@@ -163,6 +163,15 @@ function drawArrow(ctx, start, end, theme) {
   ctx.fill()
 }
 
+function lastNonZeroSegment(points) {
+  for (let index = points.length - 1; index > 0; index--) {
+    const start = points[index - 1]
+    const end = points[index]
+    if (start.x !== end.x || start.y !== end.y) return { start, end }
+  }
+  return null
+}
+
 function drawEdge(ctx, points, theme) {
   const edgeTheme = { ...defaultTheme.edge, ...(theme.edge || {}) }
   ctx.strokeStyle = edgeTheme.color
@@ -171,7 +180,8 @@ function drawEdge(ctx, points, theme) {
   ctx.moveTo(points[0].x, points[0].y)
   for (const point of points.slice(1)) ctx.lineTo(point.x, point.y)
   ctx.stroke()
-  drawArrow(ctx, points.at(-2), points.at(-1), theme)
+  const arrowSegment = lastNonZeroSegment(points)
+  if (arrowSegment) drawArrow(ctx, arrowSegment.start, arrowSegment.end, theme)
 }
 
 function edgePayload(edge) {

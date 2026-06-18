@@ -266,6 +266,51 @@ test('partial theme edge overrides still draw arrow triangles', () => {
   assert.equal(ctx.methodsOf('fill').length, edges.length)
 })
 
+test('tied-overlap edges still draw an arrow when the terminal segment is zero-length', () => {
+  const ctx = createMockCtx()
+  const fromBox = { id: 'from', type: 'node', x: 0, y: 0, width: 100, height: 100 }
+  const toBox = { id: 'to', type: 'node', x: 50, y: 0, width: 100, height: 100 }
+  const scene = {
+    graph: {
+      rootIds: ['from'],
+      nodes: new Map([
+        ['from', { id: 'from', children: [] }],
+        ['to', { id: 'to', children: [] }],
+      ]),
+      edges: [{ id: 'edge-tied-overlap', source: 'from', target: 'to' }],
+    },
+    layout: {
+      nodes: new Map([
+        ['from', fromBox],
+        ['to', toBox],
+      ]),
+      groups: [],
+      visibleItems: [fromBox, toBox],
+    },
+    viewport: { x: 100, y: 100, scale: 1 },
+    width: 800,
+    height: 600,
+    layoutDirection: 'horizontal',
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  }
+  const expectedPath = orthogonalPath(fromBox, toBox, 'x').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+
+  renderScene(ctx, scene)
+
+  const arrowCalls = arrowFillSegment(ctx, 0)
+  const arrowPoints = linePoints(arrowCalls)
+  assert.equal(ctx.methodsOf('fill').length, 1)
+  assert.deepEqual(arrowPoints[0], { ...expectedPath[3], method: 'moveTo' })
+  assert.equal(Number.isFinite(arrowPoints[1].x), true)
+  assert.equal(Number.isFinite(arrowPoints[1].y), true)
+  assert.equal(Number.isFinite(arrowPoints[2].x), true)
+  assert.equal(Number.isFinite(arrowPoints[2].y), true)
+})
+
 test('custom edgeRenderer still receives only center points and no endpoint boxes', () => {
   const ctx = createMockCtx()
   const scene = demoScene()
