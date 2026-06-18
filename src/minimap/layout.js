@@ -135,7 +135,11 @@ export function computeLayout(graph, options = {}) {
         centers.push(place(child, childMainStart, cursor))
         cursor += crossSizeOf(child) + SIBLING_GAP
       }
-      center = (centers[0] + centers[centers.length - 1]) / 2
+      const middle = Math.floor(centers.length / 2)
+      center =
+        centers.length % 2 === 1
+          ? centers[middle]
+          : (centers[middle - 1] + centers[middle]) / 2
     } else {
       center = crossStart + crossSizeOf(item) / 2
     }

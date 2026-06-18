@@ -37,10 +37,7 @@ export function createDemoGraph() {
     version: GRAPH_VERSION,
     nodes,
     rootIds: ['energy-root'],
-    edges: [
-      { id: 'edge-1', source: 'cluster-8', target: 'cluster-25', kind: 'relation' },
-      { id: 'edge-2', source: 'grid-tie', target: 'heap-1', kind: 'relation' },
-    ],
+    edges: [],
   }
 }
 

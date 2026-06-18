@@ -23,7 +23,7 @@ test('demo graph exposes the expected ids and edges', () => {
   assert.equal(graph.nodes.get('heap-1').children.length, 24)
   assert.ok(graph.nodes.get('heap-1').children.includes('cluster-8'))
   assert.equal(graph.nodes.get('cluster-25').children.length, 10)
-  assert.ok(graph.edges.length > 0)
+  assert.deepEqual(graph.edges, [])
 })
 
 test('stress graph size is childCount + 2', () => {
@@ -58,12 +58,12 @@ test('edges do not change the main tree layout', () => {
   assert.deepEqual(withoutEdges.nodes.get('cluster-25'), withEdges.nodes.get('cluster-25'))
 })
 
-test('parent sits on the midline of its first and last children', () => {
+test('parent aligns to the middle child center when it has an odd number of children', () => {
   const layout = computeLayout(createDemoGraph(), VIEWPORT)
   const center = (id) => {
     const box = layout.nodes.get(id)
     return box.y + box.height / 2
   }
-  const expected = (center('grid-tie') + center('cluster-25')) / 2
+  const expected = center('heap-1')
   assert.ok(Math.abs(center('energy-root') - expected) < 1e-6)
 })

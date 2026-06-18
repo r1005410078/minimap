@@ -24,6 +24,17 @@ function demoScene(overrides = {}) {
   }
 }
 
+function demoGraphWithRelationEdges() {
+  const graph = createDemoGraph()
+  return {
+    ...graph,
+    edges: [
+      { id: 'edge-1', source: 'cluster-8', target: 'cluster-25', kind: 'relation' },
+      { id: 'edge-2', source: 'grid-tie', target: 'heap-1', kind: 'relation' },
+    ],
+  }
+}
+
 function edgeStrokeSegments(ctx, edgeIndex) {
   const strokes = ctx.methodsOf('stroke')
   const strokeIndex = ctx.calls.findIndex((call, index) => call === strokes[edgeIndex])
@@ -69,7 +80,7 @@ test('collectVisible keeps on-screen items and culls off-screen ones', () => {
 })
 
 test('resolveEdges builds tree edges and routes folded endpoints to the group', () => {
-  const graph = createDemoGraph()
+  const graph = demoGraphWithRelationEdges()
   const layout = computeLayout(graph, VIEWPORT)
   const edges = resolveEdges(graph, layout)
 
@@ -106,7 +117,7 @@ test('resolveEdges keeps regular tree edge centers and boxes aligned', () => {
 })
 
 test('resolveEdges skips edges whose endpoints cannot be resolved', () => {
-  const graph = createDemoGraph()
+  const graph = demoGraphWithRelationEdges()
   const layout = computeLayout(graph, VIEWPORT)
   const edges = resolveEdges({ ...graph, edges: [{ id: 'x', source: 'nope', target: 'energy-root' }] }, layout)
   assert.equal(edges.some((edge) => edge.id === 'x'), false)
@@ -151,6 +162,33 @@ test('default edges draw as three-segment orthogonal polylines', () => {
     { ...expectedPath[2], method: 'lineTo' },
     { ...expectedPath[3], method: 'lineTo' },
   ])
+})
+
+test('tree edge to the middle child stays visually straight when parent and child spans overlap', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  })
+  const edges = resolveEdges(scene.graph, scene.layout)
+  const targetIndex = edges.findIndex((edge) => edge.id === 'tree:energy-root:heap-1')
+
+  renderScene(ctx, scene)
+
+  const points = linePoints(edgeStrokeSegments(ctx, targetIndex))
+  const expectedPath = orthogonalPath(edges[targetIndex].fromBox, edges[targetIndex].toBox, 'x').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+  assert.deepEqual(points, [
+    { ...expectedPath[0], method: 'moveTo' },
+    { ...expectedPath[1], method: 'lineTo' },
+    { ...expectedPath[2], method: 'lineTo' },
+    { ...expectedPath[3], method: 'lineTo' },
+  ])
+  assert.equal(points[0].y, points[1].y)
+  assert.equal(points[1].y, points[2].y)
+  assert.equal(points[2].y, points[3].y)
 })
 
 test('arrow triangles are drawn at edge endpoints', () => {

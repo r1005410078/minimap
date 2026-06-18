@@ -47,6 +47,22 @@ test('supports horizontal and vertical layout directions', () => {
   assert.ok(vertical.nodes.get('heap-1').y > vertical.nodes.get('energy-root').y)
 })
 
+test('odd sibling counts align the parent to the middle child center', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, {
+    direction: 'horizontal',
+    viewportWidth: 1200,
+    viewportHeight: 760,
+  })
+
+  const root = layout.nodes.get('energy-root')
+  const heap = layout.nodes.get('heap-1')
+  const rootCenter = root.y + root.height / 2
+  const heapCenter = heap.y + heap.height / 2
+
+  assert.equal(rootCenter, heapCenter)
+})
+
 test('reorders a child inside a group by changing graph child order', () => {
   const graph = createDemoGraph()
 
@@ -78,4 +94,26 @@ test('creates a stress graph with 10000 child nodes', () => {
   assert.equal(graph.nodes.size, 10002)
   assert.equal(layout.groups[0].children.length, 10000)
   assert.ok(layout.visibleItems.length < graph.nodes.size)
+})
+
+test('even sibling counts keep the parent centered between the two middle children', () => {
+  const nodes = new Map([
+    ['root', { id: 'root', label: 'root', parentId: null, children: ['a', 'b'] }],
+    ['a', { id: 'a', label: 'a', parentId: 'root', children: [] }],
+    ['b', { id: 'b', label: 'b', parentId: 'root', children: [] }],
+  ])
+  const graph = { version: 1, nodes, rootIds: ['root'], edges: [] }
+  const layout = computeLayout(graph, {
+    direction: 'horizontal',
+    viewportWidth: 1200,
+    viewportHeight: 760,
+  })
+
+  const center = (id) => {
+    const box = layout.nodes.get(id)
+    return box.y + box.height / 2
+  }
+  const expected = (center('a') + center('b')) / 2
+
+  assert.ok(Math.abs(center('root') - expected) < 1e-6)
 })
