@@ -7,7 +7,7 @@ import { computeLayout } from './layout.js'
 import { renderScene } from './renderer.js'
 import { defaultTheme } from './theme.js'
 import { screenToWorld } from './coords.js'
-import { hitTest } from './interaction.js'
+import { hitTest, findInsertionIndex } from './interaction.js'
 import ResourceTree from './ResourceTree.vue'
 
 const props = defineProps({
@@ -18,7 +18,7 @@ const props = defineProps({
   theme: { type: Object, default: null },
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'node-drop', 'change'])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -72,6 +72,33 @@ function handlePointerDown(event) {
   setSelected(hit ? [hit.id] : [])
 }
 
+function handleDragOver(event) {
+  event.preventDefault()
+}
+
+function handleDrop(event) {
+  event.preventDefault()
+  if (!layout) return
+  const raw = event.dataTransfer.getData('application/json')
+  if (!raw) return
+  const resource = JSON.parse(raw)
+
+  const point = pointFromEvent(event)
+  const selected = currentSelectedIds()
+  const parentId = selected[0] ?? props.graph.rootIds[0]
+  const parent = props.graph.nodes.get(parentId)
+  if (!parent) return
+
+  const index = findInsertionIndex(props.graph, layout, parentId, point, props.layoutDirection)
+  const id = `res-${resource.id}-${Date.now()}`
+  props.graph.nodes.set(id, { id, label: resource.label, parentId, children: [] })
+  parent.children.splice(index, 0, id)
+
+  render()
+  emit('node-drop', { resource, parentId, index })
+  emit('change', props.graph)
+}
+
 function syncCanvasSize() {
   const container = containerRef.value
   const canvas = canvasRef.value
@@ -96,6 +123,8 @@ onMounted(() => {
   })
   resizeObserver.observe(containerRef.value)
   canvasRef.value.addEventListener('pointerdown', handlePointerDown)
+  canvasRef.value.addEventListener('dragover', handleDragOver)
+  canvasRef.value.addEventListener('drop', handleDrop)
   render()
 })
 
