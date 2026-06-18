@@ -30,6 +30,7 @@ let cssWidth = 0
 let cssHeight = 0
 let internalSelectedId = null
 
+// Phase 1 固定视口，平移/缩放是第三阶段才做；那时改这里要联动下面的 pointFromEvent。
 const viewport = { x: 0, y: 0, scale: 1 }
 
 function currentSelectedIds() {

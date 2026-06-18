@@ -91,7 +91,7 @@ findInsertionIndex(graph, layout, parentId, worldPoint, direction) -> number
 
 **资源拖入落图**
 
-- `ResourceTree.vue` 渲染 `resources` 的分类（不可拖）与叶子项（`draggable="true"`）；叶子项 `dragstart` 把 `{ id, label, kind }` 序列化进 `event.dataTransfer`。
+- `ResourceTree.vue` 渲染 `resources` 的分类（不可拖）与叶子项（`draggable="true"`）；叶子项 `dragstart` 把该资源项原样（`{ id, label }`，若有 `kind` 也带上）序列化进 `event.dataTransfer`。
 - 画布容器监听 `dragover`（`preventDefault()` 以允许放）与 `drop`：
   1. 从 `dataTransfer` 解析出资源 payload。
   2. 用容器内相对坐标 → `screenToWorld` 得到世界坐标 `point`。
