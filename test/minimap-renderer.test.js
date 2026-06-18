@@ -2,7 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDemoGraph, createStressGraph } from '../src/minimap/graph.js'
 import { computeLayout } from '../src/minimap/layout.js'
+import { orthogonalPath } from '../src/minimap/orthogonal.js'
 import { worldRectToScreen, collectVisible, resolveEdges, renderScene } from '../src/minimap/renderer.js'
+import { defaultTheme } from '../src/minimap/theme.js'
 import { createMockCtx } from './helpers/mock-ctx.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
@@ -20,6 +22,34 @@ function demoScene(overrides = {}) {
     height: 1600,
     ...overrides,
   }
+}
+
+function edgeStrokeSegments(ctx, edgeIndex) {
+  const strokes = ctx.methodsOf('stroke')
+  const strokeIndex = ctx.calls.findIndex((call, index) => call === strokes[edgeIndex])
+  const start = ctx.calls
+    .slice(0, strokeIndex + 1)
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.method === 'beginPath')
+    .at(-1)?.index
+  return ctx.calls.slice(start, strokeIndex + 1)
+}
+
+function linePoints(segmentCalls) {
+  return segmentCalls
+    .filter((call) => call.method === 'moveTo' || call.method === 'lineTo')
+    .map((call) => ({ x: call.args[0], y: call.args[1], method: call.method }))
+}
+
+function arrowFillSegment(ctx, arrowIndex) {
+  const fills = ctx.methodsOf('fill')
+  const fillIndex = ctx.calls.findIndex((call, index) => call === fills[arrowIndex])
+  const start = ctx.calls
+    .slice(0, fillIndex + 1)
+    .map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.method === 'beginPath')
+    .at(-1)?.index
+  return ctx.calls.slice(start, fillIndex + 1)
 }
 
 test('worldRectToScreen applies scale and viewport offset', () => {
@@ -96,6 +126,113 @@ test('renderScene draws in order grid -> edges -> groups -> nodes', () => {
   assert.ok(firstEdge >= 0 && firstGroup >= 0 && firstNode >= 0)
   assert.ok(firstEdge < firstGroup)
   assert.ok(firstGroup < firstNode)
+})
+
+test('default edges draw as three-segment orthogonal polylines', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  })
+  const edges = resolveEdges(scene.graph, scene.layout)
+
+  renderScene(ctx, scene)
+
+  const firstEdgeCalls = edgeStrokeSegments(ctx, 0)
+  const firstEdgePoints = linePoints(firstEdgeCalls)
+  const expectedPath = orthogonalPath(edges[0].fromBox, edges[0].toBox, 'x').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+
+  assert.deepEqual(firstEdgePoints, [
+    { ...expectedPath[0], method: 'moveTo' },
+    { ...expectedPath[1], method: 'lineTo' },
+    { ...expectedPath[2], method: 'lineTo' },
+    { ...expectedPath[3], method: 'lineTo' },
+  ])
+})
+
+test('arrow triangles are drawn at edge endpoints', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  })
+  const edges = resolveEdges(scene.graph, scene.layout)
+
+  renderScene(ctx, scene)
+
+  const arrowCalls = arrowFillSegment(ctx, 0)
+  const arrowPoints = linePoints(arrowCalls)
+  const expectedPath = orthogonalPath(edges[0].fromBox, edges[0].toBox, 'x').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+
+  assert.equal(ctx.methodsOf('fill').length, edges.length)
+  assert.equal(arrowPoints[0].method, 'moveTo')
+  assert.deepEqual(arrowPoints[0], { ...expectedPath[3], method: 'moveTo' })
+  assert.equal(arrowPoints.length, 3)
+  assert.equal(arrowCalls.at(-2).method, 'closePath')
+  assert.equal(arrowCalls.at(-1).method, 'fill')
+})
+
+test('vertical direction uses vertical orthogonal routing', () => {
+  const ctx = createMockCtx()
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'vertical', viewportWidth: 1200, viewportHeight: 760 })
+  const scene = {
+    graph,
+    layout,
+    viewport: { x: 100, y: 100, scale: 1 },
+    width: 2400,
+    height: 1600,
+    layoutDirection: 'vertical',
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  }
+  const edges = resolveEdges(graph, layout)
+
+  renderScene(ctx, scene)
+
+  const firstEdgePoints = linePoints(edgeStrokeSegments(ctx, 0))
+  const expectedPath = orthogonalPath(edges[0].fromBox, edges[0].toBox, 'y').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+
+  assert.deepEqual(firstEdgePoints, [
+    { ...expectedPath[0], method: 'moveTo' },
+    { ...expectedPath[1], method: 'lineTo' },
+    { ...expectedPath[2], method: 'lineTo' },
+    { ...expectedPath[3], method: 'lineTo' },
+  ])
+})
+
+test('custom edgeRenderer still receives only center points and no endpoint boxes', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  const payloads = []
+  const expectedEdges = resolveEdges(scene.graph, scene.layout).map(({ id, kind, from, to }) => ({ id, kind, from, to }))
+
+  renderScene(ctx, {
+    ...scene,
+    renderers: {
+      edge: (_ctx, payload) => payloads.push(payload),
+      group: () => {},
+      node: () => {},
+    },
+  })
+
+  assert.ok(payloads.length > 0)
+  assert.equal(payloads.length, expectedEdges.length)
+  for (const [index, payload] of payloads.entries()) {
+    assert.deepEqual(Object.keys(payload).sort(), ['edge', 'from', 'theme', 'to', 'viewport'])
+    assert.deepEqual(payload.edge, expectedEdges[index])
+    assert.equal('fromBox' in payload.edge, false)
+    assert.equal('toBox' in payload.edge, false)
+  }
 })
 
 test('custom nodeRenderer replaces default node drawing', () => {

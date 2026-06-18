@@ -17,5 +17,5 @@ export const defaultTheme = {
     header: '#9fb6cc',
     font: '12px sans-serif',
   },
-  edge: { color: '#3a4f66', width: 1 },
+  edge: { color: '#3a4f66', width: 1, arrowSize: 6 },
 }

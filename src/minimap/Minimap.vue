@@ -48,6 +48,7 @@ function render() {
   renderScene(ctx, {
     layout,
     graph: props.graph,
+    layoutDirection: props.layoutDirection,
     viewport,
     width: cssWidth,
     height: cssHeight,

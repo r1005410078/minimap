@@ -3,6 +3,7 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-canvas-renderer.md
 
 import { worldToScreen } from './coords.js'
+import { orthogonalPath } from './orthogonal.js'
 import { defaultTheme } from './theme.js'
 
 const now = () => (globalThis.performance ?? Date).now()
@@ -137,13 +138,51 @@ function drawGrid(ctx, width, height, viewport, theme) {
   ctx.stroke()
 }
 
-function drawEdge(ctx, from, to, theme) {
+function drawArrow(ctx, start, end, theme) {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return
+
+  const ux = dx / length
+  const uy = dy / length
+  const px = -uy
+  const py = ux
+  const size = theme.edge.arrowSize
+  const baseX = end.x - ux * size
+  const baseY = end.y - uy * size
+  const halfWidth = size / 2
+
+  ctx.fillStyle = theme.edge.color
+  ctx.beginPath()
+  ctx.moveTo(end.x, end.y)
+  ctx.lineTo(baseX + px * halfWidth, baseY + py * halfWidth)
+  ctx.lineTo(baseX - px * halfWidth, baseY - py * halfWidth)
+  ctx.closePath()
+  ctx.fill()
+}
+
+function drawEdge(ctx, points, theme) {
   ctx.strokeStyle = theme.edge.color
   ctx.lineWidth = theme.edge.width
   ctx.beginPath()
-  ctx.moveTo(from.x, from.y)
-  ctx.lineTo(to.x, to.y)
+  ctx.moveTo(points[0].x, points[0].y)
+  for (const point of points.slice(1)) ctx.lineTo(point.x, point.y)
   ctx.stroke()
+  drawArrow(ctx, points.at(-2), points.at(-1), theme)
+}
+
+function edgePayload(edge) {
+  return {
+    id: edge.id,
+    kind: edge.kind,
+    from: edge.from,
+    to: edge.to,
+  }
+}
+
+function edgeMainAxis(direction) {
+  return direction === 'vertical' ? 'y' : 'x'
 }
 
 function drawGroup(ctx, group, rect, theme) {
@@ -182,8 +221,11 @@ export function renderScene(ctx, scene) {
     theme = defaultTheme,
     state = {},
     renderers = {},
+    layoutDirection,
+    direction,
   } = scene
   const selectedIds = state.selectedIds
+  const mainAxis = edgeMainAxis(layoutDirection || direction)
 
   ctx.clearRect(0, 0, width, height)
   drawGrid(ctx, width, height, viewport, theme)
@@ -191,8 +233,11 @@ export function renderScene(ctx, scene) {
   for (const edge of resolveEdges(graph, layout)) {
     const from = worldToScreen(edge.from, viewport)
     const to = worldToScreen(edge.to, viewport)
-    if (renderers.edge) renderers.edge(ctx, { edge, from, to, theme, viewport })
-    else drawEdge(ctx, from, to, theme)
+    if (renderers.edge) renderers.edge(ctx, { edge: edgePayload(edge), from, to, theme, viewport })
+    else {
+      const path = orthogonalPath(edge.fromBox, edge.toBox, mainAxis).map((point) => worldToScreen(point, viewport))
+      drawEdge(ctx, path, theme)
+    }
   }
 
   const { items, culled } = collectVisible(layout, viewport, width, height)
