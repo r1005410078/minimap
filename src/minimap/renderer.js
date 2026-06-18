@@ -47,12 +47,12 @@ export function resolveEdges(graph, layout) {
   const edges = []
   const groupByParent = new Map(layout.groups.map((group) => [group.parentId, group]))
 
-  const centerOf = (id) => {
+  const resolveEndpoint = (id) => {
     const box = layout.nodes.get(id)
-    if (box) return centerOfBox(box)
+    if (box) return { box, point: centerOfBox(box) }
     const node = graph.nodes.get(id)
     const group = node && groupByParent.get(node.parentId)
-    return group ? centerOfBox(group) : null
+    return group ? { box: group, point: centerOfBox(group) } : null
   }
 
   for (const item of layout.visibleItems) {
@@ -60,23 +60,47 @@ export function resolveEdges(graph, layout) {
     const node = graph.nodes.get(item.id)
     if (!node || !node.children || node.children.length === 0) continue
     const parentCenter = centerOfBox(item)
+    const parentBox = layout.nodes.get(item.id)
     const group = groupByParent.get(item.id)
     if (group) {
-      edges.push({ id: `tree:${item.id}:group`, kind: 'tree', from: parentCenter, to: centerOfBox(group) })
+      edges.push({
+        id: `tree:${item.id}:group`,
+        kind: 'tree',
+        from: parentCenter,
+        to: centerOfBox(group),
+        fromBox: parentBox,
+        toBox: group,
+      })
     } else {
       for (const childId of node.children) {
         const childBox = layout.nodes.get(childId)
         if (childBox) {
-          edges.push({ id: `tree:${item.id}:${childId}`, kind: 'tree', from: parentCenter, to: centerOfBox(childBox) })
+          edges.push({
+            id: `tree:${item.id}:${childId}`,
+            kind: 'tree',
+            from: parentCenter,
+            to: centerOfBox(childBox),
+            fromBox: parentBox,
+            toBox: childBox,
+          })
         }
       }
     }
   }
 
   for (const edge of graph.edges || []) {
-    const from = centerOf(edge.source)
-    const to = centerOf(edge.target)
-    if (from && to) edges.push({ id: edge.id, kind: edge.kind || 'relation', from, to })
+    const from = resolveEndpoint(edge.source)
+    const to = resolveEndpoint(edge.target)
+    if (from && to) {
+      edges.push({
+        id: edge.id,
+        kind: edge.kind || 'relation',
+        from: from.point,
+        to: to.point,
+        fromBox: from.box,
+        toBox: to.box,
+      })
+    }
   }
 
   return edges

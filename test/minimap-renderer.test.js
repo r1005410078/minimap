@@ -7,6 +7,8 @@ import { createMockCtx } from './helpers/mock-ctx.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
 
+const centerOfBox = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
+
 function demoScene(overrides = {}) {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, VIEWPORT)
@@ -44,9 +46,27 @@ test('resolveEdges builds tree edges and routes folded endpoints to the group', 
   assert.ok(edges.some((edge) => edge.kind === 'tree'))
 
   const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
-  const groupCenter = { x: heapGroup.x + heapGroup.width / 2, y: heapGroup.y + heapGroup.height / 2 }
+  const groupCenter = centerOfBox(heapGroup)
+  const cluster25 = layout.nodes.get('cluster-25')
   const business = edges.find((edge) => edge.id === 'edge-1') // cluster-8 -> cluster-25
   assert.deepEqual(business.from, groupCenter)
+  assert.deepEqual(business.fromBox, heapGroup)
+  assert.deepEqual(business.toBox, cluster25)
+  assert.deepEqual(business.to, centerOfBox(cluster25))
+})
+
+test('resolveEdges keeps regular tree edge centers and boxes aligned', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const edges = resolveEdges(graph, layout)
+
+  const root = layout.nodes.get('energy-root')
+  const gridTie = layout.nodes.get('grid-tie')
+  const tree = edges.find((edge) => edge.id === 'tree:energy-root:grid-tie')
+  assert.deepEqual(tree.fromBox, root)
+  assert.deepEqual(tree.toBox, gridTie)
+  assert.deepEqual(tree.from, centerOfBox(root))
+  assert.deepEqual(tree.to, centerOfBox(gridTie))
 })
 
 test('resolveEdges skips edges whose endpoints cannot be resolved', () => {
