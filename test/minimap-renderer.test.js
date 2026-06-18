@@ -47,8 +47,14 @@ test('resolveEdges builds tree edges and routes folded endpoints to the group', 
 
   const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
   const groupCenter = centerOfBox(heapGroup)
+  const heapNode = layout.nodes.get('heap-1')
   const cluster25 = layout.nodes.get('cluster-25')
+  const groupedTree = edges.find((edge) => edge.id === 'tree:heap-1:group')
   const business = edges.find((edge) => edge.id === 'edge-1') // cluster-8 -> cluster-25
+  assert.deepEqual(groupedTree.fromBox, heapNode)
+  assert.deepEqual(groupedTree.toBox, heapGroup)
+  assert.deepEqual(groupedTree.from, centerOfBox(heapNode))
+  assert.deepEqual(groupedTree.to, groupCenter)
   assert.deepEqual(business.from, groupCenter)
   assert.deepEqual(business.fromBox, heapGroup)
   assert.deepEqual(business.toBox, cluster25)
