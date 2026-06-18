@@ -210,6 +210,62 @@ test('vertical direction uses vertical orthogonal routing', () => {
   ])
 })
 
+test('vertical layouts stay on vertical routing without scene direction fields', () => {
+  const ctx = createMockCtx()
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'vertical', viewportWidth: 1200, viewportHeight: 760 })
+  const scene = {
+    graph,
+    layout,
+    viewport: { x: 100, y: 100, scale: 1 },
+    width: 2400,
+    height: 1600,
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  }
+  const edges = resolveEdges(graph, layout)
+
+  renderScene(ctx, scene)
+
+  const firstEdgePoints = linePoints(edgeStrokeSegments(ctx, 0))
+  const expectedPath = orthogonalPath(edges[0].fromBox, edges[0].toBox, 'y').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+
+  assert.deepEqual(firstEdgePoints, [
+    { ...expectedPath[0], method: 'moveTo' },
+    { ...expectedPath[1], method: 'lineTo' },
+    { ...expectedPath[2], method: 'lineTo' },
+    { ...expectedPath[3], method: 'lineTo' },
+  ])
+})
+
+test('partial theme edge overrides still draw arrow triangles', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({
+    theme: { ...defaultTheme, edge: { color: '#ff00aa', width: 2 }, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  })
+  const edges = resolveEdges(scene.graph, scene.layout)
+
+  renderScene(ctx, scene)
+
+  const arrowCalls = arrowFillSegment(ctx, 0)
+  const arrowPoints = linePoints(arrowCalls)
+  const expectedPath = orthogonalPath(edges[0].fromBox, edges[0].toBox, 'x').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+
+  assert.deepEqual(arrowPoints[0], { ...expectedPath[3], method: 'moveTo' })
+  assert.equal(Number.isFinite(arrowPoints[1].x), true)
+  assert.equal(Number.isFinite(arrowPoints[1].y), true)
+  assert.equal(Number.isFinite(arrowPoints[2].x), true)
+  assert.equal(Number.isFinite(arrowPoints[2].y), true)
+  assert.equal(ctx.methodsOf('fill').length, edges.length)
+})
+
 test('custom edgeRenderer still receives only center points and no endpoint boxes', () => {
   const ctx = createMockCtx()
   const scene = demoScene()

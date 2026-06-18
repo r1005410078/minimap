@@ -139,6 +139,7 @@ function drawGrid(ctx, width, height, viewport, theme) {
 }
 
 function drawArrow(ctx, start, end, theme) {
+  const edgeTheme = { ...defaultTheme.edge, ...(theme.edge || {}) }
   const dx = end.x - start.x
   const dy = end.y - start.y
   const length = Math.hypot(dx, dy)
@@ -148,12 +149,12 @@ function drawArrow(ctx, start, end, theme) {
   const uy = dy / length
   const px = -uy
   const py = ux
-  const size = theme.edge.arrowSize
+  const size = edgeTheme.arrowSize
   const baseX = end.x - ux * size
   const baseY = end.y - uy * size
   const halfWidth = size / 2
 
-  ctx.fillStyle = theme.edge.color
+  ctx.fillStyle = edgeTheme.color
   ctx.beginPath()
   ctx.moveTo(end.x, end.y)
   ctx.lineTo(baseX + px * halfWidth, baseY + py * halfWidth)
@@ -163,8 +164,9 @@ function drawArrow(ctx, start, end, theme) {
 }
 
 function drawEdge(ctx, points, theme) {
-  ctx.strokeStyle = theme.edge.color
-  ctx.lineWidth = theme.edge.width
+  const edgeTheme = { ...defaultTheme.edge, ...(theme.edge || {}) }
+  ctx.strokeStyle = edgeTheme.color
+  ctx.lineWidth = edgeTheme.width
   ctx.beginPath()
   ctx.moveTo(points[0].x, points[0].y)
   for (const point of points.slice(1)) ctx.lineTo(point.x, point.y)
@@ -183,6 +185,52 @@ function edgePayload(edge) {
 
 function edgeMainAxis(direction) {
   return direction === 'vertical' ? 'y' : 'x'
+}
+
+function inferDirectionFromLayout(graph, layout, edges) {
+  const rootCenters = (graph.rootIds || [])
+    .map((id) => layout.nodes.get(id))
+    .filter(Boolean)
+    .map(centerOfBox)
+  if (rootCenters.length >= 2) {
+    const xs = rootCenters.map((point) => point.x)
+    const ys = rootCenters.map((point) => point.y)
+    const spanX = Math.max(...xs) - Math.min(...xs)
+    const spanY = Math.max(...ys) - Math.min(...ys)
+    if (spanX !== spanY) return spanX > spanY ? 'vertical' : 'horizontal'
+  }
+
+  const groupByParent = new Map(layout.groups.map((group) => [group.parentId, group]))
+  for (const node of graph.nodes.values()) {
+    const parentBox = layout.nodes.get(node.id)
+    if (!parentBox || !node.children || node.children.length === 0) continue
+
+    const targets = groupByParent.has(node.id)
+      ? [groupByParent.get(node.id)]
+      : node.children.map((childId) => layout.nodes.get(childId)).filter(Boolean)
+    if (targets.length === 0) continue
+
+    const parentCenter = centerOfBox(parentBox)
+    const avgTarget = targets.reduce(
+      (acc, box) => {
+        const point = centerOfBox(box)
+        return { x: acc.x + point.x, y: acc.y + point.y }
+      },
+      { x: 0, y: 0 },
+    )
+    avgTarget.x /= targets.length
+    avgTarget.y /= targets.length
+
+    const dx = Math.abs(avgTarget.x - parentCenter.x)
+    const dy = Math.abs(avgTarget.y - parentCenter.y)
+    if (dx !== dy) return dy > dx ? 'vertical' : 'horizontal'
+  }
+
+  const treeEdge = edges.find((edge) => edge.kind === 'tree') || edges[0]
+  if (!treeEdge) return 'horizontal'
+  const dx = Math.abs(treeEdge.to.x - treeEdge.from.x)
+  const dy = Math.abs(treeEdge.to.y - treeEdge.from.y)
+  return dy > dx ? 'vertical' : 'horizontal'
 }
 
 function drawGroup(ctx, group, rect, theme) {
@@ -225,12 +273,14 @@ export function renderScene(ctx, scene) {
     direction,
   } = scene
   const selectedIds = state.selectedIds
-  const mainAxis = edgeMainAxis(layoutDirection || direction)
+  const edges = resolveEdges(graph, layout)
+  const resolvedDirection = layoutDirection || direction || inferDirectionFromLayout(graph, layout, edges)
+  const mainAxis = edgeMainAxis(resolvedDirection)
 
   ctx.clearRect(0, 0, width, height)
   drawGrid(ctx, width, height, viewport, theme)
 
-  for (const edge of resolveEdges(graph, layout)) {
+  for (const edge of edges) {
     const from = worldToScreen(edge.from, viewport)
     const to = worldToScreen(edge.to, viewport)
     if (renderers.edge) renderers.edge(ctx, { edge: edgePayload(edge), from, to, theme, viewport })
