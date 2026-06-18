@@ -1,0 +1,71 @@
+<h2>Minimap component direction</h2>
+<p class="subtitle">Pick the implementation feel you want. The visual shape is similar; the key difference is how we keep 10000 nodes smooth without adding libraries.</p>
+
+<div class="cards">
+  <div class="card" data-choice="canvas-core" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:360px;background:#11151d;border-radius:10px;border:1px solid #2b323d;display:grid;grid-template-columns:150px 1fr;overflow:hidden;color:#d8dde6;font:12px system-ui">
+        <div style="background:#171c25;border-right:1px solid #303743;padding:14px;text-align:left">
+          <div style="font-weight:700;margin-bottom:12px;color:#f0f4fb">Resources</div>
+          <div style="display:grid;gap:8px">
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">Energy Storage Unit</div>
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">Electricity meter</div>
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">BMS heap</div>
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">Cluster node</div>
+          </div>
+        </div>
+        <div style="position:relative;background-image:radial-gradient(#28303b 1px, transparent 1px);background-size:20px 20px">
+          <div style="position:absolute;left:42px;top:72px;width:110px;height:34px;border:1px solid #4b5563;background:#222832;border-radius:6px;display:grid;place-items:center">BMS heap 1</div>
+          <div style="position:absolute;left:210px;top:36px;width:290px;height:126px;border:1px solid #3e4652;background:rgba(24,29,38,.92);border-radius:10px;padding:12px">
+            <div style="font-weight:700;text-align:left;margin-bottom:9px;color:#b8c0cc"><span style="color:#36db75">■</span> BMS clusters <span style="float:right;font-weight:400">24</span></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+              <span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 1</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 2</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 3</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 4</span>
+              <span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 5</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 6</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 7</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:6px">cluster 8</span>
+            </div>
+          </div>
+          <div style="position:absolute;left:220px;top:228px;width:78px;height:32px;border:1px solid #4b5563;background:#222832;border-radius:6px;display:grid;place-items:center">cluster 25</div>
+          <div style="position:absolute;left:350px;top:208px;width:220px;height:95px;border:1px solid #3e4652;background:rgba(24,29,38,.92);border-radius:10px;padding:12px;text-align:left">
+            <div style="font-weight:700;color:#b8c0cc;margin-bottom:8px"><span style="color:#36db75">■</span> cluster 25 subnodes <span style="float:right;font-weight:400">10</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center">
+              <span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:5px">Node 1</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:5px">Node 2</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:5px">Node 3</span>
+              <span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:5px">Node 4</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:5px">Node 5</span><span style="background:#252b35;border:1px solid #48515f;border-radius:5px;padding:5px">Node 6</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Canvas 主渲染，DOM 只负责拖拽浮层</h3>
+      <p>推荐。节点、连线、分组框主体由 canvas 绘制；拖拽/选中时用少量 DOM 提升交互精度。最适合 10000 节点。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="dom-virtual" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:360px;background:#121820;border-radius:10px;border:1px solid #2b323d;display:grid;grid-template-columns:150px 1fr;overflow:hidden;color:#d8dde6;font:12px system-ui">
+        <div style="background:#171c25;border-right:1px solid #303743;padding:14px;text-align:left">
+          <div style="font-weight:700;margin-bottom:12px;color:#f0f4fb">Resources</div>
+          <div style="display:grid;gap:8px">
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">Tree item</div>
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">Tree item</div>
+            <div style="background:#222832;border:1px solid #3b4452;border-radius:6px;padding:8px">Tree item</div>
+          </div>
+        </div>
+        <div style="position:relative;background-image:radial-gradient(#28303b 1px, transparent 1px);background-size:20px 20px">
+          <div style="position:absolute;inset:22px;border:1px dashed #3b4452;border-radius:8px;display:grid;place-items:center;color:#8e98a7">Only visible DOM nodes are mounted</div>
+          <div style="position:absolute;left:46px;top:60px;width:110px;height:34px;border:1px solid #4b5563;background:#222832;border-radius:6px;display:grid;place-items:center">Node</div>
+          <div style="position:absolute;left:230px;top:88px;width:250px;height:120px;border:1px solid #3e4652;background:rgba(24,29,38,.92);border-radius:10px;padding:12px">Grouped nodes as real buttons</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. DOM 虚拟化</h3>
+      <p>实现拖拽较直观，但 10000 节点 + 分组滚动 + 连线会更吃布局和重排，需要更谨慎的可视区域裁剪。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Proposed behavior</h3>
+  <p>超过 5 个相邻子节点折叠为分组框；框内采用可滚动网格，支持框内拖拽换位。左右/上下布局切换只重新计算坐标，并以当前拖拽/选中节点为锚点修正视口，避免整个画布跳走。</p>
+</div>
