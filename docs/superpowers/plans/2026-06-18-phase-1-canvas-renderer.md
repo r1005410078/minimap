@@ -5,9 +5,11 @@
 
 ## 进度
 
-- [ ] 纯函数：`worldRectToScreen` / `collectVisible` / `resolveEdges`
-- [ ] 默认绘制 + `renderScene` 入口 + 统计
-- [ ] mock ctx 测试 + 全套测试收口
+- [x] 纯函数：`worldRectToScreen` / `collectVisible` / `resolveEdges`
+- [x] 默认绘制 + `renderScene` 入口 + 统计
+- [x] mock ctx 测试 + 全套测试收口
+
+切片完成：commit `1caccd8`，`npm test` 22 passed、`npm run build` 通过。
 
 ## 文件落点
 

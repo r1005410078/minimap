@@ -15,10 +15,12 @@
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
 - **当前阶段**：第一阶段（核心可用能力）—— 进行中
-- **当前阶段计划**：[docs/superpowers/plans/2026-06-18-phase-1-core-logic.md](docs/superpowers/plans/2026-06-18-phase-1-core-logic.md)（切片级进度在该文档「进度」一节）
-- **已完成切片**：逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`，13 tests 全过）
-- **下一步**：第一阶段后续切片——Canvas 渲染器（按 brainstorm → spec → plan → implement 推进）
-- **待办切片**：Canvas 渲染器 → Vue 组件壳 + 资源树拖入 → 布局切换动画；三者验收点全绿后勾「第一阶段」
+- **当前阶段计划**：[逻辑层](docs/superpowers/plans/2026-06-18-phase-1-core-logic.md) ｜ [Canvas 渲染器](docs/superpowers/plans/2026-06-18-phase-1-canvas-renderer.md)（切片级进度在各 plan「进度」一节）
+- **已完成切片**：
+  - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
+  - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
+- **下一步**：第一阶段后续切片——Vue 组件壳 + 资源树拖入（按 brainstorm → spec → plan → implement 推进）
+- **待办切片**：Vue 组件壳 + 资源树拖入 → 布局切换动画；二者验收点全绿后勾「第一阶段」
 
 ## 目标
 
