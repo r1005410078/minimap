@@ -41,7 +41,7 @@
 - [x] Task 3: default orthogonal edge drawing + arrows + direction plumbing
 - [x] Task 4: docs progress sync + full verification
 
-切片完成：commit `7902000`..`e5f18c4`，`npm test` 全过、`npm run build` 通过。
+切片完成：commit `7902000`..`0d4b711`，`npm test` 全过、`npm run build` 通过。
 
 ---
 
