@@ -48,13 +48,29 @@ export function orthogonalPath(fromBox, toBox, mainAxis = 'x') {
 
   const fromCenter = center(fromBox, routeAxis.main, routeAxis.mainSize)
   const toCenter = center(toBox, routeAxis.main, routeAxis.mainSize)
-  const fromBeforeTo = fromCenter <= toCenter
-
-  const fromExitMain = fromBeforeTo ? fromBox[routeAxis.main] + fromBox[routeAxis.mainSize] : fromBox[routeAxis.main]
-  const toEntryMain = fromBeforeTo ? toBox[routeAxis.main] : toBox[routeAxis.main] + toBox[routeAxis.mainSize]
-  const bendMain = (fromExitMain + toEntryMain) / 2
   const fromCross = center(fromBox, routeAxis.cross, routeAxis.crossSize)
   const toCross = center(toBox, routeAxis.cross, routeAxis.crossSize)
+  const fromBeforeTo = fromCenter <= toCenter
+
+  let fromExitMain
+  let toEntryMain
+  let bendMain
+
+  if (fromCenter === toCenter) {
+    if (fromCross <= toCross) {
+      fromExitMain = fromBox[routeAxis.main] + fromBox[routeAxis.mainSize]
+      toEntryMain = toBox[routeAxis.main] + toBox[routeAxis.mainSize]
+      bendMain = Math.max(fromExitMain, toEntryMain)
+    } else {
+      fromExitMain = fromBox[routeAxis.main]
+      toEntryMain = toBox[routeAxis.main]
+      bendMain = Math.min(fromExitMain, toEntryMain)
+    }
+  } else {
+    fromExitMain = fromBeforeTo ? fromBox[routeAxis.main] + fromBox[routeAxis.mainSize] : fromBox[routeAxis.main]
+    toEntryMain = fromBeforeTo ? toBox[routeAxis.main] : toBox[routeAxis.main] + toBox[routeAxis.mainSize]
+    bendMain = (fromExitMain + toEntryMain) / 2
+  }
 
   return [
     point(routeAxis.main, fromExitMain, fromCross),
