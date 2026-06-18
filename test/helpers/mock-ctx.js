@@ -20,6 +20,7 @@ const METHODS = [
   'setLineDash',
   'translate',
   'scale',
+  'setTransform',
 ]
 
 export function createMockCtx() {
