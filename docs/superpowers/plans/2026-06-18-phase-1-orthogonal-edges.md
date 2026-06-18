@@ -1,6 +1,6 @@
 # Phase 1 正交连线 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]` / `- [x]`) syntax for tracking.
 
 **Goal:** 把所有 minimap 连线从中心点直线改为正交折线，并在终点绘制箭头，同时保持自定义 `edgeRenderer` 的既有中心点契约不变。
 
@@ -56,7 +56,7 @@
 - `fromBox` / `toBox`: `{ x, y, width, height }` in world coordinates.
 - `mainAxis`: `'x'` for horizontal layouts, `'y'` for vertical layouts.
 
-- [ ] **Step 1: Write the failing pure function tests**
+- [x] **Step 1: Write the failing pure function tests**
 
 Create `test/minimap-orthogonal.test.js`:
 
@@ -139,7 +139,7 @@ test('orthogonalPath gives siblings of the same parent a shared spine coordinate
 })
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run:
 
@@ -149,7 +149,7 @@ npm test
 
 Expected: FAIL with a module-not-found error for `../src/minimap/orthogonal.js`.
 
-- [ ] **Step 3: Implement the pure function**
+- [x] **Step 3: Implement the pure function**
 
 Create `src/minimap/orthogonal.js`:
 
@@ -221,7 +221,7 @@ export function orthogonalPath(fromBox, toBox, mainAxis = 'x') {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify the pure function passes**
+- [x] **Step 4: Run tests to verify the pure function passes**
 
 Run:
 
@@ -231,7 +231,7 @@ npm test
 
 Expected: PASS. The new `test/minimap-orthogonal.test.js` tests pass alongside the existing suite.
 
-- [ ] **Step 5: Run build**
+- [x] **Step 5: Run build**
 
 Run:
 
@@ -241,7 +241,7 @@ npm run build
 
 Expected: build exits successfully.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/minimap/orthogonal.js test/minimap-orthogonal.test.js
@@ -261,7 +261,7 @@ git commit -m "feat: add orthogonal edge routing"
 - `resolveEdges(graph, layout)` adds `fromBox` / `toBox` as the exact world-coordinate box used to derive those centers.
 - Folded endpoints still route to their parent group box.
 
-- [ ] **Step 1: Write failing tests for endpoint boxes**
+- [x] **Step 1: Write failing tests for endpoint boxes**
 
 Modify the existing `resolveEdges builds tree edges and routes folded endpoints to the group` test in `test/minimap-renderer.test.js` to include these assertions:
 
@@ -313,7 +313,7 @@ test('resolveEdges includes boxes for tree edges without changing center points'
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -323,7 +323,7 @@ npm test
 
 Expected: FAIL because `edge.fromBox` and `edge.toBox` are currently `undefined`.
 
-- [ ] **Step 3: Update `resolveEdges` to resolve boxes and centers together**
+- [x] **Step 3: Update `resolveEdges` to resolve boxes and centers together**
 
 In `src/minimap/renderer.js`, replace the existing `centerOfBox` / `resolveEdges` block with this code:
 
@@ -396,7 +396,7 @@ export function resolveEdges(graph, layout) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run:
 
@@ -406,7 +406,7 @@ npm test
 
 Expected: PASS. Existing edge resolution tests and new box assertions all pass.
 
-- [ ] **Step 5: Run build**
+- [x] **Step 5: Run build**
 
 Run:
 
@@ -416,7 +416,7 @@ npm run build
 
 Expected: build exits successfully.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/minimap/renderer.js test/minimap-renderer.test.js
@@ -438,7 +438,7 @@ git commit -m "feat: include edge endpoint boxes"
 - Default edge drawing uses `mainAxis = 'y'` only for vertical direction; otherwise `mainAxis = 'x'`.
 - Custom `renderers.edge` receives `{ edge, from, to, theme, viewport }`, where `edge` does not expose `fromBox` / `toBox` to that callback.
 
-- [ ] **Step 1: Add failing renderer tests for orthogonal lines, arrows, vertical direction, and custom edge contract**
+- [x] **Step 1: Add failing renderer tests for orthogonal lines, arrows, vertical direction, and custom edge contract**
 
 Add these imports to the top of `test/minimap-renderer.test.js`:
 
@@ -518,7 +518,7 @@ test('custom edgeRenderer still receives only center points and no endpoint boxe
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -528,7 +528,7 @@ npm test
 
 Expected: FAIL because default drawing still emits a single straight `lineTo`, no arrow `fill`, no direction-aware path, and the custom callback currently receives `edge` with boxes after Task 2.
 
-- [ ] **Step 3: Add `arrowSize` to the default theme**
+- [x] **Step 3: Add `arrowSize` to the default theme**
 
 In `src/minimap/theme.js`, change the `edge` entry to:
 
@@ -536,7 +536,7 @@ In `src/minimap/theme.js`, change the `edge` entry to:
   edge: { color: '#3a4f66', width: 1, arrowSize: 6 },
 ```
 
-- [ ] **Step 4: Import `orthogonalPath` and add screen path helpers**
+- [x] **Step 4: Import `orthogonalPath` and add screen path helpers**
 
 In `src/minimap/renderer.js`, add this import:
 
@@ -565,7 +565,7 @@ function mainAxisForScene(scene) {
 }
 ```
 
-- [ ] **Step 5: Replace straight `drawEdge` with polyline + arrow drawing**
+- [x] **Step 5: Replace straight `drawEdge` with polyline + arrow drawing**
 
 In `src/minimap/renderer.js`, replace the current `drawEdge` function with:
 
@@ -599,7 +599,7 @@ function drawEdge(ctx, path, theme) {
 }
 ```
 
-- [ ] **Step 6: Use direction-aware default drawing and hide boxes from custom renderers**
+- [x] **Step 6: Use direction-aware default drawing and hide boxes from custom renderers**
 
 In `src/minimap/renderer.js`, inside `renderScene`, add:
 
@@ -629,7 +629,7 @@ with:
   }
 ```
 
-- [ ] **Step 7: Pass layout direction from the Vue shell**
+- [x] **Step 7: Pass layout direction from the Vue shell**
 
 In `src/minimap/Minimap.vue`, inside the `renderScene(ctx, { ... })` call, add:
 
@@ -652,7 +652,7 @@ The full call should look like:
   })
 ```
 
-- [ ] **Step 8: Run tests to verify they pass**
+- [x] **Step 8: Run tests to verify they pass**
 
 Run:
 
@@ -662,7 +662,7 @@ npm test
 
 Expected: PASS. Renderer tests confirm three-segment paths, arrows, vertical routing, and custom edge contract.
 
-- [ ] **Step 9: Run build**
+- [x] **Step 9: Run build**
 
 Run:
 
@@ -672,7 +672,7 @@ npm run build
 
 Expected: build exits successfully.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/minimap/renderer.js src/minimap/theme.js src/minimap/Minimap.vue test/minimap-renderer.test.js
@@ -689,7 +689,7 @@ git commit -m "feat: draw orthogonal edges with arrows"
 
 **Goal:** Persist the completed slice status so a new session can resume from the right next step.
 
-- [ ] **Step 1: Update ROADMAP current progress**
+- [x] **Step 1: Update ROADMAP current progress**
 
 In `ROADMAP.md`, replace the `当前进度` block with this content:
 
@@ -711,7 +711,7 @@ In `ROADMAP.md`, replace the `当前进度` block with this content:
 
 After committing the slice, copy the exact completed-slice line from this plan's Progress section into the roadmap entry if a commit hash is desired there.
 
-- [ ] **Step 2: Update this plan progress**
+- [x] **Step 2: Update this plan progress**
 
 In `docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md`, change the progress checklist to:
 
@@ -728,7 +728,7 @@ In `docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md`, change the p
 
 When applying this edit manually, run `git rev-parse --short HEAD` after the implementation commit and replace the command substitution text with that exact short hash before committing the docs progress update.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 Run:
 
@@ -746,7 +746,7 @@ npm run build
 
 Expected: build exits successfully.
 
-- [ ] **Step 4: Inspect git diff before committing**
+- [x] **Step 4: Inspect git diff before committing**
 
 Run:
 
@@ -756,7 +756,7 @@ git diff -- ROADMAP.md docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edge
 
 Expected: diff only contains progress/status updates for the orthogonal edges slice.
 
-- [ ] **Step 5: Commit docs progress**
+- [x] **Step 5: Commit docs progress**
 
 ```bash
 git add ROADMAP.md docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md
