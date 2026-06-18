@@ -21,14 +21,16 @@
 
 ## 进度
 
-- [ ] Task 1：纯函数 `interaction.js`（`hitTest` / `findInsertionIndex`）+ 测试
-- [ ] Task 2：Vue 组件测试基建（`@vue/test-utils` + `jsdom` + 自定义 SFC loader）+ smoke 测试
-- [ ] Task 3：`ResourceTree.vue` + 测试
-- [ ] Task 4：`Minimap.vue` 骨架（真实 canvas 挂载 / DPR / ResizeObserver 渲染）+ 测试
-- [ ] Task 5：`Minimap.vue` 最小可用点击选中（受控/非受控双模式）+ 测试
-- [ ] Task 6：`Minimap.vue` 资源拖入落图 + 测试
-- [ ] Task 7：`App.vue` 演示页 + 清理占位资源 + 测试
-- [ ] Task 8：全量验证 + 同步 ROADMAP / 本文档进度
+- [x] Task 1：纯函数 `interaction.js`（`hitTest` / `findInsertionIndex`）+ 测试（commit `0c50895`，review clean）
+- [x] Task 2：Vue 组件测试基建（`@vue/test-utils` + `jsdom` + 自定义 SFC loader）+ smoke 测试（commit `b32e12b`，review clean；过程中发现 `node --test` 默认发现规则把 `test/helpers/*.js` 也当成测试文件计数，见 `e93b19d` 的修正）
+- [x] Task 3：`ResourceTree.vue` + 测试（commit `a557001`，review clean）
+- [x] Task 4：`Minimap.vue` 骨架（真实 canvas 挂载 / DPR / ResizeObserver 渲染）+ 测试（commit `f08b2fb`，review clean）
+- [x] Task 5：`Minimap.vue` 最小可用点击选中（受控/非受控双模式）+ 测试（commit `ad9e199`；review 发现一个 Important——受控测试没真正隔离 `setSelected` 自身的写入门槛，只验证了渲染层的 `currentSelectedIds()` 短路；补测用例修复见 `3e8cbea`，复审时用注入 bug 的方式实测确认新用例能抓到回归）
+- [x] Task 6：`Minimap.vue` 资源拖入落图 + 测试（commit `59cfaf4`，review clean）
+- [x] Task 7：`App.vue` 演示页 + 清理占位资源 + 测试（commit `e4c451b`，review clean；浏览器手动验收清单由用户确认全部通过）
+- [x] Task 8：全量验证 + 同步 ROADMAP / 本文档进度（`npm test` 49 全过、`npm run build` 通过）
+
+切片完成：commit `0c50895`..`e4c451b`，`npm test` 49 passed、`npm run build` 通过。
 
 ---
 
