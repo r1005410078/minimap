@@ -23,6 +23,10 @@ const METHODS = [
   'setTransform',
 ]
 
+// 这几个属性会被赋值（不是方法调用），也记录进 calls，
+// 方便测试判断"画某个节点时 strokeStyle 是不是选中色"。
+const TRACKED_PROPERTIES = ['fillStyle', 'strokeStyle', 'font', 'lineWidth']
+
 export function createMockCtx() {
   const calls = []
   const ctx = {
@@ -38,6 +42,18 @@ export function createMockCtx() {
     ctx[method] = (...args) => {
       calls.push({ method, args })
     }
+  }
+  for (const prop of TRACKED_PROPERTIES) {
+    let value
+    Object.defineProperty(ctx, prop, {
+      get() {
+        return value
+      },
+      set(v) {
+        value = v
+        calls.push({ method: `set:${prop}`, args: [v] })
+      },
+    })
   }
   return ctx
 }

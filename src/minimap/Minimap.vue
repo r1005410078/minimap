@@ -6,14 +6,19 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { computeLayout } from './layout.js'
 import { renderScene } from './renderer.js'
 import { defaultTheme } from './theme.js'
+import { screenToWorld } from './coords.js'
+import { hitTest } from './interaction.js'
 import ResourceTree from './ResourceTree.vue'
 
 const props = defineProps({
   graph: { type: Object, required: true },
   resources: { type: Array, default: () => [] },
   layoutDirection: { type: String, default: 'horizontal' },
+  selectedIds: { type: Array, default: null },
   theme: { type: Object, default: null },
 })
+
+const emit = defineEmits(['select'])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -23,8 +28,14 @@ let resizeObserver = null
 let layout = null
 let cssWidth = 0
 let cssHeight = 0
+let internalSelectedId = null
 
 const viewport = { x: 0, y: 0, scale: 1 }
+
+function currentSelectedIds() {
+  if (props.selectedIds !== null) return props.selectedIds
+  return internalSelectedId ? [internalSelectedId] : []
+}
 
 function render() {
   if (!ctx) return
@@ -40,7 +51,25 @@ function render() {
     width: cssWidth,
     height: cssHeight,
     theme: props.theme || defaultTheme,
+    state: { selectedIds: new Set(currentSelectedIds()) },
   })
+}
+
+function setSelected(ids) {
+  if (props.selectedIds === null) internalSelectedId = ids[0] ?? null
+  emit('select', ids)
+  render()
+}
+
+function pointFromEvent(event) {
+  const rect = canvasRef.value.getBoundingClientRect()
+  return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, viewport)
+}
+
+function handlePointerDown(event) {
+  if (!layout) return
+  const hit = hitTest(layout, pointFromEvent(event))
+  setSelected(hit ? [hit.id] : [])
 }
 
 function syncCanvasSize() {
@@ -66,6 +95,7 @@ onMounted(() => {
     render()
   })
   resizeObserver.observe(containerRef.value)
+  canvasRef.value.addEventListener('pointerdown', handlePointerDown)
   render()
 })
 
@@ -74,6 +104,7 @@ onUnmounted(() => {
 })
 
 watch(() => props.layoutDirection, render)
+watch(() => props.selectedIds, render)
 </script>
 
 <template>

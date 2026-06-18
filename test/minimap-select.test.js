@@ -1,0 +1,86 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
+import { stubCanvasContext, stubResizeObserver } from './helpers/canvas-env.js'
+import { createDemoGraph } from '../src/minimap/graph.js'
+import { computeLayout } from '../src/minimap/layout.js'
+import { defaultTheme } from '../src/minimap/theme.js'
+
+installDomEnv()
+stubElementSize(800, 600)
+const contexts = stubCanvasContext()
+stubResizeObserver()
+
+const { mount } = await import('@vue/test-utils')
+const Minimap = (await import('../src/minimap/Minimap.vue')).default
+
+function dispatchPointerDown(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, bubbles: true }),
+  )
+}
+
+// 只看最近一次 render()（最后一次 clearRect 之后）的绘制调用，
+// 避免一个组件实例多次渲染的历史调用互相污染断言。
+function selectedLabels(ctx, theme) {
+  const lastClear = ctx.calls.map((c) => c.method).lastIndexOf('clearRect')
+  const calls = ctx.calls.slice(lastClear + 1)
+  const labels = []
+  calls.forEach((call, i) => {
+    if (call.method !== 'fillText') return
+    for (let j = i - 1; j >= 0; j--) {
+      if (calls[j].method === 'set:strokeStyle') {
+        if (calls[j].args[0] === theme.node.selectedStroke) labels.push(call.args[0])
+        break
+      }
+    }
+  })
+  return labels
+}
+
+test('clicking a node selects it (uncontrolled) and highlights it on the next render', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const rect = layout.nodes.get('grid-tie')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
+
+  assert.deepEqual(wrapper.emitted('select')[0][0], ['grid-tie'])
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Grid Tie'])
+  wrapper.destroy()
+})
+
+test('clicking blank space clears the selection', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const rect = layout.nodes.get('grid-tie')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  dispatchPointerDown(wrapper, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
+
+  dispatchPointerDown(wrapper, { x: -100000, y: -100000 })
+
+  assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), [])
+  wrapper.destroy()
+})
+
+test('selectedIds prop puts the component in controlled mode', async () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['grid-tie'] } })
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Grid Tie'])
+
+  const rootRect = layout.nodes.get('energy-root')
+  dispatchPointerDown(wrapper, { x: rootRect.x + rootRect.width / 2, y: rootRect.y + rootRect.height / 2 })
+
+  assert.deepEqual(wrapper.emitted('select')[0][0], ['energy-root'])
+  // 受控模式：prop 还没变，下一次渲染应该还是原来的选中状态
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Grid Tie'])
+
+  await wrapper.setProps({ selectedIds: ['energy-root'] })
+  await wrapper.vm.$nextTick()
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Energy Root'])
+  wrapper.destroy()
+})
