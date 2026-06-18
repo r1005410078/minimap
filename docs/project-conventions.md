@@ -16,6 +16,13 @@ When implementation questions arise, check the design document first. If the des
 - Keep feature scope aligned with the current design document.
 - When adding or changing a user-facing capability, update the design and task split before implementation.
 - Prefer small, reviewable tasks: data model, layout logic, renderer, interaction, shell, tests.
+- 每个阶段按 superpowers 顺序推进：brainstorm → spec（`docs/superpowers/specs/`）→ plan（`docs/superpowers/plans/`）→ implement。spec/plan 各自经用户批准后才进入下一步。
+
+## 进度跟踪
+
+- 进度是持久状态，不依赖对话上下文。换窗口或新会话时，先读 [ROADMAP.md](../ROADMAP.md) 的「当前进度」块。
+- 一眼概览放在 ROADMAP「当前进度」；切片级 checkbox 放在对应阶段 plan 文档的「进度」一节。
+- 每完成一个切片就同步更新这两处，并记录对应 commit。
 
 ## Dependency Rules
 

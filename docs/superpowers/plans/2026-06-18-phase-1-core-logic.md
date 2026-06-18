@@ -3,6 +3,15 @@
 > 实现依据：[spec](../specs/2026-06-18-phase-1-core-logic.md)。
 > 范围：纯逻辑层 `graph.js` / `layout.js` / `coords.js` + 测试，不碰 Canvas / Vue。
 
+## 进度
+
+> 切片级持久状态；换窗口/新会话先读 [ROADMAP 当前进度](../../../ROADMAP.md#当前进度) 再回这里。
+
+- [x] 逻辑层切片：`graph.js` / `layout.js` / `coords.js` + 测试（commit `893b6b7`，`npm test` 13 passed、`npm run build` 通过）
+- [ ] Canvas 渲染器切片（待新开 spec/plan）
+- [ ] Vue 组件壳 + 资源树拖入切片（待新开 spec/plan）
+- [ ] 布局切换动画切片（复用 `keepAnchorStable`，待新开 spec/plan）
+
 ## 文件落点
 
 - `src/minimap/graph.js`：数据模型、示例/压力数据、`reorderGroupChild`。
