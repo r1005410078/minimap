@@ -366,7 +366,7 @@ test('the vue-sfc-loader + jsdom env can mount a real .vue SFC under node --test
 - [ ] **Step 6: 跑测试确认通过**
 
 Run: `npm test`
-Expected: 全部 31 个测试 PASS（30 个既有 + 这个新的 infra smoke test）。如果失败，先确认 `package.json` 的 `test` 脚本已经改成 Step 2 的样子。
+Expected: 全部 34 个测试 PASS（30 个既有真正的 `test()` 断言 + 这个新的 infra smoke test 1 个 + 这个任务新建的 3 个 `test/helpers/*.js` 文件，每个文件本身也被 `node --test` 的默认发现规则当成 1 个"测试"算进去）。如果失败，先确认 `package.json` 的 `test` 脚本已经改成 Step 2 的样子。
 
 - [ ] **Step 7: 跑 build 确认不破坏构建**
 
@@ -521,7 +521,9 @@ function onDragStart(item, event) {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `npm test`
-Expected: 全部 33 个测试 PASS。
+Expected: 全部 36 个测试 PASS。
+
+（注：`node --test` 默认发现规则会把 `test/` 目录下**每一个** `.js` 文件都当成一个独立"测试"——哪怕它没有调用 `test()`，只是普通模块（比如 `test/helpers/dom-env.js`）。所以总数 = 真正的 `test()` 断言数 + `test/helpers/` 下的 `.js` 文件数。这是 Node 测试运行器的固有行为，不是 bug，后续每个任务的预期数字都已经把这部分算进去。）
 
 - [ ] **Step 5: 跑 build 确认不破坏构建**
 
@@ -794,7 +796,7 @@ watch(() => props.layoutDirection, render)
 - [ ] **Step 6: 跑测试确认通过**
 
 Run: `npm test`
-Expected: 全部 37 个测试 PASS。
+Expected: 全部 41 个测试 PASS（36 个既有 + `test/helpers/canvas-env.js` 这个新文件本身算 1 个 + 4 个新的 `test()` 断言）。
 
 - [ ] **Step 7: 跑 build 确认不破坏构建**
 
@@ -1158,7 +1160,7 @@ watch(() => props.selectedIds, render)
 - [ ] **Step 5: 跑测试确认通过**
 
 Run: `npm test`
-Expected: 全部 40 个测试 PASS。
+Expected: 全部 44 个测试 PASS（41 个既有 + 3 个新的 `test()` 断言；这个任务只改 `mock-ctx.js` 内容、没新建 `test/helpers/` 下的文件，所以不增加文件级计数）。
 
 - [ ] **Step 6: 跑 build 确认不破坏构建**
 
@@ -1379,7 +1381,7 @@ function handleDrop(event) {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `npm test`
-Expected: 全部 43 个测试 PASS。
+Expected: 全部 47 个测试 PASS（44 个既有 + 3 个新的 `test()` 断言）。
 
 - [ ] **Step 5: 跑 build 确认不破坏构建**
 
@@ -1516,7 +1518,7 @@ body,
 - [ ] **Step 6: 跑测试确认通过**
 
 Run: `npm test`
-Expected: 全部 44 个测试 PASS。
+Expected: 全部 48 个测试 PASS（47 个既有 + 1 个新的 `test()` 断言）。
 
 - [ ] **Step 7: 跑 build 确认不破坏构建**
 
@@ -1563,7 +1565,7 @@ EOF
 - [ ] **Step 1: 全量跑测试和构建**
 
 Run: `npm test && npm run build`
-Expected: 测试全部 PASS（44 个），构建成功。
+Expected: 测试全部 PASS（48 个，含 `test/helpers/` 下文件级计数，见 Task 3 的注），构建成功。
 
 - [ ] **Step 2: 更新 `ROADMAP.md` 的「当前进度」块**
 
@@ -1585,7 +1587,7 @@ Expected: 测试全部 PASS（44 个），构建成功。
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
-  - Vue 组件壳 `Minimap.vue` / `ResourceTree.vue` / `interaction.js` + 资源树拖入 + 测试（`npm test` 44 全过）
+  - Vue 组件壳 `Minimap.vue` / `ResourceTree.vue` / `interaction.js` + 资源树拖入 + 测试（`npm test` 48 全过）
 - **下一步**：第一阶段最后一个切片——布局切换动画（按 brainstorm → spec → plan → implement 推进）
 - **待办切片**：布局切换动画；验收点全绿后勾「第一阶段」
 ```
