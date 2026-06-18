@@ -6,8 +6,7 @@ This project builds a Vue 2.7 + Vite minimap component. The component should ren
 
 ## Authoritative Docs
 
-- Product and technical design: [docs/superpowers/specs/2026-06-18-minimap-design.md](superpowers/specs/2026-06-18-minimap-design.md)
-- Functional task split: [docs/superpowers/plans/2026-06-18-minimap.md](superpowers/plans/2026-06-18-minimap.md)
+- Product and technical design / feature roadmap (含各阶段验收标准): [ROADMAP.md](../ROADMAP.md)
 
 When implementation questions arise, check the design document first. If the design is missing a decision, update the design or ask the user before coding.
 
