@@ -84,3 +84,19 @@ test('selectedIds prop puts the component in controlled mode', async () => {
   assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Energy Root'])
   wrapper.destroy()
 })
+
+test('clicking while controlled does not leak into a later uncontrolled render', async () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['grid-tie'] } })
+
+  const rootRect = layout.nodes.get('energy-root')
+  dispatchPointerDown(wrapper, { x: rootRect.x + rootRect.width / 2, y: rootRect.y + rootRect.height / 2 })
+
+  // 切回非受控模式：如果 setSelected 在受控期间偷偷写了 internalSelectedId，
+  // 这里就会错误地显示 energy-root 被选中，而不是真正的"无选中"。
+  await wrapper.setProps({ selectedIds: null })
+  await wrapper.vm.$nextTick()
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), [])
+  wrapper.destroy()
+})
