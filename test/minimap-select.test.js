@@ -14,11 +14,24 @@ stubResizeObserver()
 const { mount } = await import('@vue/test-utils')
 const Minimap = (await import('../src/minimap/Minimap.vue')).default
 
-function dispatchPointerDown(wrapper, point) {
+function dispatchPointerDown(wrapper, point, options = {}) {
   const canvasEl = wrapper.find('canvas').element
   canvasEl.dispatchEvent(
-    new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, bubbles: true }),
+    new PointerEvent('pointerdown', {
+      clientX: point.x,
+      clientY: point.y,
+      bubbles: true,
+      shiftKey: options.shiftKey ?? false,
+      metaKey: options.metaKey ?? false,
+      ctrlKey: options.ctrlKey ?? false,
+      pointerId: options.pointerId ?? 1,
+    }),
   )
+}
+
+function dispatchKeyDown(wrapper, key) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
 }
 
 // 只看最近一次 render()（最后一次 clearRect 之后）的绘制调用，
@@ -60,6 +73,37 @@ test('clicking blank space clears the selection', () => {
   dispatchPointerDown(wrapper, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
 
   dispatchPointerDown(wrapper, { x: -100000, y: -100000 })
+
+  assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
+  assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), [])
+  wrapper.destroy()
+})
+
+test('modifier clicking adds and toggles multiple selections', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const grid = layout.nodes.get('grid-tie')
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 })
+  dispatchPointerDown(wrapper, { x: heapGroup.x + heapGroup.width / 2, y: heapGroup.y + heapGroup.height / 2 }, { shiftKey: true })
+  dispatchPointerDown(wrapper, { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }, { ctrlKey: true })
+
+  assert.deepEqual(wrapper.emitted('select')[0][0], ['grid-tie'])
+  assert.deepEqual(wrapper.emitted('select')[1][0], ['grid-tie', heapGroup.id])
+  assert.deepEqual(wrapper.emitted('select')[2][0], [heapGroup.id])
+  wrapper.destroy()
+})
+
+test('Escape clears the current selection', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const grid = layout.nodes.get('grid-tie')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 })
+  dispatchKeyDown(wrapper, 'Escape')
 
   assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
   assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), [])

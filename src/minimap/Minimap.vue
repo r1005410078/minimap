@@ -37,6 +37,7 @@ import {
   dragShiftEasedProgress,
   dragShiftProgress,
 } from './drag-transition.js'
+import { applySelectionClick, buildSelectionRelations } from './selection.js'
 import ResourceTree from './ResourceTree.vue'
 
 const ANIMATION_DURATION_MS = 200
@@ -74,7 +75,7 @@ let resizeObserver = null
 let layout = null
 let cssWidth = 0
 let cssHeight = 0
-let internalSelectedId = null
+let internalSelectedIds = []
 let internalGroupStates = {}
 let dragState = null
 let scrollbarDragState = null
@@ -90,7 +91,7 @@ let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
 
 function currentSelectedIds() {
   if (props.selectedIds !== null) return props.selectedIds
-  return internalSelectedId ? [internalSelectedId] : []
+  return internalSelectedIds
 }
 
 function currentGroupStates() {
@@ -228,6 +229,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
   if (!ctx || !currentLayout) return
   lastRenderedLayout = currentLayout
   lastRenderedViewport = { ...renderViewport }
+  const relations = buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
   renderScene(ctx, {
     layout: currentLayout,
     graph: props.graph,
@@ -237,7 +239,11 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
     height: cssHeight,
     theme: props.theme || defaultTheme,
     state: {
-      selectedIds: new Set(currentSelectedIds()),
+      selectedIds: relations.selectedIds,
+      highlightedIds: relations.highlightedIds,
+      dimmedIds: relations.dimmedIds,
+      highlightedEdgeIds: relations.highlightedEdgeIds,
+      dimmedEdgeIds: relations.dimmedEdgeIds,
       groupDrag: dragRenderContext(),
       groupScrollbarHoverId: hoveredScrollbarGroupId,
     },
@@ -354,9 +360,14 @@ function updateLayout({ animate = true, preserveAnchor = true } = {}) {
 }
 
 function setSelected(ids) {
-  if (props.selectedIds === null) internalSelectedId = ids[0] ?? null
-  emit('select', ids)
+  const nextIds = [...ids]
+  if (props.selectedIds === null) internalSelectedIds = nextIds
+  emit('select', nextIds)
   renderCurrent()
+}
+
+function isAdditiveSelection(event) {
+  return event.shiftKey || event.metaKey || event.ctrlKey
 }
 
 function screenPointFromEvent(event) {
@@ -500,6 +511,7 @@ function clearScrollbarHover() {
 
 function handlePointerDown(event) {
   if (!layout) return
+  canvasRef.value.focus?.()
   const point = pointFromEvent(event)
   const scrollbarHit = hitScrollbarThumb(point)
   if (scrollbarHit) {
@@ -528,6 +540,7 @@ function handlePointerDown(event) {
     dragState = {
       groupId: hit.id,
       childId: hit.childId,
+      additive: isAdditiveSelection(event),
       startScreen: { x: event.clientX, y: event.clientY },
       dragging: false,
       insertIndex: 0,
@@ -556,7 +569,7 @@ function handlePointerDown(event) {
     return
   }
 
-  setSelected([hit.id])
+  setSelected(applySelectionClick(currentSelectedIds(), hit.id, { additive: isAdditiveSelection(event) }))
 }
 
 function handlePointerMove(event) {
@@ -643,7 +656,7 @@ function handlePointerUp() {
       emit('change', props.graph)
     }
   } else {
-    setSelected([dragState.childId])
+    setSelected(applySelectionClick(currentSelectedIds(), dragState.childId, { additive: dragState.additive }))
   }
 
   dragState = null
@@ -674,6 +687,13 @@ function handleWheel(event) {
   settleAnimation()
   const nextViewport = zoomViewportAt(viewport, screenPoint, event.deltaY, viewportOptions(props.options))
   applyViewport(nextViewport)
+}
+
+function handleKeyDown(event) {
+  if (event.key !== 'Escape') return
+  if (currentSelectedIds().length === 0) return
+  event.preventDefault()
+  setSelected([])
 }
 
 function handleDragOver(event) {
@@ -734,6 +754,7 @@ onMounted(() => {
   canvas.addEventListener('pointerup', handlePointerUp)
   canvas.addEventListener('pointercancel', cancelPointerInteractions)
   canvas.addEventListener('lostpointercapture', cancelPointerInteractions)
+  canvas.addEventListener('keydown', handleKeyDown)
   canvas.addEventListener('wheel', handleWheel, { passive: false })
   canvas.addEventListener('dragover', handleDragOver)
   canvas.addEventListener('drop', handleDrop)
@@ -751,6 +772,7 @@ onUnmounted(() => {
     canvas.removeEventListener('pointerup', handlePointerUp)
     canvas.removeEventListener('pointercancel', cancelPointerInteractions)
     canvas.removeEventListener('lostpointercapture', cancelPointerInteractions)
+    canvas.removeEventListener('keydown', handleKeyDown)
     canvas.removeEventListener('wheel', handleWheel)
     canvas.removeEventListener('dragover', handleDragOver)
     canvas.removeEventListener('drop', handleDrop)
@@ -770,7 +792,7 @@ watch(() => props.options, () => updateLayout())
   <div class="minimap">
     <ResourceTree class="minimap-resources" :resources="resources" />
     <div ref="containerRef" class="minimap-canvas-container">
-      <canvas ref="canvasRef"></canvas>
+      <canvas ref="canvasRef" tabindex="0"></canvas>
     </div>
   </div>
 </template>
