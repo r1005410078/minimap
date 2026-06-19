@@ -47,8 +47,15 @@ function collectGroupSegments(parentNode, graph, groupThreshold) {
   return segments.filter((segment) => segment.length > groupThreshold)
 }
 
+// 把任意 scrollTop 夹到合法范围；不溢出的分组恒为 0。
+export function clampGroupScroll(group, scrollTop) {
+  if (!group.overflowY) return 0
+  const maxScroll = Math.max(0, group.contentHeight - group.height)
+  return Math.max(0, Math.min(scrollTop, maxScroll))
+}
+
 // 把一个分组的子节点列表折叠成分组框，按内部网格推导尺寸，同时受视口比例约束。
-function buildGroup(groupId, parentId, children, viewportWidth, viewportHeight) {
+function buildGroup(groupId, parentId, children, state, viewportWidth, viewportHeight) {
   const maxW = viewportWidth * GROUP_MAX_W_RATIO
   const maxH = viewportHeight * GROUP_MAX_H_RATIO
 
@@ -61,8 +68,11 @@ function buildGroup(groupId, parentId, children, viewportWidth, viewportHeight) 
   const contentHeight =
     GROUP.header + 2 * GROUP.padding + rows * GROUP.itemH + Math.max(0, rows - 1) * GROUP.itemGap
 
+  const expanded = state.expanded === true
   const width = Math.max(GROUP_MIN_WIDTH, Math.min(contentWidth, maxW))
-  const height = Math.max(GROUP_MIN_HEIGHT, Math.min(contentHeight, maxH))
+  const height = expanded
+    ? Math.max(GROUP_MIN_HEIGHT, contentHeight)
+    : Math.max(GROUP_MIN_HEIGHT, Math.min(contentHeight, maxH))
   const overflowY = height < contentHeight
 
   return {
@@ -73,7 +83,10 @@ function buildGroup(groupId, parentId, children, viewportWidth, viewportHeight) 
     rows,
     width,
     height,
+    contentHeight,
     overflowY,
+    expanded,
+    scrollTop: clampGroupScroll({ height, contentHeight, overflowY }, state.scrollTop ?? 0),
     x: 0,
     y: 0,
   }
@@ -84,6 +97,7 @@ export function computeLayout(graph, options = {}) {
   const viewportWidth = options.viewportWidth ?? 1200
   const viewportHeight = options.viewportHeight ?? 760
   const groupThreshold = options.groupThreshold ?? GROUP_THRESHOLD
+  const groupStates = options.groupStates ?? new Map()
 
   // 1. 按"连续叶子兄弟分段"规则折叠；一个父节点下可能产生 0、1 或多个分组。
   const groups = []
@@ -92,7 +106,8 @@ export function computeLayout(graph, options = {}) {
     const segments = collectGroupSegments(node, graph, groupThreshold)
     segments.forEach((segmentChildren, segmentIndex) => {
       const groupId = `${node.id}::g${segmentIndex}`
-      const group = buildGroup(groupId, node.id, segmentChildren, viewportWidth, viewportHeight)
+      const state = groupStates.get(groupId) ?? {}
+      const group = buildGroup(groupId, node.id, segmentChildren, state, viewportWidth, viewportHeight)
       groups.push(group)
       for (const childId of segmentChildren) groupOf.set(childId, group)
     })

@@ -9,6 +9,7 @@ import {
   GROUP_THRESHOLD,
   computeLayout,
   keepAnchorStable,
+  clampGroupScroll,
 } from '../src/minimap/layout.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
@@ -191,4 +192,34 @@ test('group size never shrinks below the minimum usable grid', () => {
 
   assert.equal(layout.groups[0].width, 144) // 2*12(padding) + 120(itemW)
   assert.equal(layout.groups[0].height, 92) // 28(header) + 2*12(padding) + 40(itemH)
+})
+
+test('clampGroupScroll clamps to the valid scroll range', () => {
+  const overflowing = { height: 100, contentHeight: 250, overflowY: true }
+  assert.equal(clampGroupScroll(overflowing, -50), 0)
+  assert.equal(clampGroupScroll(overflowing, 1000), 150)
+  assert.equal(clampGroupScroll(overflowing, 80), 80)
+
+  const notOverflowing = { height: 250, contentHeight: 250, overflowY: false }
+  assert.equal(clampGroupScroll(notOverflowing, 9999), 0)
+})
+
+test('options.groupStates can expand a group beyond the collapsed max height', () => {
+  const graph = graphWithChildren(leaves('e', 30))
+  const collapsedLayout = computeLayout(graph, VIEWPORT)
+  assert.equal(collapsedLayout.groups[0].overflowY, true)
+  const groupId = collapsedLayout.groups[0].id
+
+  const expandedLayout = computeLayout(graph, {
+    ...VIEWPORT,
+    groupStates: new Map([[groupId, { expanded: true }]]),
+  })
+  const expandedGroup = expandedLayout.groups[0]
+
+  assert.equal(expandedGroup.expanded, true)
+  assert.equal(expandedGroup.overflowY, false)
+  assert.equal(expandedGroup.scrollTop, 0)
+  assert.equal(expandedGroup.height, expandedGroup.contentHeight)
+  assert.ok(expandedGroup.height > collapsedLayout.groups[0].height)
+  assert.equal(expandedGroup.columns, collapsedLayout.groups[0].columns)
 })
