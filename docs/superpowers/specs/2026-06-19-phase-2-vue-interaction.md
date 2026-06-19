@@ -14,6 +14,7 @@
 - **拖拽中不连续广播状态**：自动滚动的 `scrollTop` 变化在拖拽过程中只直接 mutate `group.scrollTop` 用于即时视觉反馈，不在每一帧都 `emit('group-state-change', ...)`；只在 `pointerup` 落地时广播一次最终值，避免受控模式的外部监听者被每帧事件刷屏。滚轮滚动（独立的离散事件，不是逐帧）则每次都正常广播。
 - **修复一个连带的旧 bug**：`renderer.js` 的 `renderScene` 第 370 行 `makeState(item.parentId, selectedIds)` 是按 `parentId` 判断分组chrome是否高亮选中——这是切片 2 遗留的、跟本切片要修的"分组选中身份"同一类问题。本切片把分组选中语义统一成 `group.id`（hitTest body 区域返回 `group.id`），所以这一行必须同步改成 `makeState(item.id, selectedIds)`，否则点击分组空白区域选中后分组框本身不会显示选中态描边。
 - **不支持跨分组拖拽**：`groupGridIndexAt` 对超出分组矩形范围的点也会做 clamp（不报错，自然收敛到最近的边界格子），所以即使指针拖到了分组外部（另一个分组、普通节点、空白画布），插入下标仍然落在原分组的合法范围内——天然保证"只能在同一个分组框内换位"，不需要额外的越界检测代码。
+- **已知行为边界：分组内叶子节点被拖入新子节点后会自动从分组里分裂出去**。这条路径在本切片之前不可达——之前点击分组永远选中整个分组（旧的 `parentId` 语义），拖资源时 `parentId` 只会是分组的父节点；本切片新增的"点击分组内某个子节点选中该子节点本身"打开了这条路径：先选中分组内的某个叶子子节点，再拖资源丢进画布，`handleDrop` 的 `parentId` 就会等于这个叶子子节点的 id。`layout.js` 的 `collectGroupSegments` 在每次 `updateLayout()` 时都会重新按"当前是否叶子"分段，所以分裂后的布局结果本身一定正确（截断成两段、分别按 `groupThreshold` 判断是否还成组），不需要新代码。唯一的已知限制是 `group.id = ${parentId}::g${segmentIndex}` 按位置而非内容编号——分裂后新的某个分段哪怕成员完全变了也可能复用旧的 `group.id`，导致 `groupStates` 里该 id 下的 `scrollTop`/`expanded` 被"捡"给一个成员不同的新分组（`clampGroupScroll` 会夹紧到合法范围，不会崩，最多是滚动位置在分裂瞬间跳一下）。本切片不做"跨重新布局的稳定分组身份追踪"（按内容重叠匹配迁移状态），只在测试里确认分裂后布局、选中态都正确，滚动位置的轻微跳变是可接受的已知行为。
 
 ## 范围
 
@@ -145,6 +146,7 @@ const emit = defineEmits(['select', 'node-drop', 'change', 'group-state-change',
 - 未超过阈值的纯点击（在 `item` zone 按下又抬起，没有明显移动）只触发 `select`，不触发任何换位。
 - `groupStates`/`options` 的受控/非受控模式行为跟现有 `selectedIds` 等价：传 prop 时组件不内部持久化，只发事件；不传时组件内部维护默认状态并在下次渲染保持。
 - 多分组场景下（一个父节点有两个独立分组段）`hitTest`/`findInsertionIndex` 都按具体的 `group.id`/分组矩形定位，不再退化或取错对象。
+- 选中分组内某个叶子子节点后拖入资源：该子节点正确获得新子节点、自动从分组里分裂出去（不再是分组成员），分裂后剩余/截断的两段分别按 `groupThreshold` 正确判断是否继续成组；选中态仍然指向该子节点本身，不丢失、不串位。
 - 现有单分组场景（demo 图 `heap-1`/`cluster-25`、压力图）的点击选中、资源拖入行为不回归。
 - `npm test`、`npm run build` 通过。
 
@@ -171,3 +173,4 @@ const emit = defineEmits(['select', 'node-drop', 'change', 'group-state-change',
   - 滚轮在 `overflowY` 分组内：可见子节点窗口变化，`emit('group-state-change', ...)` 携带新 `scrollTop`，但不触发 `updateLayout`（断言 `layout` 引用不变或用某个不受布局影响但受渲染影响的探针）。
   - `groupStates`/`options` 受控模式：传入后组件不内部持久化（跟 `selectedIds` 受控测试同构）。
   - 回归：现有单分组点击选中、资源拖入（`minimap-drop.test.js`）行为不变。
+  - 选中分组内某个叶子子节点（如 `cluster-5`）→ 拖入资源丢给它：`graph.nodes.get('cluster-5').children` 增加新节点；下一次渲染里 `cluster-5` 不再属于任何 `layout.groups` 成员（已分裂出去）；分裂后两段（若仍超过 `groupThreshold`）各自成为独立的 `group.id`；`select` 状态仍指向 `cluster-5`。
