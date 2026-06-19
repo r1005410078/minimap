@@ -1,18 +1,27 @@
 <script setup>
 // Phase 1 Vue 组件壳骨架：挂载真实 canvas、DPR 适配、ResizeObserver 驱动的按需重渲染。
-// 点击选中和资源拖入在后续切片（Task 5 / Task 6）里加到这个文件上。
+// 分组框命中检测细分、框内拖拽换位、滚轮滚动、展开折叠点击见 Phase 2 切片3。
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
+// 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { computeLayout, keepAnchorStable } from './layout.js'
+import { computeLayout, keepAnchorStable, GROUP, clampGroupScroll } from './layout.js'
 import {
   createLayoutTransition,
   layoutAt,
   resolveAnchorCenter,
 } from './layout-transition.js'
-import { renderScene } from './renderer.js'
+import { renderScene, worldRectToScreen } from './renderer.js'
 import { defaultTheme } from './theme.js'
 import { screenToWorld } from './coords.js'
-import { hitTest, findInsertionIndex } from './interaction.js'
+import {
+  hitTest,
+  findInsertionIndex,
+  groupGridIndexAt,
+  exceedsDragThreshold,
+  groupAutoScrollSpeed,
+  groupInsertIndexToParentIndex,
+} from './interaction.js'
+import { reorderGroupChild } from './graph.js'
 import ResourceTree from './ResourceTree.vue'
 
 const ANIMATION_DURATION_MS = 200
@@ -22,13 +31,15 @@ const props = defineProps({
   resources: { type: Array, default: () => [] },
   layoutDirection: { type: String, default: 'horizontal' },
   selectedIds: { type: Array, default: null },
+  groupStates: { type: Object, default: null },
+  options: { type: Object, default: null },
   theme: { type: Object, default: null },
   nodeRenderer: { type: Function, default: null },
   groupRenderer: { type: Function, default: null },
   edgeRenderer: { type: Function, default: null },
 })
 
-const emit = defineEmits(['select', 'node-drop', 'change'])
+const emit = defineEmits(['select', 'node-drop', 'change', 'group-state-change', 'group-reorder'])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -39,6 +50,8 @@ let layout = null
 let cssWidth = 0
 let cssHeight = 0
 let internalSelectedId = null
+let internalGroupStates = {}
+let dragState = null
 
 // Phase 1 固定视口，平移/缩放是第三阶段才做；那时改这里要联动下面的 pointFromEvent。
 let viewport = { x: 0, y: 0, scale: 1 }
@@ -53,6 +66,26 @@ function currentSelectedIds() {
   return internalSelectedId ? [internalSelectedId] : []
 }
 
+function currentGroupStates() {
+  return props.groupStates !== null ? props.groupStates : internalGroupStates
+}
+
+function updateGroupState(groupId, patch) {
+  const current = currentGroupStates()
+  const next = { ...current, [groupId]: { ...current[groupId], ...patch } }
+  if (props.groupStates === null) internalGroupStates = next
+  emit('group-state-change', next)
+}
+
+function dragRenderContext() {
+  if (!dragState || !dragState.dragging || !layout) return null
+  const group = layout.groups.find((g) => g.id === dragState.groupId)
+  if (!group) return null
+  const order = group.children.filter((id) => id !== dragState.childId)
+  order.splice(dragState.insertIndex, 0, dragState.childId)
+  return { groupId: group.id, order, draggingChildId: dragState.childId, ghostRect: dragState.ghostScreenRect }
+}
+
 function renderCurrent(currentLayout = layout, currentViewport = viewport) {
   if (!ctx || !currentLayout) return
   lastRenderedLayout = currentLayout
@@ -65,7 +98,7 @@ function renderCurrent(currentLayout = layout, currentViewport = viewport) {
     width: cssWidth,
     height: cssHeight,
     theme: props.theme || defaultTheme,
-    state: { selectedIds: new Set(currentSelectedIds()) },
+    state: { selectedIds: new Set(currentSelectedIds()), groupDrag: dragRenderContext() },
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
 }
@@ -149,6 +182,8 @@ function updateLayout({ animate = true, preserveAnchor = true } = {}) {
     direction: props.layoutDirection,
     viewportWidth: cssWidth,
     viewportHeight: cssHeight,
+    groupThreshold: props.options?.groupThreshold,
+    groupStates: new Map(Object.entries(currentGroupStates())),
   })
 
   const startLayout = lastRenderedLayout || settledLayout || layout
@@ -181,10 +216,123 @@ function pointFromEvent(event) {
   return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, viewport)
 }
 
+function ghostRectForPoint(worldPoint) {
+  const worldRect = {
+    x: worldPoint.x - GROUP.itemW / 2,
+    y: worldPoint.y - GROUP.itemH / 2,
+    width: GROUP.itemW,
+    height: GROUP.itemH,
+  }
+  return worldRectToScreen(worldRect, viewport)
+}
+
+function cancelAutoScrollLoop() {
+  if (dragState && dragState.scrollRafId !== null) {
+    cancelAnimationFrame(dragState.scrollRafId)
+    dragState.scrollRafId = null
+  }
+}
+
+function startAutoScrollLoop() {
+  const tick = () => {
+    if (!dragState || !dragState.dragging) return
+    const group = layout.groups.find((g) => g.id === dragState.groupId)
+    if (group && dragState.ghostWorldPoint) {
+      const delta = groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y)
+      if (delta !== 0) {
+        group.scrollTop = clampGroupScroll(group, group.scrollTop + delta)
+        renderCurrent()
+      }
+    }
+    dragState.scrollRafId = requestAnimationFrame(tick)
+  }
+  dragState.scrollRafId = requestAnimationFrame(tick)
+}
+
 function handlePointerDown(event) {
   if (!layout) return
-  const hit = hitTest(layout, pointFromEvent(event))
+  const point = pointFromEvent(event)
+  const hit = hitTest(layout, point)
+
+  if (hit?.type === 'group' && hit.zone === 'header') {
+    const group = layout.groups.find((g) => g.id === hit.id)
+    updateGroupState(hit.id, { expanded: !group.expanded })
+    updateLayout()
+    return
+  }
+
+  if (hit?.type === 'group' && hit.zone === 'item') {
+    canvasRef.value.setPointerCapture?.(event.pointerId)
+    dragState = {
+      groupId: hit.id,
+      childId: hit.childId,
+      startScreen: { x: event.clientX, y: event.clientY },
+      dragging: false,
+      insertIndex: 0,
+      ghostWorldPoint: null,
+      ghostScreenRect: null,
+      scrollRafId: null,
+    }
+    return
+  }
+
   setSelected(hit ? [hit.id] : [])
+}
+
+function handlePointerMove(event) {
+  if (!dragState) return
+  const screenPoint = { x: event.clientX, y: event.clientY }
+
+  if (!dragState.dragging) {
+    if (!exceedsDragThreshold(dragState.startScreen, screenPoint)) return
+    dragState.dragging = true
+    startAutoScrollLoop()
+  }
+
+  const group = layout.groups.find((g) => g.id === dragState.groupId)
+  if (!group) return
+  const worldPoint = pointFromEvent(event)
+  const restGroup = { ...group, children: group.children.filter((id) => id !== dragState.childId) }
+  dragState.insertIndex = groupGridIndexAt(restGroup, worldPoint)
+  dragState.ghostWorldPoint = worldPoint
+  dragState.ghostScreenRect = ghostRectForPoint(worldPoint)
+  renderCurrent()
+}
+
+function handlePointerUp() {
+  if (!dragState) return
+
+  if (dragState.dragging) {
+    cancelAutoScrollLoop()
+    const group = layout.groups.find((g) => g.id === dragState.groupId)
+    if (group) {
+      const parent = props.graph.nodes.get(group.parentId)
+      const index = groupInsertIndexToParentIndex(parent, group, dragState.childId, dragState.insertIndex)
+      reorderGroupChild(props.graph, group.parentId, dragState.childId, index)
+      updateGroupState(group.id, { scrollTop: group.scrollTop })
+      updateLayout()
+      emit('group-reorder', { groupId: group.id, childId: dragState.childId, index })
+      emit('change', props.graph)
+    }
+  } else {
+    setSelected([dragState.childId])
+  }
+
+  dragState = null
+}
+
+function handleWheel(event) {
+  if (!layout) return
+  const point = pointFromEvent(event)
+  const hit = hitTest(layout, point)
+  if (hit?.type !== 'group') return
+  const group = layout.groups.find((g) => g.id === hit.id)
+  if (!group || !group.overflowY) return
+
+  event.preventDefault()
+  group.scrollTop = clampGroupScroll(group, group.scrollTop + event.deltaY)
+  updateGroupState(group.id, { scrollTop: group.scrollTop })
+  renderCurrent()
 }
 
 function handleDragOver(event) {
@@ -231,27 +379,43 @@ function syncCanvasSize() {
 }
 
 onMounted(() => {
-  ctx = canvasRef.value.getContext('2d')
+  const canvas = canvasRef.value
+  ctx = canvas.getContext('2d')
   syncCanvasSize()
   resizeObserver = new ResizeObserver(() => {
     syncCanvasSize()
     updateLayout({ animate: false, preserveAnchor: false })
   })
   resizeObserver.observe(containerRef.value)
-  canvasRef.value.addEventListener('pointerdown', handlePointerDown)
-  canvasRef.value.addEventListener('dragover', handleDragOver)
-  canvasRef.value.addEventListener('drop', handleDrop)
+  canvas.addEventListener('pointerdown', handlePointerDown)
+  canvas.addEventListener('pointermove', handlePointerMove)
+  canvas.addEventListener('pointerup', handlePointerUp)
+  canvas.addEventListener('wheel', handleWheel, { passive: false })
+  canvas.addEventListener('dragover', handleDragOver)
+  canvas.addEventListener('drop', handleDrop)
   updateLayout({ animate: false, preserveAnchor: false })
 })
 
 onUnmounted(() => {
+  const canvas = canvasRef.value
   cancelAnimation()
+  cancelAutoScrollLoop()
+  if (canvas) {
+    canvas.removeEventListener('pointerdown', handlePointerDown)
+    canvas.removeEventListener('pointermove', handlePointerMove)
+    canvas.removeEventListener('pointerup', handlePointerUp)
+    canvas.removeEventListener('wheel', handleWheel)
+    canvas.removeEventListener('dragover', handleDragOver)
+    canvas.removeEventListener('drop', handleDrop)
+  }
   if (resizeObserver) resizeObserver.disconnect()
 })
 
 watch(() => props.layoutDirection, () => updateLayout())
 watch(() => props.graph, () => updateLayout())
 watch(() => props.selectedIds, () => renderCurrent())
+watch(() => props.groupStates, () => updateLayout())
+watch(() => props.options, () => updateLayout())
 </script>
 
 <template>
