@@ -5,6 +5,7 @@
 import { worldToScreen } from './coords.js'
 import { orthogonalPath } from './orthogonal.js'
 import { defaultTheme } from './theme.js'
+import { GROUP } from './layout.js'
 
 const now = () => (globalThis.performance ?? Date).now()
 
@@ -261,6 +262,8 @@ function inferDirectionFromLayout(graph, layout, edges) {
   return dy > dx ? 'vertical' : 'horizontal'
 }
 
+const SCROLLBAR_WIDTH = 6
+
 function drawGroup(ctx, group, rect, theme) {
   ctx.fillStyle = theme.group.fill
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
@@ -269,7 +272,28 @@ function drawGroup(ctx, group, rect, theme) {
   ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
   ctx.fillStyle = theme.group.header
   ctx.font = theme.group.font
-  ctx.fillText(`${group.parentId} · ${group.children.length}`, rect.x + 8, rect.y + 16)
+  const chevron = group.expanded ? '▾' : '▸'
+  ctx.fillText(`${chevron} ${group.parentId} · ${group.children.length}`, rect.x + 8, rect.y + 16)
+  if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme)
+}
+
+// 滚动条是纯视觉提示（轨道 + 按比例定位/取尺寸的滑块），不响应任何指针事件。
+function drawGroupScrollbar(ctx, group, rect, theme) {
+  const scrollbar = { ...defaultTheme.group.scrollbar, ...(theme.group.scrollbar || {}) }
+  const scale = rect.height / group.height
+  const headerHeight = GROUP.header * scale
+  const trackX = rect.x + rect.width - SCROLLBAR_WIDTH
+  const trackY = rect.y + headerHeight
+  const trackHeight = rect.height - headerHeight
+
+  ctx.fillStyle = scrollbar.track
+  ctx.fillRect(trackX, trackY, SCROLLBAR_WIDTH, trackHeight)
+
+  const thumbHeight = (group.height / group.contentHeight) * trackHeight
+  const maxScroll = group.contentHeight - group.height
+  const thumbOffset = maxScroll > 0 ? (group.scrollTop / maxScroll) * (trackHeight - thumbHeight) : 0
+  ctx.fillStyle = scrollbar.thumb
+  ctx.fillRect(trackX, trackY + thumbOffset, SCROLLBAR_WIDTH, thumbHeight)
 }
 
 function drawNode(ctx, node, rect, state, theme) {

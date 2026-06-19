@@ -500,3 +500,24 @@ test('inferDirectionFromLayout still infers correctly when a parent has multiple
     { ...expectedPath[3], method: 'lineTo' },
   ])
 })
+
+test('drawGroup shows an expand/collapse chevron with label and count in the header', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ renderers: { node: () => {} } })
+  renderScene(ctx, scene)
+
+  const headerTexts = ctx.methodsOf('fillText').map((c) => c.args[0])
+  assert.ok(headerTexts.includes('▸ heap-1 · 24'))
+  assert.ok(headerTexts.includes('▸ cluster-25 · 10'))
+})
+
+test('drawGroup draws a scrollbar track and thumb only for overflowing groups', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ renderers: { node: () => {} } })
+  renderScene(ctx, scene)
+
+  // 滚动条轨道/滑块都是固定 6px 宽的 fillRect；分组背景、节点背景都比 6 宽得多，
+  // 用宽度筛选不会跟其它绘制混在一起。heap-1 溢出（1 条轨道 + 1 个滑块），cluster-25 不溢出（0）。
+  const scrollbarRects = ctx.methodsOf('fillRect').filter((call) => call.args[2] === 6)
+  assert.equal(scrollbarRects.length, 2)
+})
