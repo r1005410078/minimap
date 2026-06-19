@@ -14,7 +14,7 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第一阶段（核心可用能力）—— 进行中（验收回归发现 2 个缺口，缺口 2 已改验收文字解决，缺口 1 待实现）
+- **当前阶段**：第一阶段（核心可用能力）—— 进行中（验收回归发现的 2 个缺口已全部处理，待重新跑一次验收回归确认全绿）
 - **当前阶段计划**：[逻辑层](docs/superpowers/plans/2026-06-18-phase-1-core-logic.md) ｜ [Canvas 渲染器](docs/superpowers/plans/2026-06-18-phase-1-canvas-renderer.md) ｜ [Vue 组件壳 + 资源树拖入](docs/superpowers/plans/2026-06-18-phase-1-vue-shell.md) ｜ [正交连线](docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md)（切片级进度在各 plan「进度」一节）
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
@@ -22,10 +22,11 @@
   - Vue 组件壳 `Minimap.vue` / `ResourceTree.vue` / `interaction.js` + 资源树拖入 + 测试（commit `0c50895`..`e4c451b`，`npm test` 49 全过，浏览器手动验收通过）
   - 正交连线 `orthogonalPath` / `resolveEdges` endpoint boxes / 折线 + 箭头绘制 + 测试（commit `7902000`..`0d4b711`，`npm test` 与 `npm run build` 通过）
   - 布局切换动画 + 视口锚点稳定 `layout-transition` / `Minimap.vue` raf 动画 + 测试（commit `8ab447a..5ee9672`，`npm test` 与 `npm run build` 通过）
+  - 自定义绘制 props 接通 `nodeRenderer`/`groupRenderer`/`edgeRenderer` + 测试（commit `6f12cd2`，`npm test` 与 `npm run build` 通过）
 - **第一阶段验收回归结果（2026-06-19）**：`npm test` 81 全过、`npm run build` 通过；真实浏览器驱动（headless Chrome + CDP）逐条核对「第一阶段验收」10 条，8 条通过，2 条发现缺口——详见下方「待办切片」。验收点全绿前不勾选「第一阶段」。
-- **下一步**：按 brainstorm → spec → plan → implement 落地缺口 1（自定义绘制 props 接通），完成后重新跑一次验收回归，全绿后勾「第一阶段」，进入第二阶段「分组框能力」
+- **下一步**：重新跑一次第一阶段验收回归（真实浏览器驱动逐条核对「第一阶段验收」），全绿后勾「第一阶段」，进入第二阶段「分组框能力」
 - **待办切片**：
-  - 缺口 1（组件契约缺失，待实现）：`renderer.js` 的 `renderers.node/group/edge` 自定义绘制钩子只在底层渲染函数里实现并测试，`Minimap.vue` 并未声明 `nodeRenderer`/`groupRenderer`/`edgeRenderer` props 或转发给 `renderScene`；实测对 `<Minimap>` 传入 `nodeRenderer` 完全不生效。需要补一个小切片把这三个 props 接上。
+  - 缺口 1（组件契约缺失，已解决）：`Minimap.vue` 已新增 `nodeRenderer`/`groupRenderer`/`edgeRenderer` props 并转发给 `renderScene`，对应组件级测试通过。
   - 缺口 2（验收点与范围矛盾，已解决）：第一阶段验收原文假设缩放/框选/overview 已存在，但这些功能按功能列表都排在第三、四阶段，`Minimap.vue` 也明确注释"Phase 1 固定视口，平移/缩放是第三阶段才做"。已把对应两条验收点的文字改成只覆盖第一阶段已有功能（拖入复用坐标转换、10000 节点挂载与交互响应），缩放/框选/overview 的验收文字挪到第三、四阶段。
 
 ## 目标
