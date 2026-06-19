@@ -184,3 +184,11 @@ test('options.groupThreshold overrides the default threshold', () => {
   assert.equal(folded.groups.length, 1)
   assert.equal(notFolded.groups.length, 0)
 })
+
+test('group size never shrinks below the minimum usable grid', () => {
+  const graph = graphWithChildren(leaves('d', 6))
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 10, viewportHeight: 10 })
+
+  assert.equal(layout.groups[0].width, 144) // 2*12(padding) + 120(itemW)
+  assert.equal(layout.groups[0].height, 92) // 28(header) + 2*12(padding) + 40(itemH)
+})

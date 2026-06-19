@@ -10,6 +10,8 @@ const SIBLING_GAP = 24 // 交叉轴（兄弟方向）间距
 const GROUP = { padding: 12, header: 28, itemW: 120, itemH: 40, itemGap: 10 }
 const GROUP_MAX_W_RATIO = 0.48
 const GROUP_MAX_H_RATIO = 0.42
+const GROUP_MIN_WIDTH = 2 * GROUP.padding + GROUP.itemW
+const GROUP_MIN_HEIGHT = GROUP.header + 2 * GROUP.padding + GROUP.itemH
 
 // 重新布局后，让锚点节点保持在原屏幕位置：补偿视口偏移。
 // screen = world * scale + viewport => viewport' = viewport + (before - after) * scale
@@ -59,15 +61,19 @@ function buildGroup(groupId, parentId, children, viewportWidth, viewportHeight) 
   const contentHeight =
     GROUP.header + 2 * GROUP.padding + rows * GROUP.itemH + Math.max(0, rows - 1) * GROUP.itemGap
 
+  const width = Math.max(GROUP_MIN_WIDTH, Math.min(contentWidth, maxW))
+  const height = Math.max(GROUP_MIN_HEIGHT, Math.min(contentHeight, maxH))
+  const overflowY = height < contentHeight
+
   return {
     id: groupId,
     parentId,
     children,
     columns,
     rows,
-    width: Math.min(contentWidth, maxW),
-    height: Math.min(contentHeight, maxH),
-    overflowY: contentHeight > maxH,
+    width,
+    height,
+    overflowY,
     x: 0,
     y: 0,
   }
