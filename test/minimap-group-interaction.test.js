@@ -37,6 +37,18 @@ function dispatchPointerUp(wrapper, point) {
   )
 }
 
+function dispatchPointerCancel(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointercancel', { clientX: point.x, clientY: point.y, pointerId: 1, bubbles: true }),
+  )
+}
+
+function dispatchLostPointerCapture(wrapper, pointerId = 1) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(new PointerEvent('lostpointercapture', { pointerId, bubbles: true }))
+}
+
 function dispatchWheel(wrapper, point, deltaY) {
   const canvasEl = wrapper.find('canvas').element
   canvasEl.dispatchEvent(
@@ -173,6 +185,73 @@ test('dragging near the bottom edge of an overflowing group auto-scrolls it', ()
     .map((c) => c.args[0])
   assert.equal(labelsAfter.includes('cluster-8'), true)
   assert.equal(labelsAfter.includes('cluster-2'), false)
+  wrapper.destroy()
+})
+
+test('releasing after auto-scroll reorders using the scrolled insertion index', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const heap = graph.nodes.get('heap-1')
+
+  const firstItemPoint = firstItemCenter(group)
+  dispatchPointerDown(wrapper, firstItemPoint)
+  const bottomEdge = { x: firstItemPoint.x, y: group.y + group.height - 1 }
+  dispatchPointerMove(wrapper, bottomEdge)
+
+  for (let i = 0; i < 20; i++) frames.runNext(i * 16)
+  dispatchPointerUp(wrapper, bottomEdge)
+  finishPendingAnimation()
+
+  assert.equal(heap.children[14], 'cluster-1')
+  assert.equal(wrapper.emitted('group-reorder')[0][0].index, 14)
+  wrapper.destroy()
+})
+
+test('pointercancel cancels an active group drag without selecting or reordering', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const heap = graph.nodes.get('heap-1')
+  const childrenBefore = [...heap.children]
+  const cancelledBefore = frames.cancelled.length
+
+  const firstItemPoint = firstItemCenter(group)
+  dispatchPointerDown(wrapper, firstItemPoint)
+  const bottomEdge = { x: firstItemPoint.x, y: group.y + group.height - 1 }
+  dispatchPointerMove(wrapper, bottomEdge)
+  dispatchPointerCancel(wrapper, bottomEdge)
+  dispatchPointerUp(wrapper, bottomEdge)
+
+  assert.deepEqual(heap.children, childrenBefore)
+  assert.equal(wrapper.emitted('select'), undefined)
+  assert.equal(wrapper.emitted('group-reorder'), undefined)
+  assert.equal(wrapper.emitted('change'), undefined)
+  assert.ok(frames.cancelled.length > cancelledBefore)
+  wrapper.destroy()
+})
+
+test('lost pointer capture cancels an active group drag without selecting or reordering', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const heap = graph.nodes.get('heap-1')
+  const childrenBefore = [...heap.children]
+
+  const firstItemPoint = firstItemCenter(group)
+  dispatchPointerDown(wrapper, firstItemPoint)
+  const bottomEdge = { x: firstItemPoint.x, y: group.y + group.height - 1 }
+  dispatchPointerMove(wrapper, bottomEdge)
+  dispatchLostPointerCapture(wrapper)
+  dispatchPointerUp(wrapper, bottomEdge)
+
+  assert.deepEqual(heap.children, childrenBefore)
+  assert.equal(wrapper.emitted('select'), undefined)
+  assert.equal(wrapper.emitted('group-reorder'), undefined)
+  assert.equal(wrapper.emitted('change'), undefined)
   wrapper.destroy()
 })
 

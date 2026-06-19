@@ -233,6 +233,13 @@ function cancelAutoScrollLoop() {
   }
 }
 
+function updateDragInsertion(group, worldPoint) {
+  const restGroup = { ...group, children: group.children.filter((id) => id !== dragState.childId) }
+  dragState.insertIndex = groupGridIndexAt(restGroup, worldPoint)
+  dragState.ghostWorldPoint = worldPoint
+  dragState.ghostScreenRect = ghostRectForPoint(worldPoint)
+}
+
 function startAutoScrollLoop() {
   const tick = () => {
     if (!dragState || !dragState.dragging) return
@@ -241,12 +248,20 @@ function startAutoScrollLoop() {
       const delta = groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y)
       if (delta !== 0) {
         group.scrollTop = clampGroupScroll(group, group.scrollTop + delta)
+        updateDragInsertion(group, dragState.ghostWorldPoint)
         renderCurrent()
       }
     }
     dragState.scrollRafId = requestAnimationFrame(tick)
   }
   dragState.scrollRafId = requestAnimationFrame(tick)
+}
+
+function cancelDrag() {
+  if (!dragState) return
+  cancelAutoScrollLoop()
+  dragState = null
+  renderCurrent()
 }
 
 function handlePointerDown(event) {
@@ -292,10 +307,7 @@ function handlePointerMove(event) {
   const group = layout.groups.find((g) => g.id === dragState.groupId)
   if (!group) return
   const worldPoint = pointFromEvent(event)
-  const restGroup = { ...group, children: group.children.filter((id) => id !== dragState.childId) }
-  dragState.insertIndex = groupGridIndexAt(restGroup, worldPoint)
-  dragState.ghostWorldPoint = worldPoint
-  dragState.ghostScreenRect = ghostRectForPoint(worldPoint)
+  updateDragInsertion(group, worldPoint)
   renderCurrent()
 }
 
@@ -390,6 +402,8 @@ onMounted(() => {
   canvas.addEventListener('pointerdown', handlePointerDown)
   canvas.addEventListener('pointermove', handlePointerMove)
   canvas.addEventListener('pointerup', handlePointerUp)
+  canvas.addEventListener('pointercancel', cancelDrag)
+  canvas.addEventListener('lostpointercapture', cancelDrag)
   canvas.addEventListener('wheel', handleWheel, { passive: false })
   canvas.addEventListener('dragover', handleDragOver)
   canvas.addEventListener('drop', handleDrop)
@@ -404,6 +418,8 @@ onUnmounted(() => {
     canvas.removeEventListener('pointerdown', handlePointerDown)
     canvas.removeEventListener('pointermove', handlePointerMove)
     canvas.removeEventListener('pointerup', handlePointerUp)
+    canvas.removeEventListener('pointercancel', cancelDrag)
+    canvas.removeEventListener('lostpointercapture', cancelDrag)
     canvas.removeEventListener('wheel', handleWheel)
     canvas.removeEventListener('dragover', handleDragOver)
     canvas.removeEventListener('drop', handleDrop)
