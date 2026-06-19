@@ -42,17 +42,21 @@ export function collectVisible(layout, viewport, width, height) {
 
 const centerOfBox = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
 
+// childId -> 它所属的分组（一个父节点下的每个分组各自的 children 互不重叠）。
+function groupByChildId(layout) {
+  return new Map(layout.groups.flatMap((group) => group.children.map((id) => [id, group])))
+}
+
 // 父子树默认连线 + graph.edges 业务线；端点为世界坐标中心，
-// 端点落在被折叠子节点上时路由到其所在分组框。
+// 端点落在被折叠子节点上时路由到其所在分组框（按 childId 直接查，不经过 node.parentId）。
 export function resolveEdges(graph, layout) {
   const edges = []
-  const groupByParent = new Map(layout.groups.map((group) => [group.parentId, group]))
+  const byChildId = groupByChildId(layout)
 
   const resolveEndpoint = (id) => {
     const box = layout.nodes.get(id)
     if (box) return { box, point: centerOfBox(box) }
-    const node = graph.nodes.get(id)
-    const group = node && groupByParent.get(node.parentId)
+    const group = byChildId.get(id)
     return group ? { box: group, point: centerOfBox(group) } : null
   }
 
@@ -62,18 +66,22 @@ export function resolveEdges(graph, layout) {
     if (!node || !node.children || node.children.length === 0) continue
     const parentCenter = centerOfBox(item)
     const parentBox = layout.nodes.get(item.id)
-    const group = groupByParent.get(item.id)
-    if (group) {
-      edges.push({
-        id: `tree:${item.id}:group`,
-        kind: 'tree',
-        from: parentCenter,
-        to: centerOfBox(group),
-        fromBox: parentBox,
-        toBox: group,
-      })
-    } else {
-      for (const childId of node.children) {
+    const consumedGroups = new Set()
+
+    for (const childId of node.children) {
+      const group = byChildId.get(childId)
+      if (group) {
+        if (consumedGroups.has(group.id)) continue
+        consumedGroups.add(group.id)
+        edges.push({
+          id: `tree:group:${group.id}`,
+          kind: 'tree',
+          from: parentCenter,
+          to: centerOfBox(group),
+          fromBox: parentBox,
+          toBox: group,
+        })
+      } else {
         const childBox = layout.nodes.get(childId)
         if (childBox) {
           edges.push({
@@ -210,14 +218,24 @@ function inferDirectionFromLayout(graph, layout, edges) {
     if (spanX !== spanY) return spanX > spanY ? 'vertical' : 'horizontal'
   }
 
-  const groupByParent = new Map(layout.groups.map((group) => [group.parentId, group]))
+  const byChildId = groupByChildId(layout)
   for (const node of graph.nodes.values()) {
     const parentBox = layout.nodes.get(node.id)
     if (!parentBox || !node.children || node.children.length === 0) continue
 
-    const targets = groupByParent.has(node.id)
-      ? [groupByParent.get(node.id)]
-      : node.children.map((childId) => layout.nodes.get(childId)).filter(Boolean)
+    const targets = []
+    const consumedGroups = new Set()
+    for (const childId of node.children) {
+      const group = byChildId.get(childId)
+      if (group) {
+        if (consumedGroups.has(group.id)) continue
+        consumedGroups.add(group.id)
+        targets.push(group)
+      } else {
+        const childBox = layout.nodes.get(childId)
+        if (childBox) targets.push(childBox)
+      }
+    }
     if (targets.length === 0) continue
 
     const parentCenter = centerOfBox(parentBox)
@@ -303,9 +321,10 @@ export function renderScene(ctx, scene) {
   const { items, culled } = collectVisible(layout, viewport, width, height)
   let drawn = 0
 
+  const groupById = new Map(layout.groups.map((group) => [group.id, group]))
   for (const { item, screen } of items) {
     if (item.type !== 'group') continue
-    const group = layout.groups.find((g) => g.parentId === item.parentId)
+    const group = groupById.get(item.id)
     const itemState = makeState(item.parentId, selectedIds)
     if (renderers.group) renderers.group(ctx, { group, rect: screen, state: itemState, theme, viewport })
     else drawGroup(ctx, group, screen, theme)

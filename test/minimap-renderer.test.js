@@ -35,6 +35,29 @@ function demoGraphWithRelationEdges() {
   }
 }
 
+// root -> p -> [a0..a5, mid(带子节点,不参与合并), b0..b5]
+// a0..a5、b0..b5 各自超过默认阈值(5)，各自独立折叠成一个分组；mid 是普通节点。
+function multiGroupGraph(edges = []) {
+  const nodes = new Map()
+  nodes.set('root', { id: 'root', label: 'root', parentId: null, children: ['p'] })
+  const childIds = []
+  for (let i = 0; i < 6; i++) {
+    const id = `a${i}`
+    childIds.push(id)
+    nodes.set(id, { id, label: id, parentId: 'p', children: [] })
+  }
+  childIds.push('mid')
+  nodes.set('mid', { id: 'mid', label: 'mid', parentId: 'p', children: ['mid-child'] })
+  nodes.set('mid-child', { id: 'mid-child', label: 'mid-child', parentId: 'mid', children: [] })
+  for (let i = 0; i < 6; i++) {
+    const id = `b${i}`
+    childIds.push(id)
+    nodes.set(id, { id, label: id, parentId: 'p', children: [] })
+  }
+  nodes.set('p', { id: 'p', label: 'p', parentId: 'root', children: childIds })
+  return { version: 1, nodes, rootIds: ['root'], edges }
+}
+
 function edgeStrokeSegments(ctx, edgeIndex) {
   const strokes = ctx.methodsOf('stroke')
   const strokeIndex = ctx.calls.findIndex((call, index) => call === strokes[edgeIndex])
@@ -90,7 +113,7 @@ test('resolveEdges builds tree edges and routes folded endpoints to the group', 
   const groupCenter = centerOfBox(heapGroup)
   const heapNode = layout.nodes.get('heap-1')
   const cluster25 = layout.nodes.get('cluster-25')
-  const groupedTree = edges.find((edge) => edge.id === 'tree:heap-1:group')
+  const groupedTree = edges.find((edge) => edge.id === `tree:group:${heapGroup.id}`)
   const business = edges.find((edge) => edge.id === 'edge-1') // cluster-8 -> cluster-25
   assert.deepEqual(groupedTree.fromBox, heapNode)
   assert.deepEqual(groupedTree.toBox, heapGroup)
@@ -401,4 +424,79 @@ test('stress graph: drawn count stays far below total node count', () => {
   assert.ok(stats.drawn < 100)
   assert.ok(stats.drawn < graph.nodes.size)
   assert.equal(stats.total, layout.visibleItems.length)
+})
+
+test('resolveEdges creates one tree edge per group when a parent has multiple groups', () => {
+  const graph = multiGroupGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const edges = resolveEdges(graph, layout)
+
+  const groupTreeEdges = edges.filter((edge) => edge.kind === 'tree' && edge.id.startsWith('tree:group:'))
+  assert.equal(groupTreeEdges.length, 2)
+  assert.equal(new Set(groupTreeEdges.map((edge) => edge.toBox)).size, 2)
+
+  const midEdge = edges.find((edge) => edge.id === 'tree:p:mid')
+  assert.ok(midEdge)
+  assert.deepEqual(midEdge.toBox, layout.nodes.get('mid'))
+})
+
+test('resolveEdges routes a business edge to the specific group that owns the endpoint', () => {
+  const graph = multiGroupGraph([{ id: 'rel-1', source: 'a0', target: 'b0', kind: 'relation' }])
+  const layout = computeLayout(graph, VIEWPORT)
+  const edges = resolveEdges(graph, layout)
+
+  const groupA = layout.groups.find((group) => group.children.includes('a0'))
+  const groupB = layout.groups.find((group) => group.children.includes('b0'))
+  const rel = edges.find((edge) => edge.id === 'rel-1')
+
+  assert.notEqual(groupA.id, groupB.id)
+  assert.deepEqual(rel.fromBox, groupA)
+  assert.deepEqual(rel.toBox, groupB)
+})
+
+test('renderScene draws each group exactly once with its own group object', () => {
+  const ctx = createMockCtx()
+  const graph = multiGroupGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const seen = []
+  renderScene(ctx, {
+    graph,
+    layout,
+    viewport: { x: 0, y: 0, scale: 1 },
+    width: 2400,
+    height: 1600,
+    layoutDirection: 'horizontal',
+    renderers: { group: (_ctx, { group }) => seen.push(group.id), node: () => {} },
+  })
+  assert.deepEqual(seen.sort(), layout.groups.map((g) => g.id).sort())
+})
+
+test('inferDirectionFromLayout still infers correctly when a parent has multiple groups', () => {
+  const ctx = createMockCtx()
+  const graph = multiGroupGraph()
+  const layout = computeLayout(graph, { direction: 'vertical', viewportWidth: 1200, viewportHeight: 760 })
+  const scene = {
+    graph,
+    layout,
+    viewport: { x: 100, y: 100, scale: 1 },
+    width: 2400,
+    height: 1600,
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+    renderers: { group: () => {}, node: () => {} },
+  }
+  const edges = resolveEdges(graph, layout)
+
+  renderScene(ctx, scene) // 不传 layoutDirection/direction，强制走 inferDirectionFromLayout
+
+  const firstEdgePoints = linePoints(edgeStrokeSegments(ctx, 0))
+  const expectedPath = orthogonalPath(edges[0].fromBox, edges[0].toBox, 'y').map((point) => ({
+    x: point.x + scene.viewport.x,
+    y: point.y + scene.viewport.y,
+  }))
+  assert.deepEqual(firstEdgePoints, [
+    { ...expectedPath[0], method: 'moveTo' },
+    { ...expectedPath[1], method: 'lineTo' },
+    { ...expectedPath[2], method: 'lineTo' },
+    { ...expectedPath[3], method: 'lineTo' },
+  ])
 })
