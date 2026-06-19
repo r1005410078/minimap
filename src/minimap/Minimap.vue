@@ -57,6 +57,7 @@ import {
   normalizeRect,
 } from './selection.js'
 import { searchNodes } from './search.js'
+import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
 const ANIMATION_DURATION_MS = 200
@@ -89,6 +90,7 @@ const emit = defineEmits([
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
+const overviewRef = ref(null)
 const searchKeyword = ref('')
 const searchMatches = ref([])
 const searchCurrentIndex = ref(-1)
@@ -318,6 +320,13 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
       selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
     },
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
+  })
+  overviewRef.value?.render({
+    layout: currentLayout,
+    viewport: renderViewport,
+    mainWidth: cssWidth,
+    mainHeight: cssHeight,
+    theme: props.theme || defaultTheme,
   })
 }
 
@@ -947,6 +956,10 @@ function searchPrevious() {
   emit('search', { keyword: searchKeyword.value, matches: searchMatches.value, current: id })
 }
 
+function handleOverviewNavigate(worldPoint) {
+  applyViewport(centerViewportOn(worldPoint, currentViewport(), cssWidth, cssHeight))
+}
+
 defineExpose({
   fitToScreen,
   centerOnNode,
@@ -1055,6 +1068,12 @@ watch(() => props.options, () => updateLayout())
           ›
         </button>
       </div>
+      <Overview
+        v-if="options?.enableOverview !== false"
+        ref="overviewRef"
+        class="minimap-overview"
+        @navigate="handleOverviewNavigate"
+      />
     </div>
   </div>
 </template>
@@ -1118,5 +1137,17 @@ watch(() => props.options, () => updateLayout())
 .minimap-search-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+.minimap-overview {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border: 1px solid #1b2530;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.minimap-overview canvas {
+  display: block;
+  cursor: pointer;
 }
 </style>
