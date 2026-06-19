@@ -79,7 +79,7 @@ group: {
   stroke: '#3a4f66',
   header: '#9fb6cc',
   font: '12px sans-serif',
-  scrollbar: { track: '#1b2530', thumb: '#3a4f66' }, // 新增
+  scrollbar: { track: '#10161d', thumb: '#4a6280' }, // 新增；特意跟其它已用颜色不同，避免颜色断言碰撞
 },
 ```
 
