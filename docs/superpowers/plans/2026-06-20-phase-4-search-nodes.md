@@ -10,9 +10,9 @@
 
 ## 进度
 
-- [ ] Task 1：`search.js` 纯函数（`searchNodes`）
-- [ ] Task 2：`Minimap.vue` 搜索状态、方法、UI、样式
-- [ ] Task 3：回归校验 + ROADMAP 同步（含 Methods 契约补充）
+- [x] Task 1：`search.js` 纯函数（`searchNodes`）
+- [x] Task 2：`Minimap.vue` 搜索状态、方法、UI、样式
+- [x] Task 3：回归校验 + ROADMAP 同步（含 Methods 契约补充）
 
 ## Global Constraints
 
