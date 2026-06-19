@@ -23,6 +23,9 @@ const props = defineProps({
   layoutDirection: { type: String, default: 'horizontal' },
   selectedIds: { type: Array, default: null },
   theme: { type: Object, default: null },
+  nodeRenderer: { type: Function, default: null },
+  groupRenderer: { type: Function, default: null },
+  edgeRenderer: { type: Function, default: null },
 })
 
 const emit = defineEmits(['select', 'node-drop', 'change'])
@@ -63,6 +66,7 @@ function renderCurrent(currentLayout = layout, currentViewport = viewport) {
     height: cssHeight,
     theme: props.theme || defaultTheme,
     state: { selectedIds: new Set(currentSelectedIds()) },
+    renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
 }
 

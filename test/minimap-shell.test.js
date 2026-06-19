@@ -5,6 +5,7 @@ import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './hel
 import { createDemoGraph } from '../src/minimap/graph.js'
 import { computeLayout, keepAnchorStable } from '../src/minimap/layout.js'
 import { easeOutCubic } from '../src/minimap/layout-transition.js'
+import { resolveEdges } from '../src/minimap/renderer.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -296,4 +297,53 @@ test('unmounting disconnects the ResizeObserver', () => {
   const observer = observers.at(-1)
   wrapper.destroy()
   assert.equal(observer.disconnected, true)
+})
+
+test('nodeRenderer prop replaces default node drawing', () => {
+  let calls = 0
+  const wrapper = mount(Minimap, {
+    propsData: { graph: createDemoGraph(), nodeRenderer: () => { calls++ } },
+  })
+  const ctx = contexts.at(-1)
+  assert.ok(calls > 0)
+  assert.equal(
+    ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'),
+    false,
+  )
+  wrapper.destroy()
+})
+
+test('groupRenderer prop replaces default group drawing', () => {
+  let calls = 0
+  const wrapper = mount(Minimap, {
+    propsData: { graph: createDemoGraph(), groupRenderer: () => { calls++ } },
+  })
+  const ctx = contexts.at(-1)
+  assert.ok(calls > 0)
+  assert.equal(
+    ctx.calls.some(
+      (call) => call.method === 'fillText' && typeof call.args[0] === 'string' && call.args[0].startsWith('heap-1'),
+    ),
+    false,
+  )
+  wrapper.destroy()
+})
+
+test('edgeRenderer prop replaces default edge drawing', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const expectedEdgeCount = resolveEdges(graph, layout).length
+  const payloads = []
+  const wrapper = mount(Minimap, {
+    propsData: { graph, edgeRenderer: (_ctx, payload) => payloads.push(payload) },
+  })
+  assert.equal(payloads.length, expectedEdgeCount)
+  wrapper.destroy()
+})
+
+test('renderer props default to null and do not affect default drawing', () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const ctx = contexts.at(-1)
+  assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'))
+  wrapper.destroy()
 })
