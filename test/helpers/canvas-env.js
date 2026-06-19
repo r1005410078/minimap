@@ -32,3 +32,32 @@ export function stubResizeObserver() {
   globalThis.ResizeObserver = FakeResizeObserver
   return instances
 }
+
+export function stubAnimationFrame() {
+  const scheduled = []
+  const cancelled = []
+  let nextId = 1
+
+  globalThis.requestAnimationFrame = (callback) => {
+    const id = nextId++
+    scheduled.push({ id, callback, cancelled: false })
+    return id
+  }
+  globalThis.cancelAnimationFrame = (id) => {
+    cancelled.push(id)
+    const frame = scheduled.find((item) => item.id === id)
+    if (frame) frame.cancelled = true
+  }
+
+  return {
+    scheduled,
+    cancelled,
+    runNext(time = 0) {
+      const frame = scheduled.find((item) => !item.cancelled && !item.ran)
+      if (!frame) return false
+      frame.ran = true
+      frame.callback(time)
+      return true
+    },
+  }
+}
