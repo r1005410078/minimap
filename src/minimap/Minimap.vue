@@ -840,6 +840,9 @@ function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
 }
 
+// 跟 resolveTargetRect 不同：这个版本会先把 id 所在分组的 scrollTop 滚到能看见它的位置
+// （副作用），只给 centerOnNode 用。centerOnSelection 故意不用这个——多个选中 id 落在
+// 同一分组时，逐个滚动会互相覆盖 scrollTop，让已经读出的矩形过期，包围盒数学失真。
 function resolveCenterTarget(id) {
   if (!layout) return null
   const located = locateChildGroup(layout, id)

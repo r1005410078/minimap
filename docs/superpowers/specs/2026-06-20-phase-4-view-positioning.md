@@ -14,7 +14,8 @@
 - **`setViewport` 不动画**：`setViewport` 是原始 setter，常用于恢复外部保存的视口状态、受控模式同步等场景，这些场景下动画反而是干扰；跟 `applyViewport` 现有的"立即生效"行为一致。
 - **顺带暴露 `select`/`clearSelection`**：`defineExpose` 是这个切片才引入的机制，索性把 ROADMAP Methods 契约里现有的、实现简单的 `select(ids, mode)`/`clearSelection()` 一起暴露，避免后面再为这两个小方法单独开一个切片。`select` 新增 `mode` 参数（`'replace'`/`'add'`/`'remove'`/`'toggle'`），包装已有的 `setSelected`。
 - **受控模式下的 `viewport-change` 时机**：补动结束时只发一次最终值；受控视口（`props.viewport !== null`）下立即发一次（不做逐帧动画），因为组件不拥有渲染时机——跟布局动画里"受控视口跳过逐帧锚点补偿"的既有简化保持一致，不是本切片新引入的限制。
-- **分组滚动的受控/非受控分支**：`centerOnNode`/`centerOnSelection` 内部需要把目标子节点滚动到可见区时，复用 `handleWheel` 现有的分组滚动模式——非受控时直接改 `group.scrollTop`（快路径，不必整次重新计算布局）；受控时 `updateGroupState` emit 后调 `updateLayout()` 重新计算（依赖父级监听器同步更新 `groupStates`，这跟现有滚轮滚动受控分支的假设完全一致）。
+- **分组滚动的受控/非受控分支**：`centerOnNode` 内部需要把目标子节点滚动到可见区时，复用 `handleWheel` 现有的分组滚动模式——非受控时直接改 `group.scrollTop`（快路径，不必整次重新计算布局）；受控时 `updateGroupState` emit 后调 `updateLayout()` 重新计算（依赖父级监听器同步更新 `groupStates`，这跟现有滚轮滚动受控分支的假设完全一致）。
+- **`centerOnSelection` 不做分组滚动揭示**：跟 `centerOnNode` 不同，`centerOnSelection` 只读当前位置（`resolveTargetRect`），不会为了让某个选中的分组子节点可见而去改 `scrollTop`。原因：若多个选中 id 落在同一个分组里，逐个调用"滚动揭示"会导致后一个 id 的 `scrollTop` 覆盖前一个——前面已经读出的矩形会变成跟分组最终滚动状态不一致的过期值，包围盒数学失真。保持只读、只用当前真实位置算包围盒，结果始终自洽；这意味着分组里被滚出可见区的子节点即使被选中，`centerOnSelection` 也不会强行把它们卷入可见窗口（这是经过权衡的取舍，不是遗漏）。
 
 ## 范围
 
