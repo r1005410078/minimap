@@ -1,0 +1,107 @@
+import { visibleGroupChildren } from './layout.js'
+import { resolveEdges, worldRectToScreen } from './renderer.js'
+
+export function normalizeRect(rect) {
+  const x = Math.min(rect.x, rect.x + rect.width)
+  const y = Math.min(rect.y, rect.y + rect.height)
+  return {
+    x,
+    y,
+    width: Math.abs(rect.width),
+    height: Math.abs(rect.height),
+  }
+}
+
+export function intersectsRect(a, b) {
+  const ra = normalizeRect(a)
+  const rb = normalizeRect(b)
+  return (
+    ra.x <= rb.x + rb.width &&
+    ra.x + ra.width >= rb.x &&
+    ra.y <= rb.y + rb.height &&
+    ra.y + ra.height >= rb.y
+  )
+}
+
+export function applySelectionClick(currentIds, id, { additive = false } = {}) {
+  if (!additive) return [id]
+  return currentIds.includes(id) ? currentIds.filter((item) => item !== id) : [...currentIds, id]
+}
+
+function visibleSelectableItems(layout) {
+  const items = [...layout.visibleItems]
+  for (const group of layout.groups) {
+    for (const child of visibleGroupChildren(group)) {
+      items.push({ ...child.rect, id: child.id, type: 'node' })
+    }
+  }
+  return items
+}
+
+export function idsInSelectionRect(layout, screenRect, viewport) {
+  const ids = []
+  for (const item of visibleSelectableItems(layout)) {
+    if (intersectsRect(screenRect, worldRectToScreen(item, viewport))) ids.push(item.id)
+  }
+  return ids
+}
+
+function addNodeRelations(graph, id, relatedIds) {
+  const node = graph.nodes.get(id)
+  if (!node) return
+  if (node.parentId) relatedIds.add(node.parentId)
+  for (const childId of node.children || []) relatedIds.add(childId)
+}
+
+function addGroupRelations(group, relatedIds) {
+  if (group.parentId) relatedIds.add(group.parentId)
+  for (const childId of group.children) relatedIds.add(childId)
+}
+
+function itemIds(layout) {
+  return visibleSelectableItems(layout).map((item) => item.id)
+}
+
+function boxForId(layout, id) {
+  return layout.nodes.get(id) || layout.groups.find((group) => group.id === id) || null
+}
+
+function edgeTouchesSelected(edge, relatedBoxes) {
+  return relatedBoxes.has(edge.fromBox) || relatedBoxes.has(edge.toBox)
+}
+
+export function buildSelectionRelations(graph, layout, selectedIds) {
+  const selected = new Set(selectedIds)
+  const highlightedIds = new Set()
+  const highlightedEdgeIds = new Set()
+  const dimmedIds = new Set()
+  const dimmedEdgeIds = new Set()
+
+  if (selected.size === 0) {
+    return { selectedIds: selected, highlightedIds, dimmedIds, highlightedEdgeIds, dimmedEdgeIds }
+  }
+
+  const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
+  for (const id of selected) {
+    const group = groupsById.get(id)
+    if (group) addGroupRelations(group, highlightedIds)
+    else addNodeRelations(graph, id, highlightedIds)
+  }
+
+  const relatedBoxes = new Set()
+  for (const id of [...selected, ...highlightedIds]) {
+    const box = boxForId(layout, id)
+    if (box) relatedBoxes.add(box)
+  }
+
+  for (const edge of resolveEdges(graph, layout)) {
+    if (edgeTouchesSelected(edge, relatedBoxes)) highlightedEdgeIds.add(edge.id)
+    else dimmedEdgeIds.add(edge.id)
+  }
+
+  for (const id of itemIds(layout)) {
+    if (!selected.has(id) && !highlightedIds.has(id)) dimmedIds.add(id)
+  }
+
+  return { selectedIds: selected, highlightedIds, dimmedIds, highlightedEdgeIds, dimmedEdgeIds }
+}
