@@ -277,7 +277,11 @@ function drawGroup(ctx, group, rect, state, theme, scrollbarHovered = false) {
   withDimmedAlpha(ctx, state, () => {
     ctx.fillStyle = theme.group.fill
     ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
-    ctx.strokeStyle = state.selected || state.highlighted ? theme.node.selectedStroke : theme.group.stroke
+    ctx.strokeStyle = state.selected
+      ? theme.node.selectedStroke
+      : state.highlighted
+        ? theme.group.header
+        : theme.group.stroke
     ctx.lineWidth = 1
     ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
     ctx.fillStyle = theme.group.header
@@ -314,7 +318,11 @@ function drawNode(ctx, node, rect, state, theme) {
   withDimmedAlpha(ctx, state, () => {
     ctx.fillStyle = theme.node.fill
     ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
-    ctx.strokeStyle = state.selected || state.highlighted ? theme.node.selectedStroke : theme.node.stroke
+    ctx.strokeStyle = state.selected
+      ? theme.node.selectedStroke
+      : state.highlighted
+        ? theme.group.header
+        : theme.node.stroke
     ctx.lineWidth = 1
     ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
     ctx.fillStyle = theme.node.text
@@ -433,7 +441,11 @@ export function renderScene(ctx, scene) {
       const path = orthogonalPath(edge.fromBox, edge.toBox, mainAxis).map((point) => worldToScreen(point, viewport))
       withDimmedAlpha(ctx, edgeState, () => {
         const edgeTheme = { ...defaultTheme.edge, ...(theme.edge || {}) }
-        ctx.strokeStyle = edgeState.selected || edgeState.highlighted ? theme.node.selectedStroke : edgeTheme.color
+        ctx.strokeStyle = edgeState.selected
+          ? theme.node.selectedStroke
+          : edgeState.highlighted
+            ? theme.group.header
+            : edgeTheme.color
         ctx.lineWidth = edgeTheme.width
         ctx.beginPath()
         ctx.moveTo(path[0].x, path[0].y)
