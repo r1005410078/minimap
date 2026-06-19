@@ -10,10 +10,10 @@
 
 ## 进度
 
-- [ ] Task 1：`interaction.js`——命中检测细分 + `findInsertionIndex` 修复 + 拖拽几何纯函数
-- [ ] Task 2：`theme.js` + `renderer.js`——空位提示/ghost 绘制 + 分组选中身份修复
-- [ ] Task 3：`Minimap.vue`——`groupStates`/`options` props + 完整指针状态机 + 滚轮
-- [ ] Task 4：回归校验 + 进度文档同步
+- [x] Task 1：`interaction.js`——命中检测细分 + `findInsertionIndex` 修复 + 拖拽几何纯函数
+- [x] Task 2：`theme.js` + `renderer.js`——空位提示/ghost 绘制 + 分组选中身份修复
+- [x] Task 3：`Minimap.vue`——`groupStates`/`options` props + 完整指针状态机 + 滚轮
+- [x] Task 4：回归校验 + 进度文档同步（`npm test` 131 全过，`npm run build` 通过）
 
 ## Global Constraints
 

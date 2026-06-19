@@ -5,7 +5,7 @@
 ## 路线图进度
 
 - [x] 第一阶段：核心可用能力
-- [ ] 第二阶段：分组框能力
+- [x] 第二阶段：分组框能力
 - [ ] 第三阶段：视图和选择能力
 - [ ] 第四阶段：导航和查找能力
 - [ ] 第五阶段：编辑和状态能力
@@ -14,8 +14,8 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第二阶段（分组框能力）—— 进行中
-- **当前阶段计划**：[分组逻辑](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)、[Canvas 渲染器](docs/superpowers/plans/2026-06-19-phase-2-canvas-renderer.md)（切片级进度在各 plan「进度」一节；第一阶段的切片链接见下方"已完成切片"，不再重复列在这里）
+- **当前阶段**：第二阶段（分组框能力）—— 已完成
+- **当前阶段计划**：[分组逻辑](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)、[Canvas 渲染器](docs/superpowers/plans/2026-06-19-phase-2-canvas-renderer.md)、[Vue 交互](docs/superpowers/plans/2026-06-19-phase-2-vue-interaction.md)
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -25,9 +25,10 @@
   - 自定义绘制 props 接通 `nodeRenderer`/`groupRenderer`/`edgeRenderer` + 测试（commit `6f12cd2..c645ca4`，`npm test` 与 `npm run build` 通过）
   - 分组逻辑 `layout.js` 叶子兄弟分段 + 多分组身份 + 最小尺寸 + 展开态 + 滚动窗口 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)，`npm test` 92 全过，`npm run build` 通过）
   - Canvas 渲染器 `renderer.js` 分组框子节点虚拟绘制 + 滚动条视觉 + 多分组动画适配 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-2-canvas-renderer.md)，`npm test` 101 全过，`npm run build` 通过）
+  - Vue 交互 `interaction.js` 命中检测细分 + `Minimap.vue` 拖拽换位/滚轮/展开折叠 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-2-vue-interaction.md)，`npm test` 131 全过，`npm run build` 通过）
 - **第一阶段验收回归结果（2026-06-19，复跑）**：`npm test` 85 全过、`npm run build` 通过；真实浏览器驱动（headless Chrome + CDP）逐条核对「第一阶段验收」10 条，全部通过——示例图与 10000 节点压力图正常渲染且不创建 10000 个 DOM 节点（仅 17 个）；`edges` 不改变父子树节点坐标（7 个节点 diff 0）；左右/上下布局正确切换，父节点居中、兄弟顺序稳定；选中 `feeder-1` 后切换布局方向，视口锚点补偿生效（截图确认其屏幕位置基本不变）；`nodeRenderer`/`groupRenderer`/`edgeRenderer` 同时生效（截图可见洋红节点/青色分组框/黄色连线）；容器 resize + DPR=3 下 canvas 像素尺寸正确按比例放大；资源树拖入后 graph 正确增加节点。
-- **下一步**：继续第二阶段「分组框能力」，按 brainstorm → spec → plan → implement 推进，下一个切片是 Vue 交互（`groupStates`/`options` props、命中检测细分、滚轮、拖拽换位、展开折叠点击，以及 `interaction.js` 的多分组适配）。
-- **待办切片**：无（Phase 2 前两个切片已完成；下一步实现第三个切片）。
+- **下一步**：第二阶段「分组框能力」已完成，按 brainstorm → spec → plan → implement 推进第三阶段「视图和选择能力」。
+- **待办切片**：无（第三阶段尚未开始 brainstorm）。
 
 ## 目标
 
