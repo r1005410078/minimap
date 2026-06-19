@@ -78,6 +78,7 @@ let internalSelectedId = null
 let internalGroupStates = {}
 let dragState = null
 let scrollbarDragState = null
+let panState = null
 let hoveredScrollbarGroupId = null
 
 let internalViewport = { ...DEFAULT_VIEWPORT }
@@ -477,9 +478,14 @@ function cancelScrollbarDrag() {
   else renderCurrent()
 }
 
+function cancelPan() {
+  panState = null
+}
+
 function cancelPointerInteractions() {
   cancelDrag()
   cancelScrollbarDrag()
+  cancelPan()
 }
 
 function updateScrollbarHover(groupId) {
@@ -537,7 +543,19 @@ function handlePointerDown(event) {
     return
   }
 
-  setSelected(hit ? [hit.id] : [])
+  if (!hit) {
+    canvasRef.value.setPointerCapture?.(event.pointerId)
+    setSelected([])
+    panState = {
+      pointerId: event.pointerId,
+      startScreen: { x: event.clientX, y: event.clientY },
+      startViewport: currentViewport(),
+      moved: false,
+    }
+    return
+  }
+
+  setSelected([hit.id])
 }
 
 function handlePointerMove(event) {
@@ -553,6 +571,16 @@ function handlePointerMove(event) {
     const nextScrollTop = clampGroupScroll(group, rawScrollTop)
     group.scrollTop = nextScrollTop
     renderCurrent()
+    return
+  }
+
+  if (panState) {
+    const delta = {
+      x: event.clientX - panState.startScreen.x,
+      y: event.clientY - panState.startScreen.y,
+    }
+    panState.moved = panState.moved || delta.x !== 0 || delta.y !== 0
+    applyViewport(panViewportBy(panState.startViewport, delta))
     return
   }
 
@@ -582,6 +610,11 @@ function handlePointerMove(event) {
 }
 
 function handlePointerUp() {
+  if (panState) {
+    panState = null
+    return
+  }
+
   if (scrollbarDragState) {
     const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
     if (group) {
@@ -617,7 +650,7 @@ function handlePointerUp() {
 
 function handleWheel(event) {
   if (!layout) return
-  if (dragState || scrollbarDragState) return
+  if (dragState || scrollbarDragState || panState) return
   const viewport = currentViewport()
   const screenPoint = screenPointFromEvent(event)
   const point = screenToWorld(screenPoint, viewport)

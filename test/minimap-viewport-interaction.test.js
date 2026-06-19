@@ -45,14 +45,28 @@ function dispatchWheel(wrapper, point, deltaY) {
 function dispatchPointerDown(wrapper, point) {
   const canvasEl = wrapper.find('canvas').element
   canvasEl.dispatchEvent(
-    new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, pointerId: 1, bubbles: true }),
+    new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, pointerId: 10, bubbles: true }),
   )
 }
 
 function dispatchPointerMove(wrapper, point) {
   const canvasEl = wrapper.find('canvas').element
   canvasEl.dispatchEvent(
-    new PointerEvent('pointermove', { clientX: point.x, clientY: point.y, pointerId: 1, bubbles: true }),
+    new PointerEvent('pointermove', { clientX: point.x, clientY: point.y, pointerId: 10, bubbles: true }),
+  )
+}
+
+function dispatchPointerUp(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointerup', { clientX: point.x, clientY: point.y, pointerId: 10, bubbles: true }),
+  )
+}
+
+function dispatchPointerCancel(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointercancel', { clientX: point.x, clientY: point.y, pointerId: 10, bubbles: true }),
   )
 }
 
@@ -193,6 +207,64 @@ test('wheel during active group item drag does not emit viewport-change', () => 
   dispatchPointerDown(wrapper, start)
   dispatchPointerMove(wrapper, { x: start.x, y: start.y + GROUP.itemH + GROUP.itemGap })
   dispatchWheel(wrapper, { x: 20, y: 20 }, -200)
+
+  assert.equal(wrapper.emitted('viewport-change'), undefined)
+  wrapper.destroy()
+})
+
+test('dragging blank space pans the viewport and emits viewport-change', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
+  dispatchPointerMove(wrapper, { x: -9900, y: -10040 })
+  dispatchPointerUp(wrapper, { x: -9900, y: -10040 })
+
+  assert.deepEqual(wrapper.emitted('viewport-change').at(-1)[0], { x: 100, y: -40, scale: 1 })
+  assert.deepEqual(wrapper.emitted('select')[0][0], [])
+  wrapper.destroy()
+})
+
+test('controlled viewport pan emits but does not persist without prop update', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const ctx = contexts.at(-1)
+  const before = renderedRectForLabel(ctx, 'Grid Tie')
+
+  dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
+  dispatchPointerMove(wrapper, { x: -9900, y: -10040 })
+  dispatchPointerUp(wrapper, { x: -9900, y: -10040 })
+
+  const after = renderedRectForLabel(ctx, 'Grid Tie')
+  assert.deepEqual(after, before)
+  assert.deepEqual(wrapper.emitted('viewport-change').at(-1)[0], { x: 100, y: -40, scale: 1 })
+  wrapper.destroy()
+})
+
+test('pointercancel stops an active blank pan', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
+  dispatchPointerMove(wrapper, { x: -9950, y: -9950 })
+  const emittedBeforeCancel = wrapper.emitted('viewport-change').length
+  dispatchPointerCancel(wrapper, { x: -9950, y: -9950 })
+  dispatchPointerMove(wrapper, { x: -9900, y: -9900 })
+
+  assert.equal(wrapper.emitted('viewport-change').length, emittedBeforeCancel)
+  wrapper.destroy()
+})
+
+test('dragging from a node does not pan the viewport in phase 3', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const grid = layout.nodes.get('grid-tie')
+  const point = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, point)
+  dispatchPointerMove(wrapper, { x: point.x + 80, y: point.y + 20 })
+  dispatchPointerUp(wrapper, { x: point.x + 80, y: point.y + 20 })
 
   assert.equal(wrapper.emitted('viewport-change'), undefined)
   wrapper.destroy()
