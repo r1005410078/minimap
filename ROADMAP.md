@@ -15,7 +15,7 @@
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
 - **当前阶段**：第二阶段（分组框能力）—— 进行中
-- **当前阶段计划**：[逻辑层](docs/superpowers/plans/2026-06-18-phase-1-core-logic.md) ｜ [Canvas 渲染器](docs/superpowers/plans/2026-06-18-phase-1-canvas-renderer.md) ｜ [Vue 组件壳 + 资源树拖入](docs/superpowers/plans/2026-06-18-phase-1-vue-shell.md) ｜ [正交连线](docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md) ｜ [分组逻辑](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)（切片级进度在各 plan「进度」一节）
+- **当前阶段计划**：[分组逻辑](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)（切片级进度在各 plan「进度」一节；第一阶段的切片链接见下方"已完成切片"，不再重复列在这里）
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
