@@ -17,6 +17,7 @@ export const defaultTheme = {
     header: '#9fb6cc',
     font: '12px sans-serif',
     scrollbar: { track: '#10161d', thumb: '#4a6280' },
+    dropSlot: { fill: '#24344a', stroke: '#6f93b8' },
   },
   edge: { color: '#3a4f66', width: 1, arrowSize: 6 },
 }

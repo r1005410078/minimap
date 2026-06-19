@@ -307,20 +307,47 @@ function drawNode(ctx, node, rect, state, theme) {
   ctx.fillText(node.label ?? node.id, rect.x + 6, rect.y + rect.height / 2 + 4)
 }
 
+function drawDropSlot(ctx, rect, theme) {
+  const dropSlot = { ...defaultTheme.group.dropSlot, ...(theme.group.dropSlot || {}) }
+  ctx.fillStyle = dropSlot.fill
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.strokeStyle = dropSlot.stroke
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.setLineDash([])
+}
+
 // 裁剪到分组框范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
 // 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
-function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds) {
+function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, dragContext) {
+  const virtualGroup = dragContext ? { ...group, children: dragContext.order } : group
   ctx.save()
   ctx.beginPath()
   ctx.rect(rect.x, rect.y, rect.width, rect.height)
   ctx.clip()
-  for (const child of visibleGroupChildren(group)) {
+  for (const child of visibleGroupChildren(virtualGroup)) {
     const node = graph.nodes.get(child.id)
     if (!node) continue
     const childRect = worldRectToScreen(child.rect, viewport)
+    if (child.id === dragContext?.draggingChildId) {
+      drawDropSlot(ctx, childRect, theme)
+      continue
+    }
     const itemState = makeState(child.id, selectedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
     else drawNode(ctx, node, childRect, itemState, theme)
+  }
+  if (dragContext) {
+    const node = graph.nodes.get(dragContext.draggingChildId)
+    if (node) {
+      const itemState = { ...makeState(dragContext.draggingChildId, selectedIds), dragging: true }
+      const previousAlpha = ctx.globalAlpha ?? 1
+      ctx.globalAlpha = 0.85
+      if (renderers.node) renderers.node(ctx, { node, rect: dragContext.ghostRect, state: itemState, theme, viewport })
+      else drawNode(ctx, node, dragContext.ghostRect, itemState, theme)
+      ctx.globalAlpha = previousAlpha
+    }
   }
   ctx.restore()
 }
@@ -367,10 +394,11 @@ export function renderScene(ctx, scene) {
   for (const { item, screen } of items) {
     if (item.type !== 'group') continue
     const group = groupById.get(item.id)
-    const itemState = makeState(item.parentId, selectedIds)
+    const itemState = makeState(item.id, selectedIds)
+    const dragContext = state.groupDrag && state.groupDrag.groupId === group.id ? state.groupDrag : undefined
     if (renderers.group) renderers.group(ctx, { group, rect: screen, state: itemState, theme, viewport })
     else drawGroup(ctx, group, screen, theme)
-    drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds)
+    drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds, dragContext)
     drawn++
   }
 

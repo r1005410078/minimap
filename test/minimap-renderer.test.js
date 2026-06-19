@@ -542,3 +542,75 @@ test('drawGroup draws a scrollbar track and thumb only for overflowing groups', 
   const scrollbarRects = ctx.methodsOf('fillRect').filter((call) => call.args[2] === 6)
   assert.equal(scrollbarRects.length, 2)
 })
+
+test('group chrome receives selected state by group.id, not parentId', () => {
+  const ctx = createMockCtx()
+  const graph = multiGroupGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetGroup = layout.groups[0]
+  const seen = []
+
+  renderScene(ctx, {
+    graph,
+    layout,
+    viewport: { x: 0, y: 0, scale: 1 },
+    width: 2400,
+    height: 1600,
+    state: { selectedIds: new Set([targetGroup.id]) },
+    renderers: {
+      group: (_ctx, { group, state }) => seen.push({ id: group.id, selected: state.selected }),
+      node: () => {},
+    },
+  })
+
+  assert.deepEqual(
+    seen.map((entry) => [entry.id, entry.selected]),
+    layout.groups.map((group) => [group.id, group.id === targetGroup.id]),
+  )
+})
+
+test('drawGroupChildren in drag mode draws a drop slot and a single ghost for the dragged child', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  const group = scene.layout.groups[0]
+  const order = [...group.children].reverse()
+  const draggingChildId = group.children[0]
+  const ghostRect = { x: 420, y: 180, width: 160, height: 34 }
+
+  renderScene(ctx, {
+    ...scene,
+    state: {
+      groupDrag: {
+        groupId: group.id,
+        order,
+        draggingChildId,
+        ghostRect,
+      },
+    },
+  })
+
+  assert.equal(defaultTheme.group.dropSlot?.fill, '#24344a')
+  assert.ok(ctx.methodsOf('set:fillStyle').some((call) => call.args[0] === defaultTheme.group.dropSlot.fill))
+  assert.ok(ctx.methodsOf('set:globalAlpha').some((call) => call.args[0] === 0.85))
+
+  const draggedNode = scene.graph.nodes.get(draggingChildId)
+  const draggedLabelCalls = ctx.methodsOf('fillText').filter((call) => call.args[0] === draggedNode.label)
+  assert.equal(draggedLabelCalls.length, 1)
+  assert.deepEqual(draggedLabelCalls[0].args.slice(1), [
+    ghostRect.x + 6,
+    ghostRect.y + ghostRect.height / 2 + 4,
+  ])
+})
+
+test('drawGroupChildren without dragContext behaves exactly like before (regression)', () => {
+  const baseCtx = createMockCtx()
+  const nullDragCtx = createMockCtx()
+  const scene = demoScene()
+
+  renderScene(baseCtx, scene)
+  renderScene(nullDragCtx, { ...scene, state: { groupDrag: null } })
+
+  assert.deepEqual(nullDragCtx.calls, baseCtx.calls)
+  assert.equal(baseCtx.methodsOf('set:globalAlpha').length, 0)
+  assert.equal(baseCtx.methodsOf('set:fillStyle').some((call) => call.args[0] === '#24344a'), false)
+})
