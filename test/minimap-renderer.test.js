@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDemoGraph, createStressGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
+import { computeLayout, visibleGroupChildren } from '../src/minimap/layout.js'
 import { orthogonalPath } from '../src/minimap/orthogonal.js'
 import { worldRectToScreen, collectVisible, resolveEdges, renderScene } from '../src/minimap/renderer.js'
 import { defaultTheme } from '../src/minimap/theme.js'
@@ -397,13 +397,34 @@ test('custom edgeRenderer still receives only center points and no endpoint boxe
   }
 })
 
+test('default drawing renders each visible group child with its own label', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  renderScene(ctx, scene)
+
+  const texts = ctx.methodsOf('fillText').map((c) => c.args[0])
+  assert.ok(texts.includes('cluster-1')) // heap-1 分组里的子节点
+  assert.ok(texts.includes('leaf-1')) // cluster-25 分组里的子节点
+})
+
+test('group children are clipped to the group box before drawing', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ renderers: { node: () => {} } })
+  renderScene(ctx, scene)
+
+  assert.equal(ctx.methodsOf('save').length, scene.layout.groups.length)
+  assert.equal(ctx.methodsOf('clip').length, scene.layout.groups.length)
+  assert.equal(ctx.methodsOf('restore').length, scene.layout.groups.length)
+})
+
 test('custom nodeRenderer replaces default node drawing', () => {
   const ctx = createMockCtx()
   let calls = 0
   const scene = demoScene({ renderers: { node: () => { calls++ } } })
   const stats = renderScene(ctx, scene)
   const nodeCount = scene.layout.visibleItems.filter((item) => item.type === 'node').length
-  assert.equal(calls, nodeCount)
+  const groupChildCount = scene.layout.groups.reduce((sum, group) => sum + visibleGroupChildren(group).length, 0)
+  assert.equal(calls, nodeCount + groupChildCount)
   // 默认节点绘制不再发出（节点 label 不会被 fillText）
   assert.equal(ctx.methodsOf('fillText').some((c) => c.args[0] === 'Energy Root'), false)
   assert.equal(stats.drawn, stats.total - stats.culled)

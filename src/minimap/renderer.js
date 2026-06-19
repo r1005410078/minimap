@@ -5,7 +5,7 @@
 import { worldToScreen } from './coords.js'
 import { orthogonalPath } from './orthogonal.js'
 import { defaultTheme } from './theme.js'
-import { GROUP } from './layout.js'
+import { GROUP, visibleGroupChildren } from './layout.js'
 
 const now = () => (globalThis.performance ?? Date).now()
 
@@ -307,6 +307,24 @@ function drawNode(ctx, node, rect, state, theme) {
   ctx.fillText(node.label ?? node.id, rect.x + 6, rect.y + rect.height / 2 + 4)
 }
 
+// 裁剪到分组框范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
+// 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
+function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds) {
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(rect.x, rect.y, rect.width, rect.height)
+  ctx.clip()
+  for (const child of visibleGroupChildren(group)) {
+    const node = graph.nodes.get(child.id)
+    if (!node) continue
+    const childRect = worldRectToScreen(child.rect, viewport)
+    const itemState = makeState(child.id, selectedIds)
+    if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
+    else drawNode(ctx, node, childRect, itemState, theme)
+  }
+  ctx.restore()
+}
+
 // --- 入口 ---
 
 // 绘制顺序：网格 → 连线 → 分组框 → 普通节点。返回渲染统计。
@@ -352,6 +370,7 @@ export function renderScene(ctx, scene) {
     const itemState = makeState(item.parentId, selectedIds)
     if (renderers.group) renderers.group(ctx, { group, rect: screen, state: itemState, theme, viewport })
     else drawGroup(ctx, group, screen, theme)
+    drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds)
     drawn++
   }
 

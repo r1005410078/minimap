@@ -21,6 +21,7 @@ const METHODS = [
   'translate',
   'scale',
   'setTransform',
+  'clip',
 ]
 
 // 这几个属性会被赋值（不是方法调用），也记录进 calls，
