@@ -358,9 +358,13 @@ function setSelected(ids) {
   renderCurrent()
 }
 
-function pointFromEvent(event) {
+function screenPointFromEvent(event) {
   const rect = canvasRef.value.getBoundingClientRect()
-  return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, currentViewport())
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+}
+
+function pointFromEvent(event) {
+  return screenToWorld(screenPointFromEvent(event), currentViewport())
 }
 
 function ghostRectForPoint(worldPoint) {
@@ -613,19 +617,28 @@ function handlePointerUp() {
 
 function handleWheel(event) {
   if (!layout) return
-  const point = pointFromEvent(event)
+  if (dragState || scrollbarDragState) return
+  const viewport = currentViewport()
+  const screenPoint = screenPointFromEvent(event)
+  const point = screenToWorld(screenPoint, viewport)
   const hit = hitTest(layout, point)
-  if (hit?.type !== 'group') return
-  const group = layout.groups.find((g) => g.id === hit.id)
-  if (!group || !group.overflowY) return
+  if (hit?.type === 'group') {
+    const group = layout.groups.find((g) => g.id === hit.id)
+    if (group?.overflowY) {
+      event.preventDefault()
+      const rawScrollTop = group.scrollTop + event.deltaY
+      const nextScrollTop = clampGroupScroll(group, rawScrollTop)
+      if (props.groupStates === null) group.scrollTop = nextScrollTop
+      updateGroupState(group.id, { scrollTop: nextScrollTop })
+      if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
+      else renderCurrent()
+      return
+    }
+  }
 
   event.preventDefault()
-  const rawScrollTop = group.scrollTop + event.deltaY
-  const nextScrollTop = clampGroupScroll(group, rawScrollTop)
-  if (props.groupStates === null) group.scrollTop = nextScrollTop
-  updateGroupState(group.id, { scrollTop: nextScrollTop })
-  if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
-  else renderCurrent()
+  const nextViewport = zoomViewportAt(viewport, screenPoint, event.deltaY, viewportOptions(props.options))
+  applyViewport(nextViewport)
 }
 
 function handleDragOver(event) {
