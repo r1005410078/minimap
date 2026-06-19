@@ -8,6 +8,14 @@
 
 **Tech Stack:** 纯 JavaScript（Canvas 2D API，ctx 由外部传入），Node 内置 `node:test` + `node:assert/strict`，`test/helpers/mock-ctx.js` 假 ctx 记录调用。无新依赖。
 
+## 进度
+
+- [x] Task 1：多分组适配（resolveEdges / renderScene 绘制循环 / inferDirectionFromLayout）
+- [x] Task 2：分组框 chrome——展开/折叠图标 + 滚动条视觉
+- [x] Task 3：分组框内部子节点虚拟绘制 + 裁剪
+- [x] Task 4：多分组动画插值（layout-transition.js）
+- [x] Task 5：回归校验 + 进度文档同步（`npm test` 101 全过、`npm run build` 通过）
+
 ## Global Constraints
 
 - 不引入新的第三方运行时或开发依赖。
