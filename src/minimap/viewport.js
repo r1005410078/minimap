@@ -52,8 +52,8 @@ export function zoomViewportAt(viewport, screenPoint, deltaY, options = DEFAULT_
   }
 }
 
-export function panViewportBy(viewport, delta) {
-  const before = normalizeViewport(viewport)
+export function panViewportBy(viewport, delta, options = DEFAULT_OPTIONS) {
+  const before = normalizeViewport(viewport, options)
   return {
     x: before.x + delta.x,
     y: before.y + delta.y,

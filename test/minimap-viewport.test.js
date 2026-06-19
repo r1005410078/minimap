@@ -70,6 +70,17 @@ test('panViewportBy offsets x and y without changing scale', () => {
   })
 })
 
+test('panViewportBy preserves scale allowed by custom options', () => {
+  assert.deepEqual(
+    panViewportBy({ x: 10, y: -5, scale: 5 }, { x: 30, y: -20 }, { minScale: 0.1, maxScale: 10 }),
+    {
+      x: 40,
+      y: -25,
+      scale: 5,
+    },
+  )
+})
+
 test('sameViewport compares x y and scale', () => {
   assert.equal(sameViewport({ x: 0, y: 0, scale: 1 }, { x: 0, y: 0, scale: 1 }), true)
   assert.equal(sameViewport({ x: 0, y: 0, scale: 1 }, { x: 0, y: 1, scale: 1 }), false)

@@ -70,6 +70,10 @@ function dispatchPointerCancel(wrapper, point) {
   )
 }
 
+function nextPendingFrameId() {
+  return frames.scheduled.find((frame) => !frame.ran && !frame.cancelled)?.id
+}
+
 function groupCenterForParent(parentId) {
   const layout = computeLayout(createDemoGraph(), { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const group = layout.groups.find((item) => item.parentId === parentId)
@@ -241,6 +245,20 @@ test('controlled viewport pan emits but does not persist without prop update', (
   wrapper.destroy()
 })
 
+test('panning preserves custom viewport scale bounds', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, {
+    propsData: { graph, viewport: { x: 0, y: 0, scale: 5 }, options: { minScale: 0.1, maxScale: 10 } },
+  })
+
+  dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
+  dispatchPointerMove(wrapper, { x: -9900, y: -10040 })
+  dispatchPointerUp(wrapper, { x: -9900, y: -10040 })
+
+  assert.deepEqual(wrapper.emitted('viewport-change').at(-1)[0], { x: 100, y: -40, scale: 5 })
+  wrapper.destroy()
+})
+
 test('pointercancel stops an active blank pan', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
@@ -252,6 +270,43 @@ test('pointercancel stops an active blank pan', () => {
   dispatchPointerMove(wrapper, { x: -9900, y: -9900 })
 
   assert.equal(wrapper.emitted('viewport-change').length, emittedBeforeCancel)
+  wrapper.destroy()
+})
+
+test('wheel zoom settles active layout animation before applying viewport', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph, layoutDirection: 'horizontal' } })
+
+  await wrapper.setProps({ layoutDirection: 'vertical' })
+  await wrapper.vm.$nextTick()
+  assert.equal(frames.runNext(1000), true)
+  const pendingFrameId = nextPendingFrameId()
+
+  dispatchWheel(wrapper, { x: 300, y: 240 }, -200)
+  const emitted = wrapper.emitted('viewport-change').at(-1)[0]
+
+  assert.ok(frames.cancelled.includes(pendingFrameId))
+  frames.runNext(1100)
+  assert.deepEqual(wrapper.emitted('viewport-change').at(-1)[0], emitted)
+  wrapper.destroy()
+})
+
+test('blank pan settles active layout animation before applying viewport', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph, layoutDirection: 'horizontal' } })
+
+  await wrapper.setProps({ layoutDirection: 'vertical' })
+  await wrapper.vm.$nextTick()
+  assert.equal(frames.runNext(2000), true)
+  const pendingFrameId = nextPendingFrameId()
+
+  dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
+  dispatchPointerMove(wrapper, { x: -9900, y: -10040 })
+  const emitted = wrapper.emitted('viewport-change').at(-1)[0]
+
+  assert.ok(frames.cancelled.includes(pendingFrameId))
+  frames.runNext(2100)
+  assert.deepEqual(wrapper.emitted('viewport-change').at(-1)[0], emitted)
   wrapper.destroy()
 })
 

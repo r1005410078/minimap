@@ -544,6 +544,7 @@ function handlePointerDown(event) {
   }
 
   if (!hit) {
+    settleAnimation()
     canvasRef.value.setPointerCapture?.(event.pointerId)
     setSelected([])
     panState = {
@@ -580,7 +581,7 @@ function handlePointerMove(event) {
       y: event.clientY - panState.startScreen.y,
     }
     panState.moved = panState.moved || delta.x !== 0 || delta.y !== 0
-    applyViewport(panViewportBy(panState.startViewport, delta))
+    applyViewport(panViewportBy(panState.startViewport, delta, viewportOptions(props.options)))
     return
   }
 
@@ -670,6 +671,7 @@ function handleWheel(event) {
   }
 
   event.preventDefault()
+  settleAnimation()
   const nextViewport = zoomViewportAt(viewport, screenPoint, event.deltaY, viewportOptions(props.options))
   applyViewport(nextViewport)
 }
