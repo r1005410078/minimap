@@ -22,9 +22,18 @@ import {
   groupInsertIndexToParentIndex,
 } from './interaction.js'
 import { reorderGroupChild } from './graph.js'
+import {
+  buildVirtualOrder,
+  childWorldRectsById,
+  currentShiftRects,
+  dragShiftEasedProgress,
+  dragShiftProgress,
+} from './drag-transition.js'
 import ResourceTree from './ResourceTree.vue'
 
 const ANIMATION_DURATION_MS = 200
+const DRAG_SHIFT_DURATION_MS = 150
+const SCROLLBAR_WIDTH = 8
 
 const props = defineProps({
   graph: { type: Object, required: true },
@@ -52,6 +61,8 @@ let cssHeight = 0
 let internalSelectedId = null
 let internalGroupStates = {}
 let dragState = null
+let scrollbarDragState = null
+let hoveredScrollbarGroupId = null
 
 // Phase 1 固定视口，平移/缩放是第三阶段才做；那时改这里要联动下面的 pointFromEvent。
 let viewport = { x: 0, y: 0, scale: 1 }
@@ -77,13 +88,109 @@ function updateGroupState(groupId, patch) {
   emit('group-state-change', next)
 }
 
+const now = () => (globalThis.performance ?? Date).now()
+
+function clearDragShiftAnimation() {
+  if (!dragState) return
+  dragState.shiftFromById = null
+  dragState.shiftToById = null
+  dragState.shiftStartedAt = null
+}
+
+function shouldAutoScroll(group) {
+  return group && dragState?.ghostWorldPoint && groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y) !== 0
+}
+
 function dragRenderContext() {
   if (!dragState || !dragState.dragging || !layout) return null
   const group = layout.groups.find((g) => g.id === dragState.groupId)
   if (!group) return null
-  const order = group.children.filter((id) => id !== dragState.childId)
-  order.splice(dragState.insertIndex, 0, dragState.childId)
-  return { groupId: group.id, order, draggingChildId: dragState.childId, ghostRect: dragState.ghostScreenRect }
+  const order = buildVirtualOrder(group, dragState.childId, dragState.insertIndex)
+  const timestamp = now()
+  const autoScrolling = shouldAutoScroll(group)
+  const childRectsById =
+    !autoScrolling &&
+    dragState.shiftFromById &&
+    dragState.shiftToById &&
+    dragState.shiftStartedAt != null
+      ? currentShiftRects(
+          dragState.shiftFromById,
+          dragState.shiftToById,
+          dragState.shiftStartedAt,
+          DRAG_SHIFT_DURATION_MS,
+          timestamp,
+        )
+      : null
+  const dropSlotOpacity =
+    autoScrolling || dragState.slotFadeStartedAt == null
+      ? 1
+      : dragShiftEasedProgress(dragState.slotFadeStartedAt, DRAG_SHIFT_DURATION_MS, timestamp)
+  return {
+    groupId: group.id,
+    order,
+    draggingChildId: dragState.childId,
+    ghostRect: dragState.ghostScreenRect,
+    childRectsById,
+    dropSlotOpacity,
+  }
+}
+
+function dragShiftActive(timestamp = now()) {
+  if (!dragState?.dragging) return false
+  const shiftActive =
+    dragState.shiftStartedAt != null &&
+    dragShiftProgress(dragState.shiftStartedAt, DRAG_SHIFT_DURATION_MS, timestamp) < 1
+  const slotActive =
+    dragState.slotFadeStartedAt != null &&
+    dragShiftProgress(dragState.slotFadeStartedAt, DRAG_SHIFT_DURATION_MS, timestamp) < 1
+  return shiftActive || slotActive
+}
+
+function cancelDragShiftLoop() {
+  if (dragState?.shiftRafId != null) {
+    cancelAnimationFrame(dragState.shiftRafId)
+    dragState.shiftRafId = null
+  }
+}
+
+function ensureDragShiftLoop() {
+  if (!dragState?.dragging || dragState.shiftRafId != null || dragState.scrollRafId != null) return
+  const tick = (time) => {
+    if (!dragState?.dragging) {
+      cancelDragShiftLoop()
+      return
+    }
+    renderCurrent()
+    if (dragShiftActive(time ?? now())) dragState.shiftRafId = requestAnimationFrame(tick)
+    else dragState.shiftRafId = null
+  }
+  dragState.shiftRafId = requestAnimationFrame(tick)
+}
+
+function beginDragVisuals(group) {
+  const toOrder = buildVirtualOrder(group, dragState.childId, dragState.insertIndex)
+  dragState.shiftFromById = childWorldRectsById(group, group.children)
+  dragState.shiftToById = childWorldRectsById(group, toOrder)
+  dragState.shiftStartedAt = now()
+  dragState.slotFadeStartedAt = now()
+}
+
+function scheduleDragShift(group, insertIndex) {
+  const timestamp = now()
+  const fromById =
+    dragState.shiftFromById && dragState.shiftToById && dragState.shiftStartedAt != null
+      ? currentShiftRects(
+          dragState.shiftFromById,
+          dragState.shiftToById,
+          dragState.shiftStartedAt,
+          DRAG_SHIFT_DURATION_MS,
+          timestamp,
+        )
+      : childWorldRectsById(group, group.children)
+  const toOrder = buildVirtualOrder(group, dragState.childId, insertIndex)
+  dragState.shiftFromById = fromById
+  dragState.shiftToById = childWorldRectsById(group, toOrder)
+  dragState.shiftStartedAt = timestamp
 }
 
 function renderCurrent(currentLayout = layout, currentViewport = viewport) {
@@ -98,7 +205,11 @@ function renderCurrent(currentLayout = layout, currentViewport = viewport) {
     width: cssWidth,
     height: cssHeight,
     theme: props.theme || defaultTheme,
-    state: { selectedIds: new Set(currentSelectedIds()), groupDrag: dragRenderContext() },
+    state: {
+      selectedIds: new Set(currentSelectedIds()),
+      groupDrag: dragRenderContext(),
+      groupScrollbarHoverId: hoveredScrollbarGroupId,
+    },
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
 }
@@ -226,6 +337,35 @@ function ghostRectForPoint(worldPoint) {
   return worldRectToScreen(worldRect, viewport)
 }
 
+function scrollbarMetrics(group) {
+  const trackHeight = group.height - GROUP.header
+  const thumbHeight = (group.height / group.contentHeight) * trackHeight
+  const maxScroll = Math.max(0, group.contentHeight - group.height)
+  const maxThumbOffset = Math.max(1, trackHeight - thumbHeight)
+  const thumbOffset = maxScroll > 0 ? (group.scrollTop / maxScroll) * maxThumbOffset : 0
+  return {
+    trackX: group.x + group.width - SCROLLBAR_WIDTH,
+    trackY: group.y + GROUP.header,
+    trackHeight,
+    thumbHeight,
+    thumbY: group.y + GROUP.header + thumbOffset,
+    maxScroll,
+    maxThumbOffset,
+  }
+}
+
+function hitScrollbarThumb(point) {
+  if (!layout) return null
+  for (const group of layout.groups) {
+    if (!group.overflowY) continue
+    const metrics = scrollbarMetrics(group)
+    const withinX = point.x >= metrics.trackX && point.x <= metrics.trackX + SCROLLBAR_WIDTH
+    const withinY = point.y >= metrics.thumbY && point.y <= metrics.thumbY + metrics.thumbHeight
+    if (withinX && withinY) return { group, metrics }
+  }
+  return null
+}
+
 function cancelAutoScrollLoop() {
   if (dragState && dragState.scrollRafId !== null) {
     cancelAnimationFrame(dragState.scrollRafId)
@@ -233,40 +373,101 @@ function cancelAutoScrollLoop() {
   }
 }
 
-function updateDragInsertion(group, worldPoint) {
+function updateDragInsertion(group, worldPoint, { animateShift = true } = {}) {
   const restGroup = { ...group, children: group.children.filter((id) => id !== dragState.childId) }
-  dragState.insertIndex = groupGridIndexAt(restGroup, worldPoint)
+  const nextIndex = groupGridIndexAt(restGroup, worldPoint)
+  const autoScrolling = shouldAutoScroll(group)
+  const canAnimateShift = animateShift && !autoScrolling
+
+  if (nextIndex !== dragState.insertIndex) {
+    if (canAnimateShift) scheduleDragShift(group, nextIndex)
+    else clearDragShiftAnimation()
+    dragState.insertIndex = nextIndex
+  } else if (autoScrolling) {
+    clearDragShiftAnimation()
+  }
+
   dragState.ghostWorldPoint = worldPoint
   dragState.ghostScreenRect = ghostRectForPoint(worldPoint)
 }
 
 function startAutoScrollLoop() {
-  const tick = () => {
+  const tick = (time) => {
     if (!dragState || !dragState.dragging) return
     const group = layout.groups.find((g) => g.id === dragState.groupId)
     if (group && dragState.ghostWorldPoint) {
       const delta = groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y)
       if (delta !== 0) {
         group.scrollTop = clampGroupScroll(group, group.scrollTop + delta)
-        updateDragInsertion(group, dragState.ghostWorldPoint)
-        renderCurrent()
+        clearDragShiftAnimation()
+        updateDragInsertion(group, dragState.ghostWorldPoint, { animateShift: false })
       }
     }
-    dragState.scrollRafId = requestAnimationFrame(tick)
+    renderCurrent()
+    const timestamp = time ?? now()
+    const scrolling = shouldAutoScroll(group)
+    if (scrolling || dragShiftActive(timestamp)) dragState.scrollRafId = requestAnimationFrame(tick)
+    else dragState.scrollRafId = null
   }
   dragState.scrollRafId = requestAnimationFrame(tick)
+}
+
+function ensureAutoScrollLoop() {
+  if (!dragState?.dragging || dragState.scrollRafId != null) return
+  const group = layout?.groups.find((g) => g.id === dragState.groupId)
+  if (!shouldAutoScroll(group) && !dragShiftActive()) return
+  startAutoScrollLoop()
 }
 
 function cancelDrag() {
   if (!dragState) return
   cancelAutoScrollLoop()
+  cancelDragShiftLoop()
   dragState = null
   renderCurrent()
+}
+
+function cancelScrollbarDrag() {
+  if (!scrollbarDragState) return
+  const group = layout?.groups.find((g) => g.id === scrollbarDragState.groupId)
+  if (group && props.groupStates === null) group.scrollTop = scrollbarDragState.startScrollTop
+  hoveredScrollbarGroupId = null
+  scrollbarDragState = null
+  if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
+  else renderCurrent()
+}
+
+function cancelPointerInteractions() {
+  cancelDrag()
+  cancelScrollbarDrag()
+}
+
+function updateScrollbarHover(groupId) {
+  if (hoveredScrollbarGroupId === groupId) return
+  hoveredScrollbarGroupId = groupId
+  renderCurrent()
+}
+
+function clearScrollbarHover() {
+  updateScrollbarHover(null)
 }
 
 function handlePointerDown(event) {
   if (!layout) return
   const point = pointFromEvent(event)
+  const scrollbarHit = hitScrollbarThumb(point)
+  if (scrollbarHit) {
+    canvasRef.value.setPointerCapture?.(event.pointerId)
+    updateScrollbarHover(scrollbarHit.group.id)
+    scrollbarDragState = {
+      groupId: scrollbarHit.group.id,
+      startScreenY: event.clientY,
+      startScrollTop: scrollbarHit.group.scrollTop,
+      metrics: scrollbarHit.metrics,
+    }
+    return
+  }
+
   const hit = hitTest(layout, point)
 
   if (hit?.type === 'group' && hit.zone === 'header') {
@@ -287,6 +488,11 @@ function handlePointerDown(event) {
       ghostWorldPoint: null,
       ghostScreenRect: null,
       scrollRafId: null,
+      shiftFromById: null,
+      shiftToById: null,
+      shiftStartedAt: null,
+      slotFadeStartedAt: null,
+      shiftRafId: null,
     }
     return
   }
@@ -295,27 +501,62 @@ function handlePointerDown(event) {
 }
 
 function handlePointerMove(event) {
-  if (!dragState) return
+  if (scrollbarDragState) {
+    const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
+    if (!group) return
+    const deltaScreenY = event.clientY - scrollbarDragState.startScreenY
+    const scrollDelta =
+      (deltaScreenY / (scrollbarDragState.metrics.maxThumbOffset * viewport.scale)) *
+      scrollbarDragState.metrics.maxScroll
+    const rawScrollTop = scrollbarDragState.startScrollTop + scrollDelta
+    const nextScrollTop = clampGroupScroll(group, rawScrollTop)
+    group.scrollTop = nextScrollTop
+    renderCurrent()
+    return
+  }
+
+  if (!dragState) {
+    const scrollbarHit = hitScrollbarThumb(pointFromEvent(event))
+    updateScrollbarHover(scrollbarHit?.group.id ?? null)
+    return
+  }
   const screenPoint = { x: event.clientX, y: event.clientY }
+  const group = layout.groups.find((g) => g.id === dragState.groupId)
+  if (!group) return
+  const worldPoint = pointFromEvent(event)
 
   if (!dragState.dragging) {
     if (!exceedsDragThreshold(dragState.startScreen, screenPoint)) return
     dragState.dragging = true
-    startAutoScrollLoop()
+    updateDragInsertion(group, worldPoint)
+    beginDragVisuals(group)
+    ensureAutoScrollLoop()
+  } else {
+    updateDragInsertion(group, worldPoint)
   }
 
-  const group = layout.groups.find((g) => g.id === dragState.groupId)
-  if (!group) return
-  const worldPoint = pointFromEvent(event)
-  updateDragInsertion(group, worldPoint)
   renderCurrent()
+  ensureAutoScrollLoop()
+  if (dragShiftActive()) ensureDragShiftLoop()
 }
 
 function handlePointerUp() {
+  if (scrollbarDragState) {
+    const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
+    if (group) {
+      updateGroupState(group.id, { scrollTop: group.scrollTop })
+      if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
+      else renderCurrent()
+    }
+    scrollbarDragState = null
+    return
+  }
+
   if (!dragState) return
 
   if (dragState.dragging) {
     cancelAutoScrollLoop()
+    cancelDragShiftLoop()
     const group = layout.groups.find((g) => g.id === dragState.groupId)
     if (group) {
       const parent = props.graph.nodes.get(group.parentId)
@@ -342,9 +583,12 @@ function handleWheel(event) {
   if (!group || !group.overflowY) return
 
   event.preventDefault()
-  group.scrollTop = clampGroupScroll(group, group.scrollTop + event.deltaY)
-  updateGroupState(group.id, { scrollTop: group.scrollTop })
-  renderCurrent()
+  const rawScrollTop = group.scrollTop + event.deltaY
+  const nextScrollTop = clampGroupScroll(group, rawScrollTop)
+  if (props.groupStates === null) group.scrollTop = nextScrollTop
+  updateGroupState(group.id, { scrollTop: nextScrollTop })
+  if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
+  else renderCurrent()
 }
 
 function handleDragOver(event) {
@@ -401,9 +645,10 @@ onMounted(() => {
   resizeObserver.observe(containerRef.value)
   canvas.addEventListener('pointerdown', handlePointerDown)
   canvas.addEventListener('pointermove', handlePointerMove)
+  canvas.addEventListener('pointerleave', clearScrollbarHover)
   canvas.addEventListener('pointerup', handlePointerUp)
-  canvas.addEventListener('pointercancel', cancelDrag)
-  canvas.addEventListener('lostpointercapture', cancelDrag)
+  canvas.addEventListener('pointercancel', cancelPointerInteractions)
+  canvas.addEventListener('lostpointercapture', cancelPointerInteractions)
   canvas.addEventListener('wheel', handleWheel, { passive: false })
   canvas.addEventListener('dragover', handleDragOver)
   canvas.addEventListener('drop', handleDrop)
@@ -413,13 +658,14 @@ onMounted(() => {
 onUnmounted(() => {
   const canvas = canvasRef.value
   cancelAnimation()
-  cancelAutoScrollLoop()
+  cancelPointerInteractions()
   if (canvas) {
     canvas.removeEventListener('pointerdown', handlePointerDown)
     canvas.removeEventListener('pointermove', handlePointerMove)
+    canvas.removeEventListener('pointerleave', clearScrollbarHover)
     canvas.removeEventListener('pointerup', handlePointerUp)
-    canvas.removeEventListener('pointercancel', cancelDrag)
-    canvas.removeEventListener('lostpointercapture', cancelDrag)
+    canvas.removeEventListener('pointercancel', cancelPointerInteractions)
+    canvas.removeEventListener('lostpointercapture', cancelPointerInteractions)
     canvas.removeEventListener('wheel', handleWheel)
     canvas.removeEventListener('dragover', handleDragOver)
     canvas.removeEventListener('drop', handleDrop)

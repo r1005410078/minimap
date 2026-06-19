@@ -185,8 +185,22 @@ test('groupGridIndexAt returns the centered child index when the point sits on i
   }
   // 第一个格子(index 0)中心：x=12+60=72, y=28+12+20=60
   assert.equal(groupGridIndexAt(group, { x: 72, y: 60 }), 0)
-  // 最后一个格子(index 9, row4 col1)中心：x=142+60=202, y=216+20=236
-  assert.equal(groupGridIndexAt(group, { x: 202, y: 236 }), 9)
+  // 最后一个格子(index 9, row4 col1)中心：x=142+60=202, y=240+20=260
+  assert.equal(groupGridIndexAt(group, { x: 202, y: 260 }), 9)
+})
+
+test('groupGridIndexAt swaps when the pointer enters a cell instead of crossing slot midpoints', () => {
+  const group = {
+    children: ['a', 'b', 'c', 'd'],
+    columns: 2,
+    scrollTop: 0,
+    x: 0,
+    y: 0,
+  }
+  // 进入 index 1 格子左上角即换位
+  assert.equal(groupGridIndexAt(group, { x: 142, y: 41 }), 1)
+  // 仍在 index 0 格子右半边时保持 0（round 会提前切到 1）
+  assert.equal(groupGridIndexAt(group, { x: 112, y: 41 }), 0)
 })
 
 test('groupGridIndexAt clamps to children.length for points beyond the grid', () => {

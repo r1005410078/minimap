@@ -262,9 +262,10 @@ function inferDirectionFromLayout(graph, layout, edges) {
   return dy > dx ? 'vertical' : 'horizontal'
 }
 
-const SCROLLBAR_WIDTH = 6
+const SCROLLBAR_WIDTH = 8
+const SCROLLBAR_RADIUS = SCROLLBAR_WIDTH / 2
 
-function drawGroup(ctx, group, rect, theme) {
+function drawGroup(ctx, group, rect, theme, scrollbarHovered = false) {
   ctx.fillStyle = theme.group.fill
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
   ctx.strokeStyle = theme.group.stroke
@@ -274,11 +275,11 @@ function drawGroup(ctx, group, rect, theme) {
   ctx.font = theme.group.font
   const chevron = group.expanded ? '▾' : '▸'
   ctx.fillText(`${chevron} ${group.parentId} · ${group.children.length}`, rect.x + 8, rect.y + 16)
-  if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme)
+  if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme, scrollbarHovered)
 }
 
-// 滚动条是纯视觉提示（轨道 + 按比例定位/取尺寸的滑块），不响应任何指针事件。
-function drawGroupScrollbar(ctx, group, rect, theme) {
+// 滚动条轨道 + 按比例定位/取尺寸的滑块；交互命中由 Minimap.vue 复用同一套几何规则。
+function drawGroupScrollbar(ctx, group, rect, theme, hovered) {
   const scrollbar = { ...defaultTheme.group.scrollbar, ...(theme.group.scrollbar || {}) }
   const scale = rect.height / group.height
   const headerHeight = GROUP.header * scale
@@ -292,8 +293,11 @@ function drawGroupScrollbar(ctx, group, rect, theme) {
   const thumbHeight = (group.height / group.contentHeight) * trackHeight
   const maxScroll = group.contentHeight - group.height
   const thumbOffset = maxScroll > 0 ? (group.scrollTop / maxScroll) * (trackHeight - thumbHeight) : 0
-  ctx.fillStyle = scrollbar.thumb
-  ctx.fillRect(trackX, trackY + thumbOffset, SCROLLBAR_WIDTH, thumbHeight)
+  const thumbY = trackY + thumbOffset
+  ctx.fillStyle = hovered ? scrollbar.thumbHover : scrollbar.thumb
+  ctx.beginPath()
+  ctx.roundRect(trackX, thumbY, SCROLLBAR_WIDTH, thumbHeight, SCROLLBAR_RADIUS)
+  ctx.fill()
 }
 
 function drawNode(ctx, node, rect, state, theme) {
@@ -307,8 +311,10 @@ function drawNode(ctx, node, rect, state, theme) {
   ctx.fillText(node.label ?? node.id, rect.x + 6, rect.y + rect.height / 2 + 4)
 }
 
-function drawDropSlot(ctx, rect, theme) {
+function drawDropSlot(ctx, rect, theme, opacity = 1) {
   const dropSlot = { ...defaultTheme.group.dropSlot, ...(theme.group.dropSlot || {}) }
+  const previousAlpha = ctx.globalAlpha ?? 1
+  ctx.globalAlpha = previousAlpha * opacity
   ctx.fillStyle = dropSlot.fill
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
   ctx.strokeStyle = dropSlot.stroke
@@ -316,22 +322,26 @@ function drawDropSlot(ctx, rect, theme) {
   ctx.setLineDash([4, 4])
   ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
   ctx.setLineDash([])
+  ctx.globalAlpha = previousAlpha
 }
 
-// 裁剪到分组框范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
+// 裁剪到分组框 body 范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
 // 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
 function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, dragContext) {
   const virtualGroup = dragContext ? { ...group, children: dragContext.order } : group
+  const bodyY = rect.y + GROUP.header * viewport.scale
+  const bodyHeight = rect.height - GROUP.header * viewport.scale
   ctx.save()
   ctx.beginPath()
-  ctx.rect(rect.x, rect.y, rect.width, rect.height)
+  ctx.rect(rect.x, bodyY, rect.width, bodyHeight)
   ctx.clip()
   for (const child of visibleGroupChildren(virtualGroup)) {
     const node = graph.nodes.get(child.id)
     if (!node) continue
-    const childRect = worldRectToScreen(child.rect, viewport)
+    const worldRect = dragContext?.childRectsById?.[child.id] ?? child.rect
+    const childRect = worldRectToScreen(worldRect, viewport)
     if (child.id === dragContext?.draggingChildId) {
-      drawDropSlot(ctx, childRect, theme)
+      drawDropSlot(ctx, childRect, theme, dragContext.dropSlotOpacity ?? 1)
       continue
     }
     const itemState = makeState(child.id, selectedIds)
@@ -396,8 +406,9 @@ export function renderScene(ctx, scene) {
     const group = groupById.get(item.id)
     const itemState = makeState(item.id, selectedIds)
     const dragContext = state.groupDrag && state.groupDrag.groupId === group.id ? state.groupDrag : undefined
+    const scrollbarHovered = state.groupScrollbarHoverId === group.id
     if (renderers.group) renderers.group(ctx, { group, rect: screen, state: itemState, theme, viewport })
-    else drawGroup(ctx, group, screen, theme)
+    else drawGroup(ctx, group, screen, theme, scrollbarHovered)
     drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds, dragContext)
     drawn++
   }

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDemoGraph, createStressGraph } from '../src/minimap/graph.js'
-import { computeLayout, visibleGroupChildren } from '../src/minimap/layout.js'
+import { computeLayout, GROUP, visibleGroupChildren } from '../src/minimap/layout.js'
 import { orthogonalPath } from '../src/minimap/orthogonal.js'
 import { worldRectToScreen, collectVisible, resolveEdges, renderScene } from '../src/minimap/renderer.js'
 import { defaultTheme } from '../src/minimap/theme.js'
@@ -537,10 +537,34 @@ test('drawGroup draws a scrollbar track and thumb only for overflowing groups', 
   const scene = demoScene({ renderers: { node: () => {} } })
   renderScene(ctx, scene)
 
-  // 滚动条轨道/滑块都是固定 6px 宽的 fillRect；分组背景、节点背景都比 6 宽得多，
-  // 用宽度筛选不会跟其它绘制混在一起。heap-1 溢出（1 条轨道 + 1 个滑块），cluster-25 不溢出（0）。
-  const scrollbarRects = ctx.methodsOf('fillRect').filter((call) => call.args[2] === 6)
-  assert.equal(scrollbarRects.length, 2)
+  // 轨道仍是 8px 宽的 fillRect；滑块改为 roundRect。heap-1 溢出（1 轨道 + 1 滑块），cluster-25 不溢出。
+  const scrollbarTracks = ctx.methodsOf('fillRect').filter((call) => call.args[2] === 8)
+  const scrollbarThumbs = ctx.methodsOf('roundRect').filter((call) => call.args[2] === 8)
+  assert.equal(scrollbarTracks.length, 1)
+  assert.equal(scrollbarThumbs.length, 1)
+})
+
+test('drawGroupScrollbar uses a subtle default thumb color and rounded ends', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ renderers: { node: () => {} } })
+  renderScene(ctx, scene)
+
+  assert.ok(ctx.methodsOf('set:fillStyle').some((call) => call.args[0] === defaultTheme.group.scrollbar.thumb))
+  const thumb = ctx.methodsOf('roundRect').find((call) => call.args[2] === 8)
+  assert.equal(thumb.args[4], 4)
+})
+
+test('drawGroupScrollbar uses a darker thumb color when hovered', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ renderers: { node: () => {} } })
+  const group = scene.layout.groups.find((item) => item.parentId === 'heap-1')
+
+  renderScene(ctx, {
+    ...scene,
+    state: { groupScrollbarHoverId: group.id },
+  })
+
+  assert.ok(ctx.methodsOf('set:fillStyle').some((call) => call.args[0] === defaultTheme.group.scrollbar.thumbHover))
 })
 
 test('group chrome receives selected state by group.id, not parentId', () => {
@@ -567,6 +591,38 @@ test('group chrome receives selected state by group.id, not parentId', () => {
     seen.map((entry) => [entry.id, entry.selected]),
     layout.groups.map((group) => [group.id, group.id === targetGroup.id]),
   )
+})
+
+test('drawGroupChildren in drag mode uses animated child rects and drop slot opacity', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  const group = scene.layout.groups[0]
+  const childId = group.children[1]
+  const child = visibleGroupChildren(group).find((item) => item.id === childId)
+  const overrideRect = { x: child.rect.x + 40, y: child.rect.y + 20, width: child.rect.width, height: child.rect.height }
+
+  renderScene(ctx, {
+    ...scene,
+    state: {
+      groupDrag: {
+        groupId: group.id,
+        order: group.children,
+        draggingChildId: group.children[0],
+        ghostRect: { x: 420, y: 180, width: 160, height: 34 },
+        childRectsById: { [childId]: overrideRect },
+        dropSlotOpacity: 0.5,
+      },
+    },
+  })
+
+  const movedLabel = scene.graph.nodes.get(childId).label
+  const labelCall = ctx.methodsOf('fillText').find((call) => call.args[0] === movedLabel)
+  const screenRect = worldRectToScreen(overrideRect, scene.viewport)
+  assert.deepEqual(labelCall.args.slice(1), [
+    screenRect.x + 6,
+    screenRect.y + screenRect.height / 2 + 4,
+  ])
+  assert.ok(ctx.methodsOf('set:globalAlpha').some((call) => call.args[0] === 0.5))
 })
 
 test('drawGroupChildren in drag mode draws a drop slot and a single ghost for the dragged child', () => {
@@ -602,15 +658,42 @@ test('drawGroupChildren in drag mode draws a drop slot and a single ghost for th
   ])
 })
 
-test('drawGroupChildren without dragContext behaves exactly like before (regression)', () => {
+test('drawGroupChildren without drag or scrollbar hover context behaves exactly like before (regression)', () => {
   const baseCtx = createMockCtx()
-  const nullDragCtx = createMockCtx()
+  const emptyStateCtx = createMockCtx()
   const scene = demoScene()
 
   renderScene(baseCtx, scene)
-  renderScene(nullDragCtx, { ...scene, state: { groupDrag: null } })
+  renderScene(emptyStateCtx, { ...scene, state: { groupDrag: null, groupScrollbarHoverId: null } })
 
-  assert.deepEqual(nullDragCtx.calls, baseCtx.calls)
+  assert.deepEqual(emptyStateCtx.calls, baseCtx.calls)
   assert.equal(baseCtx.methodsOf('set:globalAlpha').length, 0)
   assert.equal(baseCtx.methodsOf('set:fillStyle').some((call) => call.args[0] === '#24344a'), false)
+})
+
+test('group children are clipped below the header while scrolling', () => {
+  const ctx = createMockCtx()
+  const graph = createDemoGraph()
+  const groupStates = new Map([['heap-1::g0', { scrollTop: 25 }]])
+  const layout = computeLayout(graph, { ...VIEWPORT, groupStates })
+  const group = layout.groups.find((item) => item.id === 'heap-1::g0')
+  const viewport = { x: 100, y: 100, scale: 1 }
+
+  renderScene(ctx, {
+    graph,
+    layout,
+    viewport,
+    width: 2400,
+    height: 1600,
+  })
+
+  const clipIndex = ctx.calls.findIndex((call, index) => {
+    return (
+      call.method === 'clip' &&
+      ctx.calls[index - 1]?.method === 'rect' &&
+      ctx.calls[index - 1].args[0] === group.x + viewport.x &&
+      ctx.calls[index - 1].args[1] === group.y + viewport.y + GROUP.header
+    )
+  })
+  assert.notEqual(clipIndex, -1)
 })

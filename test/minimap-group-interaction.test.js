@@ -82,6 +82,24 @@ function firstItemCenter(group) {
   }
 }
 
+function scrollbarThumbCenter(group) {
+  const trackHeight = group.height - GROUP.header
+  const thumbHeight = (group.height / group.contentHeight) * trackHeight
+  return {
+    x: group.x + group.width - 4,
+    y: group.y + GROUP.header + thumbHeight / 2,
+  }
+}
+
+function scrollbarThumbCenterAtBottom(group) {
+  const trackHeight = group.height - GROUP.header
+  const thumbHeight = (group.height / group.contentHeight) * trackHeight
+  return {
+    x: group.x + group.width - 4,
+    y: group.y + group.height - thumbHeight / 2,
+  }
+}
+
 test('clicking a group header toggles expanded and does not emit select', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
@@ -188,6 +206,32 @@ test('dragging near the bottom edge of an overflowing group auto-scrolls it', ()
   wrapper.destroy()
 })
 
+test('auto-scroll restarts when the pointer returns to an edge after leaving it', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const ctx = contexts.at(-1)
+
+  const firstItemPoint = firstItemCenter(group)
+  const middle = { x: firstItemPoint.x, y: group.y + group.height / 2 }
+  const bottomEdge = { x: firstItemPoint.x, y: group.y + group.height - 1 }
+
+  dispatchPointerDown(wrapper, firstItemPoint)
+  dispatchPointerMove(wrapper, middle)
+  for (let i = 0; i < 12; i++) frames.runNext(i * 16)
+
+  dispatchPointerMove(wrapper, bottomEdge)
+  for (let i = 0; i < 20; i++) frames.runNext(200 + i * 16)
+
+  const labelsAfter = callsSinceLastClear(ctx)
+    .filter((c) => c.method === 'fillText')
+    .map((c) => c.args[0])
+  assert.equal(labelsAfter.includes('cluster-8'), true)
+  assert.equal(labelsAfter.includes('cluster-2'), false)
+  wrapper.destroy()
+})
+
 test('releasing after auto-scroll reorders using the scrolled insertion index', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
@@ -273,6 +317,138 @@ test('scrolling the wheel inside an overflowing group shifts the visible window 
   const stateChange = wrapper.emitted('group-state-change')
   assert.ok(stateChange.length > 0)
   assert.equal(stateChange.at(-1)[0][group.id].scrollTop, 200)
+  wrapper.destroy()
+})
+
+test('dragging the scrollbar thumb scrolls an overflowing group', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const start = scrollbarThumbCenter(group)
+  const end = scrollbarThumbCenterAtBottom(group)
+  dispatchPointerDown(wrapper, start)
+  dispatchPointerMove(wrapper, end)
+  dispatchPointerUp(wrapper, end)
+
+  const maxScroll = group.contentHeight - group.height
+  const stateChange = wrapper.emitted('group-state-change')
+  assert.equal(wrapper.emitted('select'), undefined)
+  assert.ok(Math.abs(stateChange.at(-1)[0][group.id].scrollTop - maxScroll) < 0.000001)
+  wrapper.destroy()
+})
+
+test('controlled groupStates does not internally persist wheel scrolling', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, {
+    propsData: { graph, groupStates: { [group.id]: { scrollTop: 0 } } },
+  })
+  const ctx = contexts.at(-1)
+
+  const insidePoint = { x: group.x + group.width / 2, y: group.y + group.height / 2 }
+  dispatchWheel(wrapper, insidePoint, 200)
+
+  const labels = callsSinceLastClear(ctx)
+    .filter((c) => c.method === 'fillText')
+    .map((c) => c.args[0])
+  assert.ok(labels.includes('cluster-1'))
+  assert.equal(wrapper.emitted('group-state-change').at(-1)[0][group.id].scrollTop, 200)
+  wrapper.destroy()
+})
+
+test('wheel at a scroll boundary does not offset content', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const ctx = contexts.at(-1)
+
+  const insidePoint = { x: group.x + group.width / 2, y: group.y + group.height / 2 }
+  dispatchWheel(wrapper, insidePoint, -200)
+
+  const labels = callsSinceLastClear(ctx).filter((c) => c.method === 'fillText')
+  const first = labels.find((c) => c.args[0] === 'cluster-1')
+  assert.equal(first.args[2], group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2 + 4)
+  assert.equal(frames.scheduled.some((frame) => !frame.ran && !frame.cancelled), false)
+  wrapper.destroy()
+})
+
+test('pointercancel during scrollbar drag at a boundary does not leave content offset', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const ctx = contexts.at(-1)
+
+  const start = scrollbarThumbCenter(group)
+  const aboveTop = { x: start.x, y: start.y - 200 }
+  dispatchPointerDown(wrapper, start)
+  dispatchPointerMove(wrapper, aboveTop)
+  dispatchPointerCancel(wrapper, aboveTop)
+
+  const labelsAfterCancel = callsSinceLastClear(ctx).filter((c) => c.method === 'fillText')
+  const firstAfterCancel = labelsAfterCancel.find((c) => c.args[0] === 'cluster-1')
+  assert.equal(firstAfterCancel.args[2], group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2 + 4)
+  wrapper.destroy()
+})
+
+test('hovering over the scrollbar thumb redraws it with the hover color', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const ctx = contexts.at(-1)
+
+  dispatchPointerMove(wrapper, scrollbarThumbCenter(group))
+
+  assert.ok(callsSinceLastClear(ctx).some((call) => call.method === 'set:fillStyle' && call.args[0] === '#7f95ad'))
+  wrapper.destroy()
+})
+
+test('controlled groupStates resets scrollbar drag changes on pointercancel', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, {
+    propsData: { graph, groupStates: { [group.id]: { scrollTop: 0 } } },
+  })
+  const ctx = contexts.at(-1)
+
+  const start = scrollbarThumbCenter(group)
+  const end = scrollbarThumbCenterAtBottom(group)
+  dispatchPointerDown(wrapper, start)
+  dispatchPointerMove(wrapper, end)
+  dispatchPointerCancel(wrapper, end)
+
+  const labels = callsSinceLastClear(ctx)
+    .filter((c) => c.method === 'fillText')
+    .map((c) => c.args[0])
+  assert.ok(labels.includes('cluster-1'))
+  assert.equal(wrapper.emitted('group-state-change'), undefined)
+  wrapper.destroy()
+})
+
+test('uncontrolled scrollbar drag cancel restores scroll and clears hover', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const ctx = contexts.at(-1)
+
+  const start = scrollbarThumbCenter(group)
+  const middle = { x: start.x, y: start.y + 48 }
+  dispatchPointerDown(wrapper, start)
+  dispatchPointerMove(wrapper, middle)
+  dispatchPointerCancel(wrapper, middle)
+
+  const calls = callsSinceLastClear(ctx)
+  const labels = calls.filter((c) => c.method === 'fillText').map((c) => c.args[0])
+  assert.ok(labels.includes('cluster-1'))
+  assert.equal(calls.some((call) => call.method === 'set:fillStyle' && call.args[0] === '#7f95ad'), false)
+  assert.equal(wrapper.emitted('group-state-change'), undefined)
   wrapper.destroy()
 })
 

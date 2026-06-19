@@ -88,16 +88,34 @@ export function findInsertionIndex(graph, layout, parentId, point, direction) {
 
 // 世界坐标点 -> 分组网格里的插入下标（0..group.children.length）。
 // 不要求该下标当前真的有子节点：用于拖拽悬停时实时算插入位置。
-// col 用 Math.round 而非 Math.floor，靠近格子左右半边时四舍五入到更近的插入缝；
-// 超出分组矩形范围的点会被 clamp 到最近的合法行/列，天然限制"只能在同一分组框内换位"。
+// 优先命中指针所在的子节点格子（与 hitTest item 区一致），进入即换位；
+// 落在间隙或空白格时用 floor 推算最近插入位。
+export function groupChildRect(group, index) {
+  const rowHeight = GROUP.itemH + GROUP.itemGap
+  const colWidth = GROUP.itemW + GROUP.itemGap
+  const columns = Math.max(1, group.columns)
+  const row = Math.floor(index / columns)
+  const col = index % columns
+  return {
+    x: group.x + GROUP.padding + col * colWidth,
+    y: group.y + GROUP.header + GROUP.padding + row * rowHeight - (group.scrollTop ?? 0),
+    width: GROUP.itemW,
+    height: GROUP.itemH,
+  }
+}
+
 export function groupGridIndexAt(group, point) {
+  for (let index = 0; index < group.children.length; index++) {
+    if (containsPoint(groupChildRect(group, index), point)) return index
+  }
+
   const rowHeight = GROUP.itemH + GROUP.itemGap
   const colWidth = GROUP.itemW + GROUP.itemGap
   const columns = Math.max(1, group.columns)
   const localX = point.x - group.x - GROUP.padding
-  const localY = point.y - group.y - GROUP.header - GROUP.padding + group.scrollTop
-  const col = Math.min(columns - 1, Math.max(0, Math.round(localX / colWidth)))
-  const row = Math.max(0, Math.round(localY / rowHeight))
+  const localY = point.y - group.y - GROUP.header - GROUP.padding + (group.scrollTop ?? 0)
+  const col = Math.min(columns - 1, Math.max(0, Math.floor(localX / colWidth)))
+  const row = Math.max(0, Math.floor(localY / rowHeight))
   return Math.min(group.children.length, row * columns + col)
 }
 
