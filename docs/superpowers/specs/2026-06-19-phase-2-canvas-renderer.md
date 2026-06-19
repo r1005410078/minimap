@@ -50,7 +50,7 @@ function drawGroup(ctx, group, rect, theme) { /* ... */ }
 // 子节点层：裁剪到 rect 范围内，对 visibleGroupChildren(group) 的每一项
 // 调用 renderers.node ?? drawNode，state 用 makeState(childId, selectedIds)。
 // rect 是分组框的屏幕坐标（screen space），子节点格子用 worldRectToScreen 转换。
-function drawGroupChildren(ctx, group, rect, viewport, theme, renderers, selectedIds) { /* ... */ }
+function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds) { /* ... */ }
 
 // resolveEdges 内部：
 // const groupByChildId = new Map(layout.groups.flatMap(g => g.children.map(id => [id, g])))
