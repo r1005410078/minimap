@@ -29,6 +29,36 @@ function dispatchPointerDown(wrapper, point, options = {}) {
   )
 }
 
+function dispatchPointerMove(wrapper, point, options = {}) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointermove', {
+      clientX: point.x,
+      clientY: point.y,
+      bubbles: true,
+      shiftKey: options.shiftKey ?? false,
+      metaKey: options.metaKey ?? false,
+      ctrlKey: options.ctrlKey ?? false,
+      pointerId: options.pointerId ?? 1,
+    }),
+  )
+}
+
+function dispatchPointerUp(wrapper, point, options = {}) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointerup', {
+      clientX: point.x,
+      clientY: point.y,
+      bubbles: true,
+      shiftKey: options.shiftKey ?? false,
+      metaKey: options.metaKey ?? false,
+      ctrlKey: options.ctrlKey ?? false,
+      pointerId: options.pointerId ?? 1,
+    }),
+  )
+}
+
 function dispatchKeyDown(wrapper, key) {
   const canvasEl = wrapper.find('canvas').element
   canvasEl.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
@@ -107,6 +137,36 @@ test('Escape clears the current selection', () => {
 
   assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
   assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), [])
+  wrapper.destroy()
+})
+
+test('Shift dragging blank space selects visible items inside the marquee', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const grid = layout.nodes.get('grid-tie')
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: 150, y: 50 }, { shiftKey: true })
+  dispatchPointerMove(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { shiftKey: true })
+  dispatchPointerUp(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { shiftKey: true })
+
+  const latest = wrapper.emitted('select').at(-1)[0]
+  assert.ok(latest.includes('grid-tie'))
+  assert.ok(latest.includes(heapGroup.id))
+  assert.equal(wrapper.emitted('viewport-change'), undefined)
+  wrapper.destroy()
+})
+
+test('Shift dragging blank space over empty area clears selection', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  dispatchPointerDown(wrapper, { x: 10, y: 10 }, { shiftKey: true })
+  dispatchPointerMove(wrapper, { x: 20, y: 20 }, { shiftKey: true })
+  dispatchPointerUp(wrapper, { x: 20, y: 20 }, { shiftKey: true })
+
+  assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
   wrapper.destroy()
 })
 

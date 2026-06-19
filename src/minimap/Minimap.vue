@@ -37,7 +37,12 @@ import {
   dragShiftEasedProgress,
   dragShiftProgress,
 } from './drag-transition.js'
-import { applySelectionClick, buildSelectionRelations } from './selection.js'
+import {
+  applySelectionClick,
+  buildSelectionRelations,
+  idsInSelectionRect,
+  normalizeRect,
+} from './selection.js'
 import ResourceTree from './ResourceTree.vue'
 
 const ANIMATION_DURATION_MS = 200
@@ -80,6 +85,7 @@ let internalGroupStates = {}
 let dragState = null
 let scrollbarDragState = null
 let panState = null
+let marqueeState = null
 let hoveredScrollbarGroupId = null
 
 let internalViewport = { ...DEFAULT_VIEWPORT }
@@ -246,6 +252,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
       dimmedEdgeIds: relations.dimmedEdgeIds,
       groupDrag: dragRenderContext(),
       groupScrollbarHoverId: hoveredScrollbarGroupId,
+      selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
     },
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
@@ -493,10 +500,15 @@ function cancelPan() {
   panState = null
 }
 
+function cancelMarquee() {
+  marqueeState = null
+}
+
 function cancelPointerInteractions() {
   cancelDrag()
   cancelScrollbarDrag()
   cancelPan()
+  cancelMarquee()
 }
 
 function updateScrollbarHover(groupId) {
@@ -559,6 +571,16 @@ function handlePointerDown(event) {
   if (!hit) {
     settleAnimation()
     canvasRef.value.setPointerCapture?.(event.pointerId)
+    if (event.shiftKey) {
+      marqueeState = {
+        pointerId: event.pointerId,
+        startScreen: { x: event.clientX, y: event.clientY },
+        rect: { x: event.clientX, y: event.clientY, width: 0, height: 0 },
+        active: false,
+      }
+      renderCurrent()
+      return
+    }
     setSelected([])
     panState = {
       pointerId: event.pointerId,
@@ -584,6 +606,19 @@ function handlePointerMove(event) {
     const rawScrollTop = scrollbarDragState.startScrollTop + scrollDelta
     const nextScrollTop = clampGroupScroll(group, rawScrollTop)
     group.scrollTop = nextScrollTop
+    renderCurrent()
+    return
+  }
+
+  if (marqueeState) {
+    const screenPoint = screenPointFromEvent(event)
+    marqueeState.rect = {
+      x: marqueeState.startScreen.x,
+      y: marqueeState.startScreen.y,
+      width: screenPoint.x - marqueeState.startScreen.x,
+      height: screenPoint.y - marqueeState.startScreen.y,
+    }
+    marqueeState.active = true
     renderCurrent()
     return
   }
@@ -624,6 +659,13 @@ function handlePointerMove(event) {
 }
 
 function handlePointerUp() {
+  if (marqueeState) {
+    const ids = marqueeState.active ? idsInSelectionRect(layout, marqueeState.rect, currentViewport()) : []
+    marqueeState = null
+    setSelected(ids)
+    return
+  }
+
   if (panState) {
     panState = null
     return
