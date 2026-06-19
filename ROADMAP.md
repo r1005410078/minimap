@@ -7,16 +7,16 @@
 - [x] 第一阶段：核心可用能力
 - [x] 第二阶段：分组框能力
 - [x] 第三阶段：视图和选择能力
-- [ ] 第四阶段：导航和查找能力
+- [x] 第四阶段：导航和查找能力
 - [ ] 第五阶段：编辑和状态能力
 
 ## 当前进度
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第四阶段（导航和查找能力）—— 切片 1、2 已完成，待规划切片 3
-- **当前阶段 Spec**：切片 1 [视图定位方法](docs/superpowers/specs/2026-06-20-phase-4-view-positioning.md)、切片 2 [搜索节点](docs/superpowers/specs/2026-06-20-phase-4-search-nodes.md) 已完成；切片 3 待创建
-- **当前阶段计划**：切片 1 [视图定位方法](docs/superpowers/plans/2026-06-20-phase-4-view-positioning.md)、切片 2 [搜索节点](docs/superpowers/plans/2026-06-20-phase-4-search-nodes.md) 已完成；切片 3 待创建
+- **当前阶段**：第四阶段（导航和查找能力）—— 已全部完成，待规划第五阶段
+- **当前阶段 Spec**：切片 1 [视图定位方法](docs/superpowers/specs/2026-06-20-phase-4-view-positioning.md)、切片 2 [搜索节点](docs/superpowers/specs/2026-06-20-phase-4-search-nodes.md)、切片 3 [Overview 小地图导航](docs/superpowers/specs/2026-06-20-phase-4-overview-navigation.md) 均已完成
+- **当前阶段计划**：切片 1 [视图定位方法](docs/superpowers/plans/2026-06-20-phase-4-view-positioning.md)、切片 2 [搜索节点](docs/superpowers/plans/2026-06-20-phase-4-search-nodes.md)、切片 3 [Overview 小地图导航](docs/superpowers/plans/2026-06-20-phase-4-overview-navigation.md) 均已完成
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -31,15 +31,16 @@
   - 选择模型和高亮 `selection.js` / `renderer.js` / `Minimap.vue` 多选、Cmd/Ctrl 框选、Esc 清空、关系高亮和非相关降权 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-3-selection-highlight.md)，commit `e83086b..d225d4c`，收尾修正 commit `71224ca`，`npm test` 184 全过，`npm run build` 通过；`http://127.0.0.1:5173/` 可访问，Browser 插件仍无可用 `iab`，以 jsdom + Canvas mock + 真实组件事件覆盖交互）
   - 视图定位方法 `viewport.js` 视口补动 + `layout.js` 分组子节点定位 + `selection.js` 多模式选择 + `Minimap.vue` 首次 `defineExpose`（`fitToScreen`/`centerOnNode`/`centerOnSelection`/`zoomTo`/`setViewport`/`getViewport`/`select`/`clearSelection`） + 测试（[plan](docs/superpowers/plans/2026-06-20-phase-4-view-positioning.md)，`npm test` 214 全过，`npm run build` 通过）
   - 搜索节点 `search.js` 深度优先遍历 + 子串匹配 + `Minimap.vue` 内建搜索框（输入即搜、上一个/下一个循环导航、`options.enableSearch` 开关） + 测试（[plan](docs/superpowers/plans/2026-06-20-phase-4-search-nodes.md)，`npm test` 233 全过，`npm run build` 通过；UI 用 jsdom + Vue Test Utils 真实组件事件覆盖，没有真实浏览器可用，未做人工目测）
+  - Overview 小地图导航 `overview.js` 缩略图视口变换 + 视口框坐标转换 + 视觉裁剪 + `Overview.vue` 独立子组件（命令式 `render()`，无 props） + `Minimap.vue` 接入（`renderCurrent()` 联动绘制、`navigate` 事件联动主视口、`options.enableOverview` 开关） + 测试（[plan](docs/superpowers/plans/2026-06-20-phase-4-overview-navigation.md)，`npm test` 253 全过，`npm run build` 通过；UI 用 jsdom + mock canvas ctx + Vue Test Utils 真实组件事件覆盖，没有真实浏览器可用，未做人工目测）
 - **第一阶段验收回归结果（2026-06-19，复跑）**：`npm test` 85 全过、`npm run build` 通过；真实浏览器驱动（headless Chrome + CDP）逐条核对「第一阶段验收」10 条，全部通过——示例图与 10000 节点压力图正常渲染且不创建 10000 个 DOM 节点（仅 17 个）；`edges` 不改变父子树节点坐标（7 个节点 diff 0）；左右/上下布局正确切换，父节点居中、兄弟顺序稳定；选中 `feeder-1` 后切换布局方向，视口锚点补偿生效（截图确认其屏幕位置基本不变）；`nodeRenderer`/`groupRenderer`/`edgeRenderer` 同时生效（截图可见洋红节点/青色分组框/黄色连线）；容器 resize + DPR=3 下 canvas 像素尺寸正确按比例放大；资源树拖入后 graph 正确增加节点。
 - **第三阶段切片**：
   - [x] 切片 1：视口平移缩放（`viewport` 受控/非受控、空白拖拽平移、滚轮缩放、缩放边界、`viewport-change`）
   - [x] 切片 2：选择模型和高亮（单选、多选、框选、空白/Esc 清空、父级/子级/相关连线高亮、非相关元素降权）
-- **第四阶段切片**（overview 是独立 mini canvas 子组件，跟前两个切片的视口数学性质不同，拆开做；切片 3 会复用切片 1 的 `centerOnNode`/视口补动能力）：
+- **第四阶段切片**（overview 是独立 mini canvas 子组件，跟前两个切片的视口数学性质不同，拆开做）：
   - [x] 切片 1：视图定位方法（`viewport.js`/`layout.js`/`selection.js` 纯函数 + `Minimap.vue` 首次 `defineExpose`：`fitToScreen`/`centerOnNode`/`centerOnSelection`/`zoomTo`/`setViewport`/`getViewport`/`select`/`clearSelection`；[plan](docs/superpowers/plans/2026-06-20-phase-4-view-positioning.md)，`npm test` 214 全过，`npm run build` 通过）
   - [x] 切片 2：搜索节点（`search.js` + `Minimap.vue` 内建搜索框，复用切片 1 的 `centerOnNode`/`select` 跳转和高亮；[plan](docs/superpowers/plans/2026-06-20-phase-4-search-nodes.md)，`npm test` 233 全过，`npm run build` 通过）
-  - [ ] 切片 3：Overview 小地图导航（独立 mini canvas 子组件，缩略图 + 视口框拖拽导航）
-- **下一步**：开始第四阶段切片 3（Overview 小地图导航）的 brainstorm 和 spec。
+  - [x] 切片 3：Overview 小地图导航（独立子组件 `Overview.vue`，命令式渲染 + `navigate` 事件联动主视口；[plan](docs/superpowers/plans/2026-06-20-phase-4-overview-navigation.md)，`npm test` 253 全过，`npm run build` 通过）
+- **下一步**：开始第五阶段（编辑和状态能力）的 brainstorm 和 spec。
 
 ## 目标
 

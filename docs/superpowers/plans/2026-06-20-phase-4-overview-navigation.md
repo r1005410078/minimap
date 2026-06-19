@@ -10,10 +10,10 @@
 
 ## 进度
 
-- [ ] Task 1：`overview.js` 三个纯函数
-- [ ] Task 2：`Overview.vue` 子组件
-- [ ] Task 3：`Minimap.vue` 集成
-- [ ] Task 4：回归校验 + ROADMAP 同步
+- [x] Task 1：`overview.js` 三个纯函数
+- [x] Task 2：`Overview.vue` 子组件
+- [x] Task 3：`Minimap.vue` 集成
+- [x] Task 4：回归校验 + ROADMAP 同步
 
 ## Global Constraints
 
