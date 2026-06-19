@@ -10,7 +10,7 @@
 
 当前下一步：为切片 2「选择模型和高亮」写实施计划。
 
-切片 1 完成记录：commit `29c8ccb..2af8e4c`；`npm test` 172 全过，`npm run build` 通过；`npm test -- test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js test/minimap-select.test.js` 37 全过；Vite dev server `http://127.0.0.1:5173/` 可访问。Browser 插件当前没有可用 `iab` 实例（browser list 为空），因此本轮未能做 in-app Browser 手动操作，改用 jsdom + Canvas mock 的真实 wheel/pointer 组件事件验收覆盖滚轮缩放、分组滚轮优先、受控 viewport 不持久化、空白拖拽平移、节点拖拽不触发平移。
+切片 1 完成记录：commit `29c8ccb..2af8e4c`；`npm test` 172 全过，`npm run build` 通过；`npm test -- test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js test/minimap-select.test.js` 40 全过；Vite dev server `http://127.0.0.1:5173/` 可访问。Browser 插件当前没有可用 `iab` 实例（browser list 为空），因此本轮未能做 in-app Browser 手动操作，改用 jsdom + Canvas mock 的真实 wheel/pointer 组件事件验收覆盖滚轮缩放、分组滚轮优先、受控 viewport 不持久化、空白拖拽平移、节点拖拽不触发平移。
 
 ## 头脑风暴决策记录
 
