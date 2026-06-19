@@ -21,7 +21,7 @@
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
   - Vue 组件壳 `Minimap.vue` / `ResourceTree.vue` / `interaction.js` + 资源树拖入 + 测试（commit `0c50895`..`e4c451b`，`npm test` 49 全过，浏览器手动验收通过）
   - 正交连线 `orthogonalPath` / `resolveEdges` endpoint boxes / 折线 + 箭头绘制 + 测试（commit `7902000`..`0d4b711`，`npm test` 与 `npm run build` 通过）
-- **下一步**：第一阶段收尾先推进「布局切换动画」；同时仍需完成「视口锚点稳定」，两项都到位后再把第一阶段勾完（按 brainstorm → spec → plan → implement 推进）
+- **下一步**：第一阶段收尾切片「布局切换动画 + 视口锚点稳定」已进入 spec review；spec 见 [布局切换动画 + 视口锚点稳定](docs/superpowers/specs/2026-06-19-phase-1-layout-transition.md)，通过后继续写 implementation plan
 - **待办切片**：布局切换动画；视口锚点稳定；验收点全绿后勾「第一阶段」
 
 ## 目标
