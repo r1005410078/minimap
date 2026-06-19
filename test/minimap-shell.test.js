@@ -13,6 +13,20 @@ const frames = stubAnimationFrame()
 const { mount } = await import('@vue/test-utils')
 const Minimap = (await import('../src/minimap/Minimap.vue')).default
 
+function dispatchDrop(wrapper, payload, point) {
+  const canvasEl = wrapper.find('canvas').element
+  const evt = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(evt, 'dataTransfer', { value: { getData: () => JSON.stringify(payload) } })
+  Object.defineProperty(evt, 'clientX', { value: point.x, configurable: true })
+  Object.defineProperty(evt, 'clientY', { value: point.y, configurable: true })
+  canvasEl.dispatchEvent(evt)
+}
+
+function callsSinceLastClear(ctx) {
+  const lastClear = ctx.calls.map((call) => call.method).lastIndexOf('clearRect')
+  return ctx.calls.slice(lastClear + 1)
+}
+
 test('mounting draws the initial graph onto the canvas', () => {
   const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
   const ctx = contexts.at(-1)
@@ -42,6 +56,7 @@ test('changing layoutDirection animates through requestAnimationFrame', async ()
 
   assert.ok(frames.scheduled.length > 0)
   assert.equal(frames.runNext(1000), true)
+  assert.equal(frames.runNext(1100), true)
   assert.ok(ctx.calls.length > callsBefore)
   wrapper.destroy()
 })
@@ -61,7 +76,23 @@ test('replacing graph prop animates through requestAnimationFrame', async () => 
 
   assert.ok(frames.scheduled.length > scheduledBefore)
   assert.equal(frames.runNext(1000), true)
+  assert.equal(frames.runNext(1100), true)
   assert.ok(ctx.calls.length > callsBefore)
+  wrapper.destroy()
+})
+
+test('completed layout animation does not schedule another frame', async () => {
+  const wrapper = mount(Minimap, {
+    propsData: { graph: createDemoGraph(), layoutDirection: 'horizontal' },
+  })
+
+  await wrapper.setProps({ layoutDirection: 'vertical' })
+  await wrapper.vm.$nextTick()
+  assert.equal(frames.runNext(1000), true)
+  const scheduledAfterFirstTick = frames.scheduled.length
+
+  assert.equal(frames.runNext(1200), true)
+  assert.equal(frames.scheduled.length, scheduledAfterFirstTick)
   wrapper.destroy()
 })
 
@@ -121,15 +152,40 @@ test('selected anchor contributes a compensated viewport during layout animation
   await wrapper.setProps({ layoutDirection: 'vertical' })
   await wrapper.vm.$nextTick()
   frames.runNext(1000)
+  frames.runNext(1100)
 
-  const gridFill = ctx.calls
+  const latestCalls = callsSinceLastClear(ctx)
+  const gridFill = latestCalls
     .filter((call) => call.method === 'fillRect')
     .find((call) => call.args[0] === 0 && call.args[1] === 0 && call.args[2] === 800 && call.args[3] === 600)
-  const verticalGridLine = ctx.calls.find((call) => call.method === 'moveTo' && call.args[0] !== 0)
+  const verticalGridLine = latestCalls.find((call) => call.method === 'moveTo' && call.args[0] < 0)
 
   assert.ok(gridFill)
   assert.ok(verticalGridLine)
   assert.notEqual(verticalGridLine.args[0], 0)
+  wrapper.destroy()
+})
+
+test('drop during layout animation settles before computing insertion index', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, {
+    propsData: {
+      graph,
+      layoutDirection: 'horizontal',
+      selectedIds: ['energy-root'],
+    },
+  })
+
+  await wrapper.setProps({ layoutDirection: 'vertical' })
+  await wrapper.vm.$nextTick()
+  const activeFrame = frames.scheduled.at(-1).id
+
+  dispatchDrop(wrapper, { id: 'inverter', label: 'Inverter' }, { x: 191, y: 0 })
+
+  const payload = wrapper.emitted('node-drop')[0][0]
+  assert.equal(payload.parentId, 'energy-root')
+  assert.equal(payload.index, 2)
+  assert.ok(frames.cancelled.includes(activeFrame))
   wrapper.destroy()
 })
 

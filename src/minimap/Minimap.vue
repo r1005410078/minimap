@@ -74,6 +74,13 @@ function cancelAnimation() {
   activeTransition = null
 }
 
+function settleAnimation() {
+  if (!activeTransition) return
+  const { nextLayout, nextViewport } = activeTransition
+  cancelAnimation()
+  finishLayout(nextLayout, nextViewport)
+}
+
 function chooseAnchorId(startLayout, nextLayout) {
   const selected = currentSelectedIds()[0]
   if (selected && resolveAnchorCenter(startLayout, selected) && resolveAnchorCenter(nextLayout, selected)) return selected
@@ -182,6 +189,7 @@ function handleDragOver(event) {
 
 function handleDrop(event) {
   event.preventDefault()
+  settleAnimation()
   if (!layout) return
   const raw = event.dataTransfer.getData('application/json')
   if (!raw) return
