@@ -21,9 +21,32 @@ export function keepAnchorStable(viewport, before, after) {
   }
 }
 
-// 把一个父节点的子节点折叠成分组框，按内部网格推导尺寸，并受视口比例约束。
-function buildGroup(node, viewportWidth, viewportHeight) {
-  const children = node.children.slice()
+function isLeaf(node) {
+  return !node.children || node.children.length === 0
+}
+
+// 把 parentNode.children 按"连续叶子兄弟"分段；遇到带子节点的兄弟就结束当前段
+// （这个兄弟自己永远不参与合并）。只返回长度超过 groupThreshold 的段，按出现顺序排列。
+function collectGroupSegments(parentNode, graph, groupThreshold) {
+  const segments = []
+  let current = null
+  for (const childId of parentNode.children || []) {
+    const child = graph.nodes.get(childId)
+    if (child && isLeaf(child)) {
+      if (!current) {
+        current = []
+        segments.push(current)
+      }
+      current.push(childId)
+    } else {
+      current = null
+    }
+  }
+  return segments.filter((segment) => segment.length > groupThreshold)
+}
+
+// 把一个分组的子节点列表折叠成分组框，按内部网格推导尺寸，同时受视口比例约束。
+function buildGroup(groupId, parentId, children, viewportWidth, viewportHeight) {
   const maxW = viewportWidth * GROUP_MAX_W_RATIO
   const maxH = viewportHeight * GROUP_MAX_H_RATIO
 
@@ -32,18 +55,19 @@ function buildGroup(node, viewportWidth, viewportHeight) {
     Math.floor((maxW - 2 * GROUP.padding + GROUP.itemGap) / (GROUP.itemW + GROUP.itemGap)),
   )
   const rows = Math.ceil(children.length / columns)
-  const contentW = 2 * GROUP.padding + columns * GROUP.itemW + (columns - 1) * GROUP.itemGap
-  const contentH =
+  const contentWidth = 2 * GROUP.padding + columns * GROUP.itemW + (columns - 1) * GROUP.itemGap
+  const contentHeight =
     GROUP.header + 2 * GROUP.padding + rows * GROUP.itemH + Math.max(0, rows - 1) * GROUP.itemGap
 
   return {
-    parentId: node.id,
+    id: groupId,
+    parentId,
     children,
     columns,
     rows,
-    width: Math.min(contentW, maxW),
-    height: Math.min(contentH, maxH),
-    overflowY: contentH > maxH,
+    width: Math.min(contentWidth, maxW),
+    height: Math.min(contentHeight, maxH),
+    overflowY: contentHeight > maxH,
     x: 0,
     y: 0,
   }
@@ -53,29 +77,36 @@ export function computeLayout(graph, options = {}) {
   const direction = options.direction === 'vertical' ? 'vertical' : 'horizontal'
   const viewportWidth = options.viewportWidth ?? 1200
   const viewportHeight = options.viewportHeight ?? 760
+  const groupThreshold = options.groupThreshold ?? GROUP_THRESHOLD
 
-  // 1. 折叠超过阈值的父节点子节点列表，记录被折叠的子节点（结构性虚拟化的依据）。
+  // 1. 按"连续叶子兄弟分段"规则折叠；一个父节点下可能产生 0、1 或多个分组。
   const groups = []
-  const groupByParent = new Map()
-  const foldedChildren = new Set()
+  const groupOf = new Map() // childId -> group，供下面的 itemOf 跳过已消费的子节点
   for (const node of graph.nodes.values()) {
-    if (node.children && node.children.length > GROUP_THRESHOLD) {
-      const group = buildGroup(node, viewportWidth, viewportHeight)
+    const segments = collectGroupSegments(node, graph, groupThreshold)
+    segments.forEach((segmentChildren, segmentIndex) => {
+      const groupId = `${node.id}::g${segmentIndex}`
+      const group = buildGroup(groupId, node.id, segmentChildren, viewportWidth, viewportHeight)
       groups.push(group)
-      groupByParent.set(node.id, group)
-      for (const childId of node.children) foldedChildren.add(childId)
-    }
+      for (const childId of segmentChildren) groupOf.set(childId, group)
+    })
   }
 
-  // 2. 构建布局项树：折叠的父节点用单个 group 项代表其全部子节点。
+  // 2. 构建布局项树：命中分组子节点时，只在该分组第一次出现的位置插入一个 group 项。
   const itemOf = (nodeId) => {
     const node = graph.nodes.get(nodeId)
-    const group = groupByParent.get(nodeId)
-    const childItems = group
-      ? [{ type: 'group', group }]
-      : (node.children || [])
-          .filter((id) => !foldedChildren.has(id))
-          .map((id) => itemOf(id))
+    const childItems = []
+    const consumedGroups = new Set()
+    for (const childId of node.children || []) {
+      const group = groupOf.get(childId)
+      if (group) {
+        if (consumedGroups.has(group.id)) continue
+        consumedGroups.add(group.id)
+        childItems.push({ type: 'group', group })
+      } else {
+        childItems.push(itemOf(childId))
+      }
+    }
     return { type: 'node', node, childItems }
   }
 
@@ -156,7 +187,7 @@ export function computeLayout(graph, options = {}) {
     } else {
       item.group.x = x
       item.group.y = y
-      visibleItems.push({ type: 'group', parentId: item.group.parentId, x, y, width, height })
+      visibleItems.push({ type: 'group', id: item.group.id, parentId: item.group.parentId, x, y, width, height })
     }
 
     minMain = Math.min(minMain, mainStart)

@@ -11,6 +11,34 @@ import {
   keepAnchorStable,
 } from '../src/minimap/layout.js'
 
+const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
+
+// 生成一个 root -> p -> children 的小图；childSpecs 里字符串视为叶子 id，
+// { id, children } 视为带子节点的非叶子兄弟（自身永不参与合并）。
+function graphWithChildren(childSpecs) {
+  const nodes = new Map()
+  nodes.set('r', { id: 'r', label: 'r', parentId: null, children: ['p'] })
+  const childIds = []
+  for (const spec of childSpecs) {
+    if (typeof spec === 'string') {
+      childIds.push(spec)
+      nodes.set(spec, { id: spec, label: spec, parentId: 'p', children: [] })
+    } else {
+      childIds.push(spec.id)
+      nodes.set(spec.id, { id: spec.id, label: spec.id, parentId: 'p', children: spec.children })
+      for (const grandchildId of spec.children) {
+        nodes.set(grandchildId, { id: grandchildId, label: grandchildId, parentId: spec.id, children: [] })
+      }
+    }
+  }
+  nodes.set('p', { id: 'p', label: 'p', parentId: 'r', children: childIds })
+  return { version: 1, nodes, rootIds: ['r'], edges: [] }
+}
+
+function leaves(prefix, count) {
+  return Array.from({ length: count }, (_, i) => `${prefix}${i}`)
+}
+
 test('groups adjacent siblings only when the run is larger than the threshold', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, {
@@ -116,4 +144,43 @@ test('even sibling counts keep the parent centered between the two middle childr
   const expected = (center('a') + center('b')) / 2
 
   assert.ok(Math.abs(center('root') - expected) < 1e-6)
+})
+
+test('a sibling with children truncates a leaf run into two independent groups', () => {
+  const graph = graphWithChildren([
+    ...leaves('a', 6),
+    { id: 'mid', children: ['mid-child'] },
+    ...leaves('b', 6),
+  ])
+  const layout = computeLayout(graph, VIEWPORT)
+
+  assert.equal(layout.groups.length, 2)
+  const [first, second] = layout.groups
+  assert.notEqual(first.id, second.id)
+  assert.deepEqual(first.children, leaves('a', 6))
+  assert.deepEqual(second.children, leaves('b', 6))
+  assert.ok(layout.nodes.has('mid'))
+  assert.ok(!layout.nodes.has('a0'))
+})
+
+test('only the run that exceeds the threshold becomes a group', () => {
+  const graph = graphWithChildren([
+    ...leaves('a', 6),
+    { id: 'mid', children: ['mid-child'] },
+    ...leaves('b', 3),
+  ])
+  const layout = computeLayout(graph, VIEWPORT)
+
+  assert.equal(layout.groups.length, 1)
+  assert.deepEqual(layout.groups[0].children, leaves('a', 6))
+  for (const id of leaves('b', 3)) assert.ok(layout.nodes.has(id))
+})
+
+test('options.groupThreshold overrides the default threshold', () => {
+  const graph = graphWithChildren(leaves('c', 6))
+  const folded = computeLayout(graph, { ...VIEWPORT, groupThreshold: 5 })
+  const notFolded = computeLayout(graph, { ...VIEWPORT, groupThreshold: 6 })
+
+  assert.equal(folded.groups.length, 1)
+  assert.equal(notFolded.groups.length, 0)
 })
