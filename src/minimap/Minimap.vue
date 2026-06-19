@@ -4,7 +4,15 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { computeLayout, keepAnchorStable, GROUP, clampGroupScroll } from './layout.js'
+import {
+  computeLayout,
+  keepAnchorStable,
+  GROUP,
+  clampGroupScroll,
+  childRectInGroup,
+  locateChildGroup,
+  scrollTopToReveal,
+} from './layout.js'
 import {
   createLayoutTransition,
   layoutAt,
@@ -15,9 +23,13 @@ import { defaultTheme } from './theme.js'
 import { screenToWorld } from './coords.js'
 import {
   DEFAULT_VIEWPORT,
+  centerViewportOn,
+  clampScale,
+  fitViewportToBounds,
   normalizeViewport,
   panViewportBy,
   sameViewport,
+  tweenViewport,
   viewportOptions,
   zoomViewportAt,
 } from './viewport.js'
@@ -39,6 +51,7 @@ import {
 } from './drag-transition.js'
 import {
   applySelectionClick,
+  applySelectionSet,
   buildSelectionRelations,
   idsInSelectionRect,
   normalizeRect,
@@ -94,6 +107,8 @@ let animationFrameId = null
 let activeTransition = null
 let lastRenderedLayout = null
 let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
+let activeViewportTween = null
+let viewportTweenFrameId = null
 
 function currentSelectedIds() {
   if (props.selectedIds !== null) return props.selectedIds
@@ -117,6 +132,49 @@ function applyViewport(nextViewport, { emitChange = true } = {}) {
   internalViewport = next
   renderCurrent(layout, next)
   return true
+}
+
+function cancelViewportTween() {
+  if (viewportTweenFrameId !== null) {
+    cancelAnimationFrame(viewportTweenFrameId)
+    viewportTweenFrameId = null
+  }
+  activeViewportTween = null
+}
+
+function runViewportTween(toViewport, { durationMs = 200 } = {}) {
+  settleAnimation()
+  cancelViewportTween()
+  cancelPointerInteractions()
+
+  const next = normalizeViewport(toViewport, viewportOptions(props.options))
+  const fromViewport = currentViewport()
+  if (sameViewport(fromViewport, next)) return
+
+  if (props.viewport !== null) {
+    emit('viewport-change', next)
+    return
+  }
+
+  activeViewportTween = { fromViewport, toViewport: next, durationMs, startedAt: null }
+  const tick = (time) => {
+    if (!activeViewportTween) return
+    if (activeViewportTween.startedAt === null) activeViewportTween.startedAt = time
+    const progress = (time - activeViewportTween.startedAt) / activeViewportTween.durationMs
+    if (progress >= 1) {
+      viewportTweenFrameId = null
+      const finalViewport = activeViewportTween.toViewport
+      activeViewportTween = null
+      internalViewport = finalViewport
+      renderCurrent(layout, finalViewport)
+      emit('viewport-change', finalViewport)
+      return
+    }
+    internalViewport = tweenViewport(activeViewportTween.fromViewport, activeViewportTween.toViewport, progress)
+    renderCurrent(layout, internalViewport)
+    viewportTweenFrameId = requestAnimationFrame(tick)
+  }
+  viewportTweenFrameId = requestAnimationFrame(tick)
 }
 
 function updateGroupState(groupId, patch) {
@@ -767,6 +825,98 @@ function handleDrop(event) {
   emit('change', props.graph)
 }
 
+function resolveTargetRect(id) {
+  if (!layout) return null
+  const group = layout.groups.find((g) => g.id === id)
+  if (group) return { x: group.x, y: group.y, width: group.width, height: group.height }
+  const nodeRect = layout.nodes.get(id)
+  if (nodeRect) return nodeRect
+  const located = locateChildGroup(layout, id)
+  if (!located) return null
+  return childRectInGroup(located.group, id)
+}
+
+function rectCenter(rect) {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
+function resolveCenterTarget(id) {
+  if (!layout) return null
+  const located = locateChildGroup(layout, id)
+  if (located) {
+    const scrollTop = scrollTopToReveal(located.group, located.index)
+    if (props.groupStates === null) located.group.scrollTop = scrollTop
+    updateGroupState(located.group.id, { scrollTop })
+    if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
+  }
+  const rect = resolveTargetRect(id)
+  return rect ? rectCenter(rect) : null
+}
+
+function fitToScreen() {
+  if (!layout) return
+  runViewportTween(fitViewportToBounds(layout.bounds, cssWidth, cssHeight, props.options))
+}
+
+function centerOnNode(id) {
+  const target = resolveCenterTarget(id)
+  if (!target) return
+  runViewportTween(centerViewportOn(target, currentViewport(), cssWidth, cssHeight))
+}
+
+function centerOnSelection() {
+  const ids = currentSelectedIds()
+  if (ids.length === 0) return
+  const rects = ids.map(resolveTargetRect).filter(Boolean)
+  if (rects.length === 0) return
+  const minX = Math.min(...rects.map((r) => r.x))
+  const maxX = Math.max(...rects.map((r) => r.x + r.width))
+  const minY = Math.min(...rects.map((r) => r.y))
+  const maxY = Math.max(...rects.map((r) => r.y + r.height))
+  const target = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+  runViewportTween(centerViewportOn(target, currentViewport(), cssWidth, cssHeight))
+}
+
+function zoomTo(scale, center = null) {
+  const viewport = currentViewport()
+  const worldCenter = center ?? screenToWorld({ x: cssWidth / 2, y: cssHeight / 2 }, viewport)
+  const nextScale = clampScale(scale, viewportOptions(props.options))
+  runViewportTween({
+    x: worldCenter.x * (viewport.scale - nextScale) + viewport.x,
+    y: worldCenter.y * (viewport.scale - nextScale) + viewport.y,
+    scale: nextScale,
+  })
+}
+
+function setViewport(viewport) {
+  settleAnimation()
+  cancelViewportTween()
+  applyViewport(viewport)
+}
+
+function getViewport() {
+  return currentViewport()
+}
+
+function select(ids, mode = 'replace') {
+  setSelected(applySelectionSet(currentSelectedIds(), ids, mode))
+}
+
+function clearSelection() {
+  setSelected([])
+}
+
+defineExpose({
+  fitToScreen,
+  centerOnNode,
+  centerOnSelection,
+  zoomTo,
+  setViewport,
+  getViewport,
+  select,
+  clearSelection,
+})
+
 function syncCanvasSize() {
   const container = containerRef.value
   const canvas = canvasRef.value
@@ -807,6 +957,7 @@ onMounted(() => {
 onUnmounted(() => {
   const canvas = canvasRef.value
   cancelAnimation()
+  cancelViewportTween()
   cancelPointerInteractions()
   if (canvas) {
     canvas.removeEventListener('pointerdown', handlePointerDown)
