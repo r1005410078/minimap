@@ -18,7 +18,7 @@
 - [x] Task 4: Add blank-canvas pan
 - [x] Task 5: Update docs and verify in browser
 
-Completion note: implementation landed in commits `29c8ccb..3979f6b`. Verification run on 2026-06-19: `npm test` passed 168/168; `npm run build` passed; `curl -fsSL http://127.0.0.1:5173/` confirmed the dev server served the app shell; `npm test -- test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js test/minimap-select.test.js` passed 37/37 for wheel/pointer interaction coverage. In-app Browser verification could not run because the Browser plugin reported no available `iab` browser instance.
+Completion note: implementation landed in commits `29c8ccb..2af8e4c`. Verification run on 2026-06-19: `npm test` passed 172/172; `npm run build` passed; `curl -fsSL http://127.0.0.1:5173/` confirmed the dev server served the app shell; `npm test -- test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js test/minimap-select.test.js` passed 37/37 for wheel/pointer interaction coverage. In-app Browser verification could not run because the Browser plugin reported no available `iab` browser instance.
 
 ## File Structure
 
