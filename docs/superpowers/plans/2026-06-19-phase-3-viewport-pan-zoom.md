@@ -12,11 +12,13 @@
 
 ## Progress
 
-- [ ] Task 1: Add pure viewport math
-- [ ] Task 2: Wire controlled/uncontrolled viewport state
-- [ ] Task 3: Add wheel zoom
-- [ ] Task 4: Add blank-canvas pan
-- [ ] Task 5: Update docs and verify in browser
+- [x] Task 1: Add pure viewport math
+- [x] Task 2: Wire controlled/uncontrolled viewport state
+- [x] Task 3: Add wheel zoom
+- [x] Task 4: Add blank-canvas pan
+- [x] Task 5: Update docs and verify in browser
+
+Completion note: implementation landed in commits `29c8ccb..3979f6b`. Verification run on 2026-06-19: `npm test` passed 168/168; `npm run build` passed; `curl -fsSL http://127.0.0.1:5173/` confirmed the dev server served the app shell; `npm test -- test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js test/minimap-select.test.js` passed 37/37 for wheel/pointer interaction coverage. In-app Browser verification could not run because the Browser plugin reported no available `iab` browser instance.
 
 ## File Structure
 
