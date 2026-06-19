@@ -36,9 +36,11 @@
 
 ## Progress
 
-- [ ] Task 1: Pure layout transition module + tests
-- [ ] Task 2: Vue shell animation + anchor integration
-- [ ] Task 3: Docs progress sync + full verification
+- [x] Task 1: Pure layout transition module + tests
+- [x] Task 2: Vue shell animation + anchor integration
+- [x] Task 3: Docs progress sync + full verification
+
+切片完成：commit `8ab447a..5ee9672`，`npm test` 全过、`npm run build` 通过。
 
 ---
 
@@ -766,7 +768,7 @@ git commit -m "feat: animate minimap layout changes"
 - Modify: `docs/superpowers/plans/2026-06-19-phase-1-layout-transition.md`
 - Modify: `ROADMAP.md`
 
-- [ ] **Step 1: Update plan progress**
+- [x] **Step 1: Update plan progress**
 
 In `docs/superpowers/plans/2026-06-19-phase-1-layout-transition.md`, update:
 
@@ -778,7 +780,7 @@ In `docs/superpowers/plans/2026-06-19-phase-1-layout-transition.md`, update:
 - [ ] Task 3: Docs progress sync + full verification
 ```
 
-- [ ] **Step 2: Find the implementation commit range**
+- [x] **Step 2: Find the implementation commit range**
 
 Run:
 
@@ -788,7 +790,7 @@ git log --oneline --reverse be05cc3..HEAD
 
 Expected: output includes the Task 1 and Task 2 commits. Use the first hash from this output as the range start and the last hash as the range end when editing the docs in the next steps. The range format is two concrete short hashes separated by `..`.
 
-- [ ] **Step 3: Update ROADMAP current progress**
+- [x] **Step 3: Update ROADMAP current progress**
 
 Modify the `ROADMAP.md` current progress block. In the layout-transition bullet, replace the words after `commit` with the two concrete short hashes from Step 2, separated by `..`:
 
@@ -798,12 +800,12 @@ Modify the `ROADMAP.md` current progress block. In the layout-transition bullet,
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
   - Vue 组件壳 `Minimap.vue` / `ResourceTree.vue` / `interaction.js` + 资源树拖入 + 测试（commit `0c50895`..`e4c451b`，`npm test` 49 全过，浏览器手动验收通过）
   - 正交连线 `orthogonalPath` / `resolveEdges` endpoint boxes / 折线 + 箭头绘制 + 测试（commit `7902000`..`0d4b711`，`npm test` 与 `npm run build` 通过）
-  - 布局切换动画 + 视口锚点稳定 `layout-transition` / `Minimap.vue` raf 动画 + 测试（commit 两个真实短 hash，中间用两个点连接，`npm test` 与 `npm run build` 通过）
+  - 布局切换动画 + 视口锚点稳定 `layout-transition` / `Minimap.vue` raf 动画 + 测试（commit `8ab447a..5ee9672`，`npm test` 与 `npm run build` 通过）
 - **下一步**：第一阶段验收回归；验收点全绿后勾「第一阶段」，再进入第二阶段「分组框能力」
 - **待办切片**：第一阶段验收回归
 ```
 
-- [ ] **Step 4: Run full verification**
+- [x] **Step 4: Run full verification**
 
 Run:
 
@@ -814,7 +816,7 @@ npm run build
 
 Expected: both commands exit 0.
 
-- [ ] **Step 5: Update plan completion note**
+- [x] **Step 5: Update plan completion note**
 
 In this plan file, change progress to:
 
@@ -825,7 +827,7 @@ In this plan file, change progress to:
 - [x] Task 2: Vue shell animation + anchor integration
 - [x] Task 3: Docs progress sync + full verification
 
-切片完成：commit 两个真实短 hash，中间用两个点连接，`npm test` 全过、`npm run build` 通过。
+切片完成：commit `8ab447a..5ee9672`，`npm test` 全过、`npm run build` 通过。
 ```
 
 - [ ] **Step 6: Commit docs**
