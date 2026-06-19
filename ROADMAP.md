@@ -14,8 +14,8 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第一阶段（核心可用能力）—— 已完成，验收点全绿
-- **当前阶段计划**：[逻辑层](docs/superpowers/plans/2026-06-18-phase-1-core-logic.md) ｜ [Canvas 渲染器](docs/superpowers/plans/2026-06-18-phase-1-canvas-renderer.md) ｜ [Vue 组件壳 + 资源树拖入](docs/superpowers/plans/2026-06-18-phase-1-vue-shell.md) ｜ [正交连线](docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md)（切片级进度在各 plan「进度」一节）
+- **当前阶段**：第二阶段（分组框能力）—— 进行中
+- **当前阶段计划**：[逻辑层](docs/superpowers/plans/2026-06-18-phase-1-core-logic.md) ｜ [Canvas 渲染器](docs/superpowers/plans/2026-06-18-phase-1-canvas-renderer.md) ｜ [Vue 组件壳 + 资源树拖入](docs/superpowers/plans/2026-06-18-phase-1-vue-shell.md) ｜ [正交连线](docs/superpowers/plans/2026-06-18-phase-1-orthogonal-edges.md) ｜ [分组逻辑](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)（切片级进度在各 plan「进度」一节）
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -23,9 +23,10 @@
   - 正交连线 `orthogonalPath` / `resolveEdges` endpoint boxes / 折线 + 箭头绘制 + 测试（commit `7902000`..`0d4b711`，`npm test` 与 `npm run build` 通过）
   - 布局切换动画 + 视口锚点稳定 `layout-transition` / `Minimap.vue` raf 动画 + 测试（commit `8ab447a..5ee9672`，`npm test` 与 `npm run build` 通过）
   - 自定义绘制 props 接通 `nodeRenderer`/`groupRenderer`/`edgeRenderer` + 测试（commit `6f12cd2..c645ca4`，`npm test` 与 `npm run build` 通过）
+  - 分组逻辑 `layout.js` 叶子兄弟分段 + 多分组身份 + 最小尺寸 + 展开态 + 滚动窗口 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-2-group-logic.md)，`npm test` 92 全过，`npm run build` 通过）
 - **第一阶段验收回归结果（2026-06-19，复跑）**：`npm test` 85 全过、`npm run build` 通过；真实浏览器驱动（headless Chrome + CDP）逐条核对「第一阶段验收」10 条，全部通过——示例图与 10000 节点压力图正常渲染且不创建 10000 个 DOM 节点（仅 17 个）；`edges` 不改变父子树节点坐标（7 个节点 diff 0）；左右/上下布局正确切换，父节点居中、兄弟顺序稳定；选中 `feeder-1` 后切换布局方向，视口锚点补偿生效（截图确认其屏幕位置基本不变）；`nodeRenderer`/`groupRenderer`/`edgeRenderer` 同时生效（截图可见洋红节点/青色分组框/黄色连线）；容器 resize + DPR=3 下 canvas 像素尺寸正确按比例放大；资源树拖入后 graph 正确增加节点。
-- **下一步**：进入第二阶段「分组框能力」，按 brainstorm → spec → plan → implement 推进。
-- **待办切片**：无（第一阶段两个缺口均已解决并复核通过）。
+- **下一步**：继续第二阶段「分组框能力」，按 brainstorm → spec → plan → implement 推进，下一个切片是 Canvas 渲染器（[plan](docs/superpowers/plans/2026-06-19-phase-2-canvas-renderer.md)）。
+- **待办切片**：无（Phase 2 第一个切片已完成；下一步实现第二个切片）。
 
 ## 目标
 
