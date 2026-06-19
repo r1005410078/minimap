@@ -56,6 +56,7 @@ import {
   idsInSelectionRect,
   normalizeRect,
 } from './selection.js'
+import { searchNodes } from './search.js'
 import ResourceTree from './ResourceTree.vue'
 
 const ANIMATION_DURATION_MS = 200
@@ -83,10 +84,14 @@ const emit = defineEmits([
   'group-state-change',
   'group-reorder',
   'viewport-change',
+  'search',
 ])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
+const searchKeyword = ref('')
+const searchMatches = ref([])
+const searchCurrentIndex = ref(-1)
 
 let ctx = null
 let resizeObserver = null
@@ -909,6 +914,39 @@ function clearSelection() {
   setSelected([])
 }
 
+function jumpToSearchResult(id) {
+  centerOnNode(id)
+  select([id])
+}
+
+function search(keyword) {
+  searchKeyword.value = keyword
+  const matches = searchNodes(props.graph, keyword)
+  searchMatches.value = matches
+  searchCurrentIndex.value = matches.length > 0 ? 0 : -1
+  if (matches.length > 0) jumpToSearchResult(matches[0])
+  const payload = { keyword, matches, current: matches[0] ?? null }
+  emit('search', payload)
+  return payload
+}
+
+function searchNext() {
+  if (searchMatches.value.length === 0) return
+  searchCurrentIndex.value = (searchCurrentIndex.value + 1) % searchMatches.value.length
+  const id = searchMatches.value[searchCurrentIndex.value]
+  jumpToSearchResult(id)
+  emit('search', { keyword: searchKeyword.value, matches: searchMatches.value, current: id })
+}
+
+function searchPrevious() {
+  if (searchMatches.value.length === 0) return
+  const length = searchMatches.value.length
+  searchCurrentIndex.value = (searchCurrentIndex.value - 1 + length) % length
+  const id = searchMatches.value[searchCurrentIndex.value]
+  jumpToSearchResult(id)
+  emit('search', { keyword: searchKeyword.value, matches: searchMatches.value, current: id })
+}
+
 defineExpose({
   fitToScreen,
   centerOnNode,
@@ -918,6 +956,9 @@ defineExpose({
   getViewport,
   select,
   clearSelection,
+  search,
+  searchNext,
+  searchPrevious,
 })
 
 function syncCanvasSize() {
@@ -990,6 +1031,30 @@ watch(() => props.options, () => updateLayout())
     <ResourceTree class="minimap-resources" :resources="resources" />
     <div ref="containerRef" class="minimap-canvas-container">
       <canvas ref="canvasRef" tabindex="0"></canvas>
+      <div v-if="options?.enableSearch !== false" class="minimap-search">
+        <input
+          :value="searchKeyword"
+          class="minimap-search-input"
+          placeholder="搜索节点..."
+          @input="search($event.target.value)"
+          @keydown.enter="searchNext"
+        />
+        <span class="minimap-search-count">{{ searchMatches.length ? `${searchCurrentIndex + 1}/${searchMatches.length}` : '0/0' }}</span>
+        <button
+          class="minimap-search-btn minimap-search-prev"
+          :disabled="searchMatches.length === 0"
+          @click="searchPrevious"
+        >
+          ‹
+        </button>
+        <button
+          class="minimap-search-btn minimap-search-next"
+          :disabled="searchMatches.length === 0"
+          @click="searchNext"
+        >
+          ›
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -1011,5 +1076,47 @@ watch(() => props.options, () => updateLayout())
 }
 .minimap-canvas-container canvas {
   display: block;
+}
+.minimap-search {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #16202b;
+  border: 1px solid #1b2530;
+  border-radius: 4px;
+}
+.minimap-search-input {
+  background: #0f1620;
+  border: 1px solid #2a3a4a;
+  color: #d8e3ec;
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-size: 12px;
+  width: 140px;
+}
+.minimap-search-count {
+  color: #9fb6cc;
+  font-size: 12px;
+  min-width: 36px;
+  text-align: center;
+}
+.minimap-search-btn {
+  background: #1f2c3a;
+  border: 1px solid #2a3a4a;
+  color: #d8e3ec;
+  border-radius: 3px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.minimap-search-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>
