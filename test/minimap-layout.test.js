@@ -6,10 +6,14 @@ import {
   reorderGroupChild,
 } from '../src/minimap/graph.js'
 import {
+  GROUP,
   GROUP_THRESHOLD,
+  childRectInGroup,
+  clampGroupScroll,
   computeLayout,
   keepAnchorStable,
-  clampGroupScroll,
+  locateChildGroup,
+  scrollTopToReveal,
   visibleGroupChildren,
 } from '../src/minimap/layout.js'
 
@@ -251,4 +255,73 @@ test('visibleGroupChildren returns only the rows within the current scroll windo
 
   const first = visibleGroupChildren(group)[0]
   assert.deepEqual(first.rect, { x: 12, y: 40, width: 120, height: 40 })
+})
+
+test('locateChildGroup finds the group and index containing a grouped child', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 })
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+
+  const located = locateChildGroup(layout, 'cluster-24')
+
+  assert.equal(located.group.id, group.id)
+  assert.equal(located.index, group.children.indexOf('cluster-24'))
+})
+
+test('locateChildGroup returns null for ids that are not grouped children', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 })
+
+  assert.equal(locateChildGroup(layout, 'feeder-1'), null)
+  assert.equal(locateChildGroup(layout, 'does-not-exist'), null)
+})
+
+test('childRectInGroup matches visibleGroupChildren rects and also works for hidden items', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 })
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+
+  for (const item of visibleGroupChildren(group)) {
+    assert.deepEqual(childRectInGroup(group, item.id), item.rect)
+  }
+
+  const lastIndex = group.children.length - 1
+  const lastId = group.children[lastIndex]
+  const expectedRect = {
+    x: group.x + GROUP.padding + (lastIndex % group.columns) * (GROUP.itemW + GROUP.itemGap),
+    y:
+      group.y +
+      GROUP.header +
+      GROUP.padding +
+      Math.floor(lastIndex / group.columns) * (GROUP.itemH + GROUP.itemGap) -
+      group.scrollTop,
+    width: GROUP.itemW,
+    height: GROUP.itemH,
+  }
+  assert.deepEqual(childRectInGroup(group, lastId), expectedRect)
+})
+
+test('childRectInGroup returns null for an id not in the group', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 })
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+
+  assert.equal(childRectInGroup(group, 'feeder-1'), null)
+})
+
+test('scrollTopToReveal centers the target row within the visible window, clamped to the valid range', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 })
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const lastIndex = group.children.length - 1
+
+  const scrollTop = scrollTopToReveal(group, lastIndex)
+  const maxScroll = group.contentHeight - group.height
+  assert.ok(scrollTop > 0 && scrollTop <= maxScroll)
+  assert.equal(scrollTopToReveal(group, 0), 0)
+
+  const revealedRect = childRectInGroup({ ...group, scrollTop }, group.children[lastIndex])
+  const innerTop = group.y + GROUP.header
+  const innerBottom = group.y + group.height
+  assert.ok(revealedRect.y >= innerTop - 1 && revealedRect.y + revealedRect.height <= innerBottom + 1)
 })

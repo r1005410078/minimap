@@ -54,6 +54,18 @@ export function clampGroupScroll(group, scrollTop) {
   return Math.max(0, Math.min(scrollTop, maxScroll))
 }
 
+function childRectAt(group, index) {
+  const rowHeight = GROUP.itemH + GROUP.itemGap
+  const row = Math.floor(index / group.columns)
+  const col = index % group.columns
+  return {
+    x: group.x + GROUP.padding + col * (GROUP.itemW + GROUP.itemGap),
+    y: group.y + GROUP.header + GROUP.padding + row * rowHeight - group.scrollTop,
+    width: GROUP.itemW,
+    height: GROUP.itemH,
+  }
+}
+
 // 根据 scrollTop 算出当前应该绘制的子节点窗口（世界坐标格子），
 // 供渲染器/交互层虚拟绘制和命中检测复用；多取一行避免半行滚动时露白。
 export function visibleGroupChildren(group) {
@@ -68,19 +80,35 @@ export function visibleGroupChildren(group) {
     for (let col = 0; col < group.columns; col++) {
       const index = row * group.columns + col
       if (index >= group.children.length) break
-      items.push({
-        id: group.children[index],
-        index,
-        rect: {
-          x: group.x + GROUP.padding + col * (GROUP.itemW + GROUP.itemGap),
-          y: group.y + GROUP.header + GROUP.padding + row * rowHeight - group.scrollTop,
-          width: GROUP.itemW,
-          height: GROUP.itemH,
-        },
-      })
+      items.push({ id: group.children[index], index, rect: childRectAt(group, index) })
     }
   }
   return items
+}
+
+// 在 layout.groups 里查 childId 属于哪个分组、第几位；查不到返回 null。
+export function locateChildGroup(layout, childId) {
+  for (const group of layout.groups) {
+    const index = group.children.indexOf(childId)
+    if (index !== -1) return { group, index }
+  }
+  return null
+}
+
+// 按 group.scrollTop 算某个子节点的世界坐标矩形，不要求当前可见；查不到返回 null。
+export function childRectInGroup(group, childId) {
+  const index = group.children.indexOf(childId)
+  if (index === -1) return null
+  return childRectAt(group, index)
+}
+
+// 算出能让第 index 个子节点在可见窗口里居中的 scrollTop，经 clampGroupScroll 夹紧；不改 expanded。
+export function scrollTopToReveal(group, index) {
+  const rowHeight = GROUP.itemH + GROUP.itemGap
+  const row = Math.floor(index / group.columns)
+  const innerHeight = group.height - GROUP.header - 2 * GROUP.padding
+  const rawScrollTop = row * rowHeight - innerHeight / 2 + GROUP.itemH / 2
+  return clampGroupScroll(group, rawScrollTop)
 }
 
 // 把一个分组的子节点列表折叠成分组框，按内部网格推导尺寸，同时受视口比例约束。
