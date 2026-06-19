@@ -28,6 +28,24 @@ export function applySelectionClick(currentIds, id, { additive = false } = {}) {
   return currentIds.includes(id) ? currentIds.filter((item) => item !== id) : [...currentIds, id]
 }
 
+export function applySelectionSet(currentIds, ids, mode = 'replace') {
+  if (mode === 'add') return [...new Set([...currentIds, ...ids])]
+  if (mode === 'remove') {
+    const removeSet = new Set(ids)
+    return currentIds.filter((id) => !removeSet.has(id))
+  }
+  if (mode === 'toggle') {
+    const result = [...currentIds]
+    for (const id of ids) {
+      const index = result.indexOf(id)
+      if (index === -1) result.push(id)
+      else result.splice(index, 1)
+    }
+    return result
+  }
+  return [...ids]
+}
+
 function visibleSelectableItems(layout) {
   const items = [...layout.visibleItems]
   for (const group of layout.groups) {

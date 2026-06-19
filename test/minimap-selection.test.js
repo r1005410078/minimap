@@ -4,6 +4,7 @@ import { createDemoGraph } from '../src/minimap/graph.js'
 import { computeLayout } from '../src/minimap/layout.js'
 import {
   applySelectionClick,
+  applySelectionSet,
   buildSelectionRelations,
   idsInSelectionRect,
   intersectsRect,
@@ -58,4 +59,22 @@ test('buildSelectionRelations marks parents, children, and tree edges as related
   assert.equal(relations.dimmedIds.has('heap-1'), true)
   assert.equal(relations.highlightedEdgeIds.has('tree:energy-root:grid-tie'), true)
   assert.equal(relations.dimmedEdgeIds.has('tree:group:heap-1::g0'), true)
+})
+
+test('applySelectionSet replace mode ignores current selection', () => {
+  assert.deepEqual(applySelectionSet(['a', 'b'], ['c'], 'replace'), ['c'])
+  assert.deepEqual(applySelectionSet(['a', 'b'], ['c']), ['c'])
+})
+
+test('applySelectionSet add mode unions without duplicates', () => {
+  assert.deepEqual(applySelectionSet(['a', 'b'], ['b', 'c'], 'add'), ['a', 'b', 'c'])
+})
+
+test('applySelectionSet remove mode subtracts the given ids', () => {
+  assert.deepEqual(applySelectionSet(['a', 'b', 'c'], ['b'], 'remove'), ['a', 'c'])
+})
+
+test('applySelectionSet toggle mode flips each id independently', () => {
+  assert.deepEqual(applySelectionSet(['a'], ['a', 'b'], 'toggle'), ['b'])
+  assert.deepEqual(applySelectionSet([], ['a', 'b'], 'toggle'), ['a', 'b'])
 })
