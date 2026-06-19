@@ -36,7 +36,7 @@
 - [x] Task 1: Minimap.vue 接通三个自定义绘制 props + 组件测试
 - [x] Task 2: 文档进度同步 + 全量验证 + commit
 
-切片完成：commit `6f12cd2..` (Task 2 commit pending)，`npm test` 全过、`npm run build` 通过。
+切片完成：commit `6f12cd2..1157f2e`，`npm test` 全过、`npm run build` 通过。
 
 ---
 
