@@ -155,16 +155,16 @@ test('Escape clears the current selection', () => {
   wrapper.destroy()
 })
 
-test('Shift dragging blank space selects visible items inside the marquee', () => {
+test('Cmd/Ctrl dragging blank space selects visible items inside the marquee', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
   const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
   const wrapper = mount(Minimap, { propsData: { graph } })
 
-  dispatchPointerDown(wrapper, { x: 150, y: 50 }, { shiftKey: true })
-  dispatchPointerMove(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { shiftKey: true })
-  dispatchPointerUp(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { shiftKey: true })
+  dispatchPointerDown(wrapper, { x: 150, y: 50 }, { ctrlKey: true })
+  dispatchPointerMove(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { ctrlKey: true })
+  dispatchPointerUp(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { ctrlKey: true })
 
   const latest = wrapper.emitted('select').at(-1)[0]
   assert.ok(latest.includes('grid-tie'))
@@ -173,26 +173,26 @@ test('Shift dragging blank space selects visible items inside the marquee', () =
   wrapper.destroy()
 })
 
-test('Shift marquee starts at the mouse position even when the canvas is offset', () => {
+test('Cmd/Ctrl marquee starts at the mouse position even when the canvas is offset', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
   setCanvasRect(wrapper, { left: 80, top: 40, width: 800, height: 600 })
 
-  dispatchPointerDown(wrapper, { x: 180, y: 140 }, { shiftKey: true })
-  dispatchPointerMove(wrapper, { x: 260, y: 200 }, { shiftKey: true })
+  dispatchPointerDown(wrapper, { x: 180, y: 140 }, { metaKey: true })
+  dispatchPointerMove(wrapper, { x: 260, y: 200 }, { metaKey: true })
 
   const calls = contexts.at(-1).calls.filter((call) => call.method === 'strokeRect')
   assert.deepEqual(calls.at(-1).args, [100, 100, 80, 60])
   wrapper.destroy()
 })
 
-test('Shift dragging blank space over empty area clears selection', () => {
+test('Cmd/Ctrl dragging blank space over empty area clears selection', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
 
-  dispatchPointerDown(wrapper, { x: 10, y: 10 }, { shiftKey: true })
-  dispatchPointerMove(wrapper, { x: 20, y: 20 }, { shiftKey: true })
-  dispatchPointerUp(wrapper, { x: 20, y: 20 }, { shiftKey: true })
+  dispatchPointerDown(wrapper, { x: 10, y: 10 }, { ctrlKey: true })
+  dispatchPointerMove(wrapper, { x: 20, y: 20 }, { ctrlKey: true })
+  dispatchPointerUp(wrapper, { x: 20, y: 20 }, { ctrlKey: true })
 
   assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
   wrapper.destroy()

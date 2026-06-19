@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Complete Phase 3 slice 2 by adding multi-selection, Shift-drag marquee selection, Esc/blank clearing, and selected-relationship highlight/dim rendering.
+**Goal:** Complete Phase 3 slice 2 by adding multi-selection, Cmd/Ctrl-drag marquee selection, Esc/blank clearing, and selected-relationship highlight/dim rendering.
 
 **Architecture:** Keep selection math in pure JS helpers so it can be tested without Vue or Canvas. `Minimap.vue` owns controlled/uncontrolled selection state and gesture routing. `renderer.js` consumes precomputed highlight/dim sets and selection-rect state, without knowing how gestures work.
 
@@ -18,7 +18,7 @@
   - `selectedIds` prop and `select` event.
   - Single-value internal selection via `internalSelectedId`.
   - Node click selection, group-item click selection, blank click clearing.
-  - Blank drag pan from non-Shift empty canvas.
+  - Blank drag pan from empty canvas unless Cmd/Ctrl is held for marquee selection.
 - Existing renderer state currently only uses `state.selectedIds`, `state.groupDrag`, and `state.groupScrollbarHoverId`.
 - Node cross-parent drag/move remains Phase 5 and must not be implemented here.
 
@@ -26,7 +26,7 @@
 
 - Create: `src/minimap/selection.js` - pure selection/highlight helpers.
 - Modify: `src/minimap/renderer.js` - selected/highlighted/dimmed states and marquee rectangle drawing.
-- Modify: `src/minimap/Minimap.vue` - internal selected ids array, modifier-click, Shift blank marquee, Esc clearing, focus.
+- Modify: `src/minimap/Minimap.vue` - internal selected ids array, modifier-click, Cmd/Ctrl blank marquee, Esc clearing, focus.
 - Modify: `test/minimap-select.test.js` - Vue interaction tests for multi-select, controlled mode, marquee, Esc.
 - Modify: `test/minimap-renderer.test.js` - renderer state propagation/highlight/dim tests.
 - Create: `test/minimap-selection.test.js` - pure helper tests.
@@ -37,7 +37,7 @@
 - [x] Task 1: Pure Selection Helpers
 - [x] Task 2: Renderer Highlight and Marquee Drawing
 - [x] Task 3: Vue Multi-Select and Esc Clear
-- [x] Task 4: Shift Blank Drag Marquee Selection
+- [x] Task 4: Cmd/Ctrl Blank Drag Marquee Selection
 - [x] Task 5: Documentation and Verification
 
 ---
@@ -589,7 +589,7 @@ git commit -m "feat: support minimap multi selection"
 
 ---
 
-### Task 4: Shift Blank Drag Marquee Selection
+### Task 4: Cmd/Ctrl Blank Drag Marquee Selection
 
 **Files:**
 - Modify: `src/minimap/Minimap.vue`
@@ -630,7 +630,7 @@ function dispatchPointerUp(wrapper, point, options = {}) {
 Append:
 
 ```js
-test('Shift dragging blank space selects visible items in the marquee and does not pan', () => {
+test('Cmd/Ctrl dragging blank space selects visible items in the marquee and does not pan', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
@@ -646,7 +646,7 @@ test('Shift dragging blank space selects visible items in the marquee and does n
   wrapper.destroy()
 })
 
-test('empty Shift marquee clears selection', () => {
+test('empty Cmd/Ctrl marquee clears selection', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
@@ -670,7 +670,7 @@ Run:
 npm test -- test/minimap-select.test.js
 ```
 
-Expected: FAIL because Shift blank drag still goes through pan/clear branch.
+Expected: FAIL because Cmd/Ctrl blank drag still goes through pan/clear branch.
 
 - [ ] **Step 3: Implement marquee state**
 
@@ -766,7 +766,7 @@ Run:
 npm test -- test/minimap-select.test.js test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js
 ```
 
-Expected: PASS. This specifically guards that blank non-Shift pan still pans, node drag still does not pan, and group internal drag still works.
+Expected: PASS. This specifically guards that blank non-marquee pan still pans, node drag still does not pan, and group internal drag still works.
 
 - [ ] **Step 5: Commit**
 
@@ -818,7 +818,7 @@ Open `http://127.0.0.1:5173/` in the available Browser plugin if an in-app Brows
 - Click one node: only that node is selected.
 - Shift/Cmd/Ctrl click another node: both become selected.
 - Shift/Cmd/Ctrl click an already selected node: it is removed.
-- Shift drag from blank area: a marquee rectangle appears and selected items match the rectangle.
+- Cmd/Ctrl drag from blank area: a marquee rectangle appears and selected items match the rectangle.
 - Click blank area: selection clears.
 - Press Esc while canvas is focused: selection clears.
 - Selected node highlights parent/children/related edges and unrelated items dim.
@@ -849,7 +849,7 @@ git commit -m "docs: mark selection highlight slice complete"
 
 ## Self-Review
 
-- Spec coverage: The plan covers single click, modifier click, Shift blank marquee, blank/Esc clear, selected relationship highlight, dimming, controlled `selectedIds`, and renderer state.
+- Spec coverage: The plan covers single click, modifier click, Cmd/Ctrl blank marquee, blank/Esc clear, selected relationship highlight, dimming, controlled `selectedIds`, and renderer state.
 - Out of scope: The plan does not implement node cross-parent move, fit/center/search/overview, delete/copy, before hooks, undo/redo, or readonly behavior.
 - Risk areas: The plan explicitly protects Phase 2 group item drag and Phase 3 blank pan by focused regression tests.
 - Completion record: code commits `e83086b..d225d4c`; `npm test` 183 all passing; `npm run build` passing; dev server `http://127.0.0.1:5173/` reachable; Browser plugin still had no available `iab`, so verification used jsdom + Canvas mock + real component keyboard/pointer events.

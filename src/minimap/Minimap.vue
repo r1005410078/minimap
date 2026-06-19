@@ -571,7 +571,7 @@ function handlePointerDown(event) {
   if (!hit) {
     settleAnimation()
     canvasRef.value.setPointerCapture?.(event.pointerId)
-    if (event.shiftKey) {
+    if (event.metaKey || event.ctrlKey) {
       const startScreen = screenPointFromEvent(event)
       marqueeState = {
         pointerId: event.pointerId,
