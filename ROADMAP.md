@@ -14,8 +14,8 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第四阶段（导航和查找能力）—— 待规划
-- **当前阶段 Spec**：待创建
+- **当前阶段**：第四阶段（导航和查找能力）—— 切片 1 已写 spec，待写 plan
+- **当前阶段 Spec**：切片 1 [视图定位方法](docs/superpowers/specs/2026-06-20-phase-4-view-positioning.md) 已完成；切片 2、3 待创建
 - **当前阶段计划**：待创建
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
@@ -33,8 +33,11 @@
 - **第三阶段切片**：
   - [x] 切片 1：视口平移缩放（`viewport` 受控/非受控、空白拖拽平移、滚轮缩放、缩放边界、`viewport-change`）
   - [x] 切片 2：选择模型和高亮（单选、多选、框选、空白/Esc 清空、父级/子级/相关连线高亮、非相关元素降权）
-- **下一步**：开始第四阶段「导航和查找能力」的 spec 和 plan。
-- **待办切片**：第四阶段切片（适配视图、定位选中、搜索节点、overview 导航）。
+- **第四阶段切片**（overview 是独立 mini canvas 子组件，跟前两个切片的视口数学性质不同，拆开做；后两个切片都会复用切片 1 的 `centerOnNode`/视口补动能力）：
+  - [ ] 切片 1：视图定位方法（`fitToScreen`/`centerOnNode`/`centerOnSelection`/`zoomTo`/`setViewport`/`getViewport`/`select`/`clearSelection` 首次通过 `defineExpose` 暴露；[spec](docs/superpowers/specs/2026-06-20-phase-4-view-positioning.md) 已完成，待写 plan）
+  - [ ] 切片 2：搜索节点（按 `id`/`label` 搜索普通节点和分组框内子节点，复用切片 1 的定位能力跳转）
+  - [ ] 切片 3：Overview 小地图导航（独立 mini canvas 子组件，缩略图 + 视口框拖拽导航）
+- **下一步**：为第四阶段切片 1（视图定位方法）写 plan。
 
 ## 目标
 
