@@ -54,6 +54,35 @@ export function clampGroupScroll(group, scrollTop) {
   return Math.max(0, Math.min(scrollTop, maxScroll))
 }
 
+// 根据 scrollTop 算出当前应该绘制的子节点窗口（世界坐标格子），
+// 供渲染器/交互层虚拟绘制和命中检测复用；多取一行避免半行滚动时露白。
+export function visibleGroupChildren(group) {
+  const rowHeight = GROUP.itemH + GROUP.itemGap
+  const innerHeight = group.height - GROUP.header - 2 * GROUP.padding
+  const visibleRows = Math.max(1, Math.ceil(innerHeight / rowHeight) + 1)
+  const startRow = Math.max(0, Math.floor(group.scrollTop / rowHeight))
+  const endRow = Math.min(group.rows, startRow + visibleRows)
+
+  const items = []
+  for (let row = startRow; row < endRow; row++) {
+    for (let col = 0; col < group.columns; col++) {
+      const index = row * group.columns + col
+      if (index >= group.children.length) break
+      items.push({
+        id: group.children[index],
+        index,
+        rect: {
+          x: group.x + GROUP.padding + col * (GROUP.itemW + GROUP.itemGap),
+          y: group.y + GROUP.header + GROUP.padding + row * rowHeight - group.scrollTop,
+          width: GROUP.itemW,
+          height: GROUP.itemH,
+        },
+      })
+    }
+  }
+  return items
+}
+
 // 把一个分组的子节点列表折叠成分组框，按内部网格推导尺寸，同时受视口比例约束。
 function buildGroup(groupId, parentId, children, state, viewportWidth, viewportHeight) {
   const maxW = viewportWidth * GROUP_MAX_W_RATIO

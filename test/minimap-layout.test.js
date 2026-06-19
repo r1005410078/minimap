@@ -10,6 +10,7 @@ import {
   computeLayout,
   keepAnchorStable,
   clampGroupScroll,
+  visibleGroupChildren,
 } from '../src/minimap/layout.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
@@ -222,4 +223,32 @@ test('options.groupStates can expand a group beyond the collapsed max height', (
   assert.equal(expandedGroup.height, expandedGroup.contentHeight)
   assert.ok(expandedGroup.height > collapsedLayout.groups[0].height)
   assert.equal(expandedGroup.columns, collapsedLayout.groups[0].columns)
+})
+
+test('visibleGroupChildren returns only the rows within the current scroll window', () => {
+  const children = Array.from({ length: 10 }, (_, i) => `c${i}`)
+  const group = {
+    id: 'p::g0',
+    parentId: 'p',
+    children,
+    columns: 2,
+    rows: 5,
+    width: 274,
+    height: 142,
+    contentHeight: 278,
+    overflowY: true,
+    expanded: false,
+    scrollTop: 0,
+    x: 0,
+    y: 0,
+  }
+
+  const atTop = visibleGroupChildren(group).map((item) => item.id)
+  assert.deepEqual(atTop, ['c0', 'c1', 'c2', 'c3', 'c4', 'c5'])
+
+  const scrolled = visibleGroupChildren({ ...group, scrollTop: 50 }).map((item) => item.id)
+  assert.deepEqual(scrolled, ['c2', 'c3', 'c4', 'c5', 'c6', 'c7'])
+
+  const first = visibleGroupChildren(group)[0]
+  assert.deepEqual(first.rect, { x: 12, y: 40, width: 120, height: 40 })
 })
