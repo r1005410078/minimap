@@ -1,4 +1,5 @@
 import { screenToWorld } from './coords.js'
+import { easeOutCubic } from './layout-transition.js'
 
 export const DEFAULT_VIEWPORT = Object.freeze({ x: 0, y: 0, scale: 1 })
 
@@ -58,5 +59,45 @@ export function panViewportBy(viewport, delta, options = DEFAULT_OPTIONS) {
     x: before.x + delta.x,
     y: before.y + delta.y,
     scale: before.scale,
+  }
+}
+
+export function tweenViewport(from, to, progress) {
+  const eased = easeOutCubic(progress)
+  return {
+    x: from.x + (to.x - from.x) * eased,
+    y: from.y + (to.y - from.y) * eased,
+    scale: from.scale + (to.scale - from.scale) * eased,
+  }
+}
+
+export function fitViewportToBounds(bounds, viewportWidth, viewportHeight, options = null, padding = 40) {
+  const degenerate =
+    !Number.isFinite(bounds?.minX) ||
+    !Number.isFinite(bounds?.maxX) ||
+    !Number.isFinite(bounds?.minY) ||
+    !Number.isFinite(bounds?.maxY)
+  if (degenerate) return DEFAULT_VIEWPORT
+
+  const contentWidth = Math.max(1, bounds.maxX - bounds.minX)
+  const contentHeight = Math.max(1, bounds.maxY - bounds.minY)
+  const availableWidth = Math.max(1, viewportWidth - 2 * padding)
+  const availableHeight = Math.max(1, viewportHeight - 2 * padding)
+  const rawScale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight)
+  const scale = clampScale(rawScale, options)
+  const centerX = (bounds.minX + bounds.maxX) / 2
+  const centerY = (bounds.minY + bounds.maxY) / 2
+  return {
+    x: viewportWidth / 2 - centerX * scale,
+    y: viewportHeight / 2 - centerY * scale,
+    scale,
+  }
+}
+
+export function centerViewportOn(worldPoint, viewport, viewportWidth, viewportHeight) {
+  return {
+    x: viewportWidth / 2 - worldPoint.x * viewport.scale,
+    y: viewportHeight / 2 - worldPoint.y * viewport.scale,
+    scale: viewport.scale,
   }
 }

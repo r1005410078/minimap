@@ -1,12 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { screenToWorld } from '../src/minimap/coords.js'
+import { easeOutCubic } from '../src/minimap/layout-transition.js'
 import {
   DEFAULT_VIEWPORT,
+  centerViewportOn,
   clampScale,
+  fitViewportToBounds,
   normalizeViewport,
   panViewportBy,
   sameViewport,
+  tweenViewport,
   viewportOptions,
   zoomViewportAt,
 } from '../src/minimap/viewport.js'
@@ -84,4 +88,38 @@ test('panViewportBy preserves scale allowed by custom options', () => {
 test('sameViewport compares x y and scale', () => {
   assert.equal(sameViewport({ x: 0, y: 0, scale: 1 }, { x: 0, y: 0, scale: 1 }), true)
   assert.equal(sameViewport({ x: 0, y: 0, scale: 1 }, { x: 0, y: 1, scale: 1 }), false)
+})
+
+test('tweenViewport eases x/y/scale independently from progress 0 to 1', () => {
+  const from = { x: 0, y: 0, scale: 1 }
+  const to = { x: 100, y: 200, scale: 2 }
+  assert.deepEqual(tweenViewport(from, to, 0), { x: 0, y: 0, scale: 1 })
+  assert.deepEqual(tweenViewport(from, to, 1), { x: 100, y: 200, scale: 2 })
+  const mid = tweenViewport(from, to, 0.5)
+  const eased = easeOutCubic(0.5)
+  assertApprox(mid.x, 100 * eased)
+  assertApprox(mid.y, 200 * eased)
+  assertApprox(mid.scale, 1 + eased)
+})
+
+test('fitViewportToBounds fits content with 40px padding and clamps scale to options', () => {
+  const bounds = { minX: 0, maxX: 200, minY: 0, maxY: 100 }
+  const result = fitViewportToBounds(bounds, 800, 600, { minScale: 0.25, maxScale: 3 })
+  assert.deepEqual(result, { x: 100, y: 150, scale: 3 })
+})
+
+test('fitViewportToBounds keeps the natural fit scale when it is within min/max', () => {
+  const bounds = { minX: 0, maxX: 480, minY: 0, maxY: 260 }
+  const result = fitViewportToBounds(bounds, 800, 600, { minScale: 0.25, maxScale: 3 })
+  assert.deepEqual(result, { x: 40, y: 105, scale: 1.5 })
+})
+
+test('fitViewportToBounds falls back to DEFAULT_VIEWPORT for degenerate bounds', () => {
+  const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+  assert.deepEqual(fitViewportToBounds(bounds, 800, 600, null), DEFAULT_VIEWPORT)
+})
+
+test('centerViewportOn pans to put worldPoint at screen center and preserves scale', () => {
+  const result = centerViewportOn({ x: 50, y: 30 }, { x: 10, y: 20, scale: 2 }, 800, 600)
+  assert.deepEqual(result, { x: 300, y: 240, scale: 2 })
 })
