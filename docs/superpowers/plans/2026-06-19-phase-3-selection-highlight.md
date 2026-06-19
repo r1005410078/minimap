@@ -34,11 +34,11 @@
 
 ## Progress
 
-- [ ] Task 1: Pure Selection Helpers
-- [ ] Task 2: Renderer Highlight and Marquee Drawing
-- [ ] Task 3: Vue Multi-Select and Esc Clear
-- [ ] Task 4: Shift Blank Drag Marquee Selection
-- [ ] Task 5: Documentation and Verification
+- [x] Task 1: Pure Selection Helpers
+- [x] Task 2: Renderer Highlight and Marquee Drawing
+- [x] Task 3: Vue Multi-Select and Esc Clear
+- [x] Task 4: Shift Blank Drag Marquee Selection
+- [x] Task 5: Documentation and Verification
 
 ---
 
@@ -852,3 +852,4 @@ git commit -m "docs: mark selection highlight slice complete"
 - Spec coverage: The plan covers single click, modifier click, Shift blank marquee, blank/Esc clear, selected relationship highlight, dimming, controlled `selectedIds`, and renderer state.
 - Out of scope: The plan does not implement node cross-parent move, fit/center/search/overview, delete/copy, before hooks, undo/redo, or readonly behavior.
 - Risk areas: The plan explicitly protects Phase 2 group item drag and Phase 3 blank pan by focused regression tests.
+- Completion record: code commits `e83086b..6d3755c`; `npm test` 183 all passing; `npm run build` passing; dev server `http://127.0.0.1:5173/` reachable; Browser plugin still had no available `iab`, so verification used jsdom + Canvas mock + real component keyboard/pointer events.

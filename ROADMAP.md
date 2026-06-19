@@ -6,7 +6,7 @@
 
 - [x] 第一阶段：核心可用能力
 - [x] 第二阶段：分组框能力
-- [ ] 第三阶段：视图和选择能力
+- [x] 第三阶段：视图和选择能力
 - [ ] 第四阶段：导航和查找能力
 - [ ] 第五阶段：编辑和状态能力
 
@@ -14,9 +14,9 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第三阶段（视图和选择能力）—— 进行中
-- **当前阶段 Spec**：[第三阶段总设计](docs/superpowers/specs/2026-06-19-phase-3-view-selection.md)
-- **当前阶段计划**：[选择模型和高亮](docs/superpowers/plans/2026-06-19-phase-3-selection-highlight.md)；下一步执行切片 2。
+- **当前阶段**：第四阶段（导航和查找能力）—— 待规划
+- **当前阶段 Spec**：待创建
+- **当前阶段计划**：待创建
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -28,12 +28,13 @@
   - Canvas 渲染器 `renderer.js` 分组框子节点虚拟绘制 + 滚动条视觉 + 多分组动画适配 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-2-canvas-renderer.md)，`npm test` 101 全过，`npm run build` 通过）
   - Vue 交互 `interaction.js` 命中检测细分 + `Minimap.vue` 拖拽换位/滚轮/展开折叠 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-2-vue-interaction.md)，`npm test` 131 全过，`npm run build` 通过）
   - 视口平移缩放 `viewport.js` / `Minimap.vue` 受控 viewport + wheel zoom + blank pan + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-3-viewport-pan-zoom.md)，commit `29c8ccb..2af8e4c`，`npm test` 172 全过，`npm run build` 通过；dev server 可访问，Browser 插件无可用 `iab`，以组件真实事件验收覆盖交互）
+  - 选择模型和高亮 `selection.js` / `renderer.js` / `Minimap.vue` 多选、框选、Esc 清空、关系高亮和非相关降权 + 测试（[plan](docs/superpowers/plans/2026-06-19-phase-3-selection-highlight.md)，commit `e83086b..6d3755c`，`npm test` 183 全过，`npm run build` 通过；`http://127.0.0.1:5173/` 可访问，Browser 插件仍无可用 `iab`，以 jsdom + Canvas mock + 真实组件事件覆盖交互）
 - **第一阶段验收回归结果（2026-06-19，复跑）**：`npm test` 85 全过、`npm run build` 通过；真实浏览器驱动（headless Chrome + CDP）逐条核对「第一阶段验收」10 条，全部通过——示例图与 10000 节点压力图正常渲染且不创建 10000 个 DOM 节点（仅 17 个）；`edges` 不改变父子树节点坐标（7 个节点 diff 0）；左右/上下布局正确切换，父节点居中、兄弟顺序稳定；选中 `feeder-1` 后切换布局方向，视口锚点补偿生效（截图确认其屏幕位置基本不变）；`nodeRenderer`/`groupRenderer`/`edgeRenderer` 同时生效（截图可见洋红节点/青色分组框/黄色连线）；容器 resize + DPR=3 下 canvas 像素尺寸正确按比例放大；资源树拖入后 graph 正确增加节点。
 - **第三阶段切片**：
   - [x] 切片 1：视口平移缩放（`viewport` 受控/非受控、空白拖拽平移、滚轮缩放、缩放边界、`viewport-change`）
-  - [ ] 切片 2：选择模型和高亮（单选、多选、框选、空白/Esc 清空、父级/子级/相关连线高亮、非相关元素降权）
-- **下一步**：执行切片 2「选择模型和高亮」实施计划。
-- **待办切片**：第三阶段切片 2「选择模型和高亮」。
+  - [x] 切片 2：选择模型和高亮（单选、多选、框选、空白/Esc 清空、父级/子级/相关连线高亮、非相关元素降权）
+- **下一步**：开始第四阶段「导航和查找能力」的 spec 和 plan。
+- **待办切片**：第四阶段切片（适配视图、定位选中、搜索节点、overview 导航）。
 
 ## 目标
 
@@ -92,9 +93,7 @@
 - 节点跨父级拖拽移动与排序：普通节点、分组框内部节点都可以拖到其他父节点下面或目标父节点的指定子节点顺序位置，结果写回 `parentId` 和 `children`。
 - 只读/编辑模式：只读模式下禁止拖入、换位、删除等编辑操作。
 - 操作拦截：拖入、移动、换位、删除、复制前允许外部校验并阻止默认行为。
-- 加载、空状态和错误状态：组件支持 loading、空图提示和非法 graph 导入提示。
-- 导入/导出：支持导出当前 graph JSON，也支持导入 graph JSON 还原图。
-- 版本化数据格式：导入/导出的 graph JSON 包含 `version` 字段，用于未来兼容升级。
+- 加载、空状态和错误状态：组件支持 loading、空图提示。
 - 性能状态提示：显示总节点数、可见节点数、缩放比例、当前帧渲染耗时等调试信息。
 
 ## 各阶段验收标准

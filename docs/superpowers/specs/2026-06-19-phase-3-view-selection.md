@@ -6,11 +6,13 @@
 ## 阶段状态
 
 - [x] 切片 1：视口平移缩放
-- [ ] 切片 2：选择模型和高亮
+- [x] 切片 2：选择模型和高亮
 
-当前下一步：执行切片 2「选择模型和高亮」实施计划：[2026-06-19-phase-3-selection-highlight.md](../plans/2026-06-19-phase-3-selection-highlight.md)。
+当前下一步：开始第四阶段「导航和查找能力」的 spec 和 plan。
 
 切片 1 完成记录：commit `29c8ccb..2af8e4c`；`npm test` 172 全过，`npm run build` 通过；`npm test -- test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js test/minimap-select.test.js` 40 全过；Vite dev server `http://127.0.0.1:5173/` 可访问。Browser 插件当前没有可用 `iab` 实例（browser list 为空），因此本轮未能做 in-app Browser 手动操作，改用 jsdom + Canvas mock 的真实 wheel/pointer 组件事件验收覆盖滚轮缩放、分组滚轮优先、受控 viewport 不持久化、空白拖拽平移、节点拖拽不触发平移。
+
+切片 2 完成记录：commit `e83086b..6d3755c`；`npm test` 183 全过，`npm run build` 通过；`npm test -- test/minimap-selection.test.js test/minimap-renderer.test.js test/minimap-select.test.js test/minimap-viewport-interaction.test.js test/minimap-group-interaction.test.js` 83 全过；`http://127.0.0.1:5173/` 可访问。Browser 插件当前仍没有可用 `iab` 实例（browser list 为空），因此本轮未能做 in-app Browser 手动操作，改用 jsdom + Canvas mock 的真实 wheel/pointer/keyboard 组件事件验收覆盖多选、框选、Esc 清空、关系高亮和非相关降权。
 
 ## 头脑风暴决策记录
 
@@ -163,3 +165,4 @@ const nextViewport = {
 - 两个切片互相依赖顺序明确：viewport -> selection/highlight。
 - 节点跨父级拖拽移动与排序已明确移出第三阶段，归入第五阶段编辑能力。
 - 第二阶段分组内部滚动、拖拽换位的手势优先级已保留。
+- 第三阶段已完成，后续进入第四阶段规划。
