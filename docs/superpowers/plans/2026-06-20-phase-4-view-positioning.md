@@ -10,11 +10,11 @@
 
 ## 进度
 
-- [ ] Task 1：`viewport.js` 视口补动纯函数（`tweenViewport`/`fitViewportToBounds`/`centerViewportOn`）
-- [ ] Task 2：`layout.js` 分组子节点定位纯函数（`locateChildGroup`/`childRectInGroup`/`scrollTopToReveal`）
-- [ ] Task 3：`selection.js` 多模式选择纯函数（`applySelectionSet`）
-- [ ] Task 4：`Minimap.vue` 视口补动状态机 + 8 个 `defineExpose` 方法
-- [ ] Task 5：回归校验 + ROADMAP 同步
+- [x] Task 1：`viewport.js` 视口补动纯函数（`tweenViewport`/`fitViewportToBounds`/`centerViewportOn`）
+- [x] Task 2：`layout.js` 分组子节点定位纯函数（`locateChildGroup`/`childRectInGroup`/`scrollTopToReveal`）
+- [x] Task 3：`selection.js` 多模式选择纯函数（`applySelectionSet`）
+- [x] Task 4：`Minimap.vue` 视口补动状态机 + 8 个 `defineExpose` 方法
+- [x] Task 5：回归校验 + ROADMAP 同步
 
 ## Global Constraints
 
