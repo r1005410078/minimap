@@ -14,6 +14,14 @@ import { renderScene, worldRectToScreen } from './renderer.js'
 import { defaultTheme } from './theme.js'
 import { screenToWorld } from './coords.js'
 import {
+  DEFAULT_VIEWPORT,
+  normalizeViewport,
+  panViewportBy,
+  sameViewport,
+  viewportOptions,
+  zoomViewportAt,
+} from './viewport.js'
+import {
   hitTest,
   findInsertionIndex,
   groupGridIndexAt,
@@ -41,6 +49,7 @@ const props = defineProps({
   layoutDirection: { type: String, default: 'horizontal' },
   selectedIds: { type: Array, default: null },
   groupStates: { type: Object, default: null },
+  viewport: { type: Object, default: null },
   options: { type: Object, default: null },
   theme: { type: Object, default: null },
   nodeRenderer: { type: Function, default: null },
@@ -48,7 +57,14 @@ const props = defineProps({
   edgeRenderer: { type: Function, default: null },
 })
 
-const emit = defineEmits(['select', 'node-drop', 'change', 'group-state-change', 'group-reorder'])
+const emit = defineEmits([
+  'select',
+  'node-drop',
+  'change',
+  'group-state-change',
+  'group-reorder',
+  'viewport-change',
+])
 
 const containerRef = ref(null)
 const canvasRef = ref(null)
@@ -64,13 +80,12 @@ let dragState = null
 let scrollbarDragState = null
 let hoveredScrollbarGroupId = null
 
-// Phase 1 固定视口，平移/缩放是第三阶段才做；那时改这里要联动下面的 pointFromEvent。
-let viewport = { x: 0, y: 0, scale: 1 }
+let internalViewport = { ...DEFAULT_VIEWPORT }
 let settledLayout = null
 let animationFrameId = null
 let activeTransition = null
 let lastRenderedLayout = null
-let lastRenderedViewport = viewport
+let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
 
 function currentSelectedIds() {
   if (props.selectedIds !== null) return props.selectedIds
@@ -79,6 +94,21 @@ function currentSelectedIds() {
 
 function currentGroupStates() {
   return props.groupStates !== null ? props.groupStates : internalGroupStates
+}
+
+function currentViewport() {
+  return normalizeViewport(props.viewport ?? internalViewport, viewportOptions(props.options))
+}
+
+function applyViewport(nextViewport, { emitChange = true } = {}) {
+  const next = normalizeViewport(nextViewport, viewportOptions(props.options))
+  const previous = currentViewport()
+  if (sameViewport(previous, next)) return false
+  if (emitChange) emit('viewport-change', next)
+  if (props.viewport !== null) return true
+  internalViewport = next
+  renderCurrent(layout, next)
+  return true
 }
 
 function updateGroupState(groupId, patch) {
@@ -193,15 +223,15 @@ function scheduleDragShift(group, insertIndex) {
   dragState.shiftStartedAt = timestamp
 }
 
-function renderCurrent(currentLayout = layout, currentViewport = viewport) {
+function renderCurrent(currentLayout = layout, renderViewport = currentViewport()) {
   if (!ctx || !currentLayout) return
   lastRenderedLayout = currentLayout
-  lastRenderedViewport = { ...currentViewport }
+  lastRenderedViewport = { ...renderViewport }
   renderScene(ctx, {
     layout: currentLayout,
     graph: props.graph,
     layoutDirection: props.layoutDirection,
-    viewport: currentViewport,
+    viewport: renderViewport,
     width: cssWidth,
     height: cssHeight,
     theme: props.theme || defaultTheme,
@@ -238,6 +268,7 @@ function chooseAnchorId(startLayout, nextLayout) {
 }
 
 function targetViewportFor(startLayout, nextLayout, preserveAnchor) {
+  const viewport = currentViewport()
   if (!preserveAnchor || !startLayout) return viewport
   const anchorId = chooseAnchorId(startLayout, nextLayout)
   if (!anchorId) return viewport
@@ -246,11 +277,16 @@ function targetViewportFor(startLayout, nextLayout, preserveAnchor) {
   return keepAnchorStable(viewport, before, after)
 }
 
+function commitViewportSilently(nextViewport) {
+  const next = normalizeViewport(nextViewport, viewportOptions(props.options))
+  if (props.viewport === null) internalViewport = next
+}
+
 function finishLayout(nextLayout, nextViewport) {
   layout = nextLayout
   settledLayout = nextLayout
-  viewport = { ...nextViewport }
-  renderCurrent(layout, viewport)
+  commitViewportSilently(nextViewport)
+  renderCurrent(layout, currentViewport())
 }
 
 function startAnimation(startLayout, nextLayout, startViewport, nextViewport) {
@@ -270,8 +306,8 @@ function startAnimation(startLayout, nextLayout, startViewport, nextViewport) {
     const progress = elapsed / activeTransition.transition.durationMs
     const frame = layoutAt(activeTransition.transition, progress)
     layout = frame.layout
-    viewport = { ...frame.viewport }
-    renderCurrent(layout, viewport)
+    commitViewportSilently(frame.viewport)
+    renderCurrent(layout, currentViewport())
 
     if (progress >= 1) {
       animationFrameId = null
@@ -298,7 +334,7 @@ function updateLayout({ animate = true, preserveAnchor = true } = {}) {
   })
 
   const startLayout = lastRenderedLayout || settledLayout || layout
-  const startViewport = lastRenderedViewport || viewport
+  const startViewport = lastRenderedViewport || currentViewport()
   const nextViewport = targetViewportFor(startLayout, nextLayout, preserveAnchor)
   const canAnimate =
     animate &&
@@ -312,7 +348,7 @@ function updateLayout({ animate = true, preserveAnchor = true } = {}) {
     return
   }
 
-  viewport = { ...startViewport }
+  commitViewportSilently(startViewport)
   startAnimation(startLayout, nextLayout, startViewport, nextViewport)
 }
 
@@ -324,7 +360,7 @@ function setSelected(ids) {
 
 function pointFromEvent(event) {
   const rect = canvasRef.value.getBoundingClientRect()
-  return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, viewport)
+  return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, currentViewport())
 }
 
 function ghostRectForPoint(worldPoint) {
@@ -334,7 +370,7 @@ function ghostRectForPoint(worldPoint) {
     width: GROUP.itemW,
     height: GROUP.itemH,
   }
-  return worldRectToScreen(worldRect, viewport)
+  return worldRectToScreen(worldRect, currentViewport())
 }
 
 function scrollbarMetrics(group) {
@@ -505,6 +541,7 @@ function handlePointerMove(event) {
     const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
     if (!group) return
     const deltaScreenY = event.clientY - scrollbarDragState.startScreenY
+    const viewport = currentViewport()
     const scrollDelta =
       (deltaScreenY / (scrollbarDragState.metrics.maxThumbOffset * viewport.scale)) *
       scrollbarDragState.metrics.maxScroll
@@ -677,6 +714,7 @@ watch(() => props.layoutDirection, () => updateLayout())
 watch(() => props.graph, () => updateLayout())
 watch(() => props.selectedIds, () => renderCurrent())
 watch(() => props.groupStates, () => updateLayout())
+watch(() => props.viewport, () => renderCurrent())
 watch(() => props.options, () => updateLayout())
 </script>
 
