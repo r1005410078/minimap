@@ -238,6 +238,7 @@ onUnmounted(() => {
 })
 
 watch(() => props.layoutDirection, () => updateLayout())
+watch(() => props.graph, () => updateLayout())
 watch(() => props.selectedIds, () => renderCurrent())
 </script>
 

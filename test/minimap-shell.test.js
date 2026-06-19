@@ -46,6 +46,25 @@ test('changing layoutDirection animates through requestAnimationFrame', async ()
   wrapper.destroy()
 })
 
+test('replacing graph prop animates through requestAnimationFrame', async () => {
+  const graph = createDemoGraph()
+  const nextGraph = createDemoGraph()
+  nextGraph.nodes.set('aux-root', { id: 'aux-root', label: 'Aux Root', parentId: 'energy-root', children: [] })
+  nextGraph.nodes.get('energy-root').children.push('aux-root')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const scheduledBefore = frames.scheduled.length
+  const ctx = contexts.at(-1)
+  const callsBefore = ctx.calls.length
+
+  await wrapper.setProps({ graph: nextGraph })
+  await wrapper.vm.$nextTick()
+
+  assert.ok(frames.scheduled.length > scheduledBefore)
+  assert.equal(frames.runNext(1000), true)
+  assert.ok(ctx.calls.length > callsBefore)
+  wrapper.destroy()
+})
+
 test('resize re-renders without starting a layout animation', () => {
   const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
   const scheduledBefore = frames.scheduled.length
