@@ -64,6 +64,21 @@ function dispatchKeyDown(wrapper, key) {
   canvasEl.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
 }
 
+function setCanvasRect(wrapper, rect) {
+  const canvasEl = wrapper.find('canvas').element
+  Object.defineProperty(canvasEl, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      left: rect.left,
+      top: rect.top,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+      width: rect.width,
+      height: rect.height,
+    }),
+  })
+}
+
 // 只看最近一次 render()（最后一次 clearRect 之后）的绘制调用，
 // 避免一个组件实例多次渲染的历史调用互相污染断言。
 function selectedLabels(ctx, theme) {
@@ -155,6 +170,19 @@ test('Shift dragging blank space selects visible items inside the marquee', () =
   assert.ok(latest.includes('grid-tie'))
   assert.ok(latest.includes(heapGroup.id))
   assert.equal(wrapper.emitted('viewport-change'), undefined)
+  wrapper.destroy()
+})
+
+test('Shift marquee starts at the mouse position even when the canvas is offset', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  setCanvasRect(wrapper, { left: 80, top: 40, width: 800, height: 600 })
+
+  dispatchPointerDown(wrapper, { x: 180, y: 140 }, { shiftKey: true })
+  dispatchPointerMove(wrapper, { x: 260, y: 200 }, { shiftKey: true })
+
+  const calls = contexts.at(-1).calls.filter((call) => call.method === 'strokeRect')
+  assert.deepEqual(calls.at(-1).args, [100, 100, 80, 60])
   wrapper.destroy()
 })
 
