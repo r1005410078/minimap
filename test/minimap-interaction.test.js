@@ -133,6 +133,15 @@ test('findInsertionIndex lands inside a specific group segment when the point fa
   assert.equal(index, parent.children.indexOf('a5') + 1)
 })
 
+test('findInsertionIndex can insert before the first visible group segment', () => {
+  const graph = multiGroupGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const aGroup = layout.groups.find((g) => g.children.includes('a0'))
+  const point = { x: aGroup.x, y: aGroup.y - 1000 }
+  const index = findInsertionIndex(graph, layout, 'p', point, 'horizontal')
+  assert.equal(index, 0)
+})
+
 test('findInsertionIndex falls through to the ungrouped sibling between two group segments', () => {
   const graph = multiGroupGraph()
   const layout = computeLayout(graph, VIEWPORT)
@@ -142,6 +151,17 @@ test('findInsertionIndex falls through to the ungrouped sibling between two grou
   const point = { x: midRect.x, y: (aGroup.y + aGroup.height + midRect.y) / 2 }
   const index = findInsertionIndex(graph, layout, 'p', point, 'horizontal')
   assert.equal(index, parent.children.indexOf('mid'))
+})
+
+test('findInsertionIndex can insert before a later visible group segment', () => {
+  const graph = multiGroupGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const parent = graph.nodes.get('p')
+  const midRect = layout.nodes.get('mid')
+  const bGroup = layout.groups.find((g) => g.children.includes('b0'))
+  const point = { x: bGroup.x, y: (midRect.y + midRect.height + bGroup.y) / 2 }
+  const index = findInsertionIndex(graph, layout, 'p', point, 'horizontal')
+  assert.equal(index, parent.children.indexOf('b0'))
 })
 
 test('groupGridIndexAt clamps to 0 for points above and left of the grid', () => {
@@ -196,6 +216,8 @@ test('groupAutoScrollSpeed returns negative speed near the top edge and positive
 test('groupAutoScrollSpeed returns 0 outside the hot zone or when the group does not overflow', () => {
   const group = { y: 100, height: 200, overflowY: true }
   assert.equal(groupAutoScrollSpeed(group, 200), 0)
+  assert.equal(groupAutoScrollSpeed(group, 127), 0)
+  assert.equal(groupAutoScrollSpeed(group, 301), 0)
   assert.equal(groupAutoScrollSpeed({ ...group, overflowY: false }, 128), 0)
 })
 

@@ -50,6 +50,11 @@ export function findInsertionIndex(graph, layout, parentId, point, direction) {
   if (children.length === 0) return 0
 
   const groupsOfParent = layout.groups.filter((group) => group.parentId === parentId)
+  const groupByChild = new Map()
+  for (const group of groupsOfParent) {
+    for (const childId of group.children) groupByChild.set(childId, group)
+  }
+
   for (const group of groupsOfParent) {
     if (containsPoint(group, point)) {
       const lastChildId = group.children[group.children.length - 1]
@@ -57,9 +62,22 @@ export function findInsertionIndex(graph, layout, parentId, point, direction) {
     }
   }
 
+  if (groupsOfParent.length === 1 && groupsOfParent[0].children.length === children.length) {
+    return children.length
+  }
+
   const pointCross = direction === 'vertical' ? point.x : point.y
+  const consumedGroups = new Set()
   for (let i = 0; i < children.length; i++) {
-    if (groupsOfParent.some((group) => group.children.includes(children[i]))) continue
+    const group = groupByChild.get(children[i])
+    if (group) {
+      if (consumedGroups.has(group.id)) continue
+      consumedGroups.add(group.id)
+      const cross = direction === 'vertical' ? group.x + group.width / 2 : group.y + group.height / 2
+      if (pointCross < cross) return i
+      continue
+    }
+
     const rect = layout.nodes.get(children[i])
     if (!rect) continue
     const cross = direction === 'vertical' ? rect.x + rect.width / 2 : rect.y + rect.height / 2
@@ -95,6 +113,7 @@ export function groupAutoScrollSpeed(group, pointerWorldY, edgeZone = 24, maxSpe
   if (!group.overflowY) return 0
   const top = group.y + GROUP.header
   const bottom = group.y + group.height
+  if (pointerWorldY < top || pointerWorldY > bottom) return 0
   if (pointerWorldY < top + edgeZone) {
     return -maxSpeed * Math.min(1, (top + edgeZone - pointerWorldY) / edgeZone)
   }
