@@ -118,12 +118,13 @@ export function resolveEdges(graph, layout) {
 
 // --- 默认绘制（发 ctx 调用，可被 renderers 覆盖）---
 
-function makeState(id, selectedIds) {
+function makeState(id, selectedIds, highlightedIds, dimmedIds) {
   return {
     selected: selectedIds ? selectedIds.has(id) : false,
     hovered: false,
     dragging: false,
-    highlighted: false,
+    highlighted: highlightedIds ? highlightedIds.has(id) : false,
+    dimmed: dimmedIds ? dimmedIds.has(id) : false,
     readonly: false,
   }
 }
@@ -202,6 +203,13 @@ function edgePayload(edge) {
   }
 }
 
+function withDimmedAlpha(ctx, state, draw) {
+  const previousAlpha = ctx.globalAlpha ?? 1
+  if (state.dimmed) ctx.globalAlpha = previousAlpha * 0.35
+  draw()
+  ctx.globalAlpha = previousAlpha
+}
+
 function edgeMainAxis(direction) {
   return direction === 'vertical' ? 'y' : 'x'
 }
@@ -265,17 +273,19 @@ function inferDirectionFromLayout(graph, layout, edges) {
 const SCROLLBAR_WIDTH = 8
 const SCROLLBAR_RADIUS = SCROLLBAR_WIDTH / 2
 
-function drawGroup(ctx, group, rect, theme, scrollbarHovered = false) {
-  ctx.fillStyle = theme.group.fill
-  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
-  ctx.strokeStyle = theme.group.stroke
-  ctx.lineWidth = 1
-  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
-  ctx.fillStyle = theme.group.header
-  ctx.font = theme.group.font
-  const chevron = group.expanded ? '▾' : '▸'
-  ctx.fillText(`${chevron} ${group.parentId} · ${group.children.length}`, rect.x + 8, rect.y + 16)
-  if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme, scrollbarHovered)
+function drawGroup(ctx, group, rect, state, theme, scrollbarHovered = false) {
+  withDimmedAlpha(ctx, state, () => {
+    ctx.fillStyle = theme.group.fill
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.strokeStyle = state.selected || state.highlighted ? theme.node.selectedStroke : theme.group.stroke
+    ctx.lineWidth = 1
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.fillStyle = theme.group.header
+    ctx.font = theme.group.font
+    const chevron = group.expanded ? '▾' : '▸'
+    ctx.fillText(`${chevron} ${group.parentId} · ${group.children.length}`, rect.x + 8, rect.y + 16)
+    if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme, scrollbarHovered)
+  })
 }
 
 // 滚动条轨道 + 按比例定位/取尺寸的滑块；交互命中由 Minimap.vue 复用同一套几何规则。
@@ -301,14 +311,16 @@ function drawGroupScrollbar(ctx, group, rect, theme, hovered) {
 }
 
 function drawNode(ctx, node, rect, state, theme) {
-  ctx.fillStyle = theme.node.fill
-  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
-  ctx.strokeStyle = state.selected ? theme.node.selectedStroke : theme.node.stroke
-  ctx.lineWidth = 1
-  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
-  ctx.fillStyle = theme.node.text
-  ctx.font = theme.node.font
-  ctx.fillText(node.label ?? node.id, rect.x + 6, rect.y + rect.height / 2 + 4)
+  withDimmedAlpha(ctx, state, () => {
+    ctx.fillStyle = theme.node.fill
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.strokeStyle = state.selected || state.highlighted ? theme.node.selectedStroke : theme.node.stroke
+    ctx.lineWidth = 1
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.fillStyle = theme.node.text
+    ctx.font = theme.node.font
+    ctx.fillText(node.label ?? node.id, rect.x + 6, rect.y + rect.height / 2 + 4)
+  })
 }
 
 function drawDropSlot(ctx, rect, theme, opacity = 1) {
@@ -325,9 +337,23 @@ function drawDropSlot(ctx, rect, theme, opacity = 1) {
   ctx.globalAlpha = previousAlpha
 }
 
+function drawSelectionRect(ctx, rect, theme) {
+  const selection = { ...defaultTheme.node, ...(theme.node || {}) }
+  const previousAlpha = ctx.globalAlpha ?? 1
+  ctx.globalAlpha = previousAlpha * 0.16
+  ctx.fillStyle = selection.selectedStroke
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.globalAlpha = previousAlpha
+  ctx.strokeStyle = selection.selectedStroke
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.setLineDash([])
+}
+
 // 裁剪到分组框 body 范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
 // 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
-function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, dragContext) {
+function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext) {
   const virtualGroup = dragContext ? { ...group, children: dragContext.order } : group
   const bodyY = rect.y + GROUP.header * viewport.scale
   const bodyHeight = rect.height - GROUP.header * viewport.scale
@@ -344,14 +370,14 @@ function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, 
       drawDropSlot(ctx, childRect, theme, dragContext.dropSlotOpacity ?? 1)
       continue
     }
-    const itemState = makeState(child.id, selectedIds)
+    const itemState = makeState(child.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
     else drawNode(ctx, node, childRect, itemState, theme)
   }
   if (dragContext) {
     const node = graph.nodes.get(dragContext.draggingChildId)
     if (node) {
-      const itemState = { ...makeState(dragContext.draggingChildId, selectedIds), dragging: true }
+      const itemState = { ...makeState(dragContext.draggingChildId, selectedIds, highlightedIds, dimmedIds), dragging: true }
       const previousAlpha = ctx.globalAlpha ?? 1
       ctx.globalAlpha = 0.85
       if (renderers.node) renderers.node(ctx, { node, rect: dragContext.ghostRect, state: itemState, theme, viewport })
@@ -380,6 +406,10 @@ export function renderScene(ctx, scene) {
     direction,
   } = scene
   const selectedIds = state.selectedIds
+  const highlightedIds = state.highlightedIds
+  const dimmedIds = state.dimmedIds
+  const highlightedEdgeIds = state.highlightedEdgeIds
+  const dimmedEdgeIds = state.dimmedEdgeIds
   const edges = resolveEdges(graph, layout)
   const resolvedDirection = layoutDirection || direction || inferDirectionFromLayout(graph, layout, edges)
   const mainAxis = edgeMainAxis(resolvedDirection)
@@ -390,10 +420,28 @@ export function renderScene(ctx, scene) {
   for (const edge of edges) {
     const from = worldToScreen(edge.from, viewport)
     const to = worldToScreen(edge.to, viewport)
-    if (renderers.edge) renderers.edge(ctx, { edge: edgePayload(edge), from, to, theme, viewport })
+    const edgeState = {
+      selected: false,
+      hovered: false,
+      dragging: false,
+      highlighted: highlightedEdgeIds ? highlightedEdgeIds.has(edge.id) : false,
+      dimmed: dimmedEdgeIds ? dimmedEdgeIds.has(edge.id) : false,
+      readonly: false,
+    }
+    if (renderers.edge) renderers.edge(ctx, { edge: edgePayload(edge), from, to, state: edgeState, theme, viewport })
     else {
       const path = orthogonalPath(edge.fromBox, edge.toBox, mainAxis).map((point) => worldToScreen(point, viewport))
-      drawEdge(ctx, path, theme)
+      withDimmedAlpha(ctx, edgeState, () => {
+        const edgeTheme = { ...defaultTheme.edge, ...(theme.edge || {}) }
+        ctx.strokeStyle = edgeState.selected || edgeState.highlighted ? theme.node.selectedStroke : edgeTheme.color
+        ctx.lineWidth = edgeTheme.width
+        ctx.beginPath()
+        ctx.moveTo(path[0].x, path[0].y)
+        for (const point of path.slice(1)) ctx.lineTo(point.x, point.y)
+        ctx.stroke()
+        const arrowSegment = lastNonZeroSegment(path)
+        if (arrowSegment) drawArrow(ctx, arrowSegment.start, arrowSegment.end, theme)
+      })
     }
   }
 
@@ -404,23 +452,27 @@ export function renderScene(ctx, scene) {
   for (const { item, screen } of items) {
     if (item.type !== 'group') continue
     const group = groupById.get(item.id)
-    const itemState = makeState(item.id, selectedIds)
+    const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     const dragContext = state.groupDrag && state.groupDrag.groupId === group.id ? state.groupDrag : undefined
     const scrollbarHovered = state.groupScrollbarHoverId === group.id
     if (renderers.group) renderers.group(ctx, { group, rect: screen, state: itemState, theme, viewport })
-    else drawGroup(ctx, group, screen, theme, scrollbarHovered)
-    drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds, dragContext)
+    else {
+      drawGroup(ctx, group, screen, itemState, theme, scrollbarHovered)
+    }
+    drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext)
     drawn++
   }
 
   for (const { item, screen } of items) {
     if (item.type !== 'node') continue
     const node = graph.nodes.get(item.id)
-    const itemState = makeState(item.id, selectedIds)
+    const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })
     else drawNode(ctx, node, screen, itemState, theme)
     drawn++
   }
+
+  if (state.selectionRect) drawSelectionRect(ctx, state.selectionRect, theme)
 
   return { total: layout.visibleItems.length, drawn, culled, durationMs: now() - t0 }
 }

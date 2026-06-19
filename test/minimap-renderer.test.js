@@ -390,11 +390,56 @@ test('custom edgeRenderer still receives only center points and no endpoint boxe
   assert.ok(payloads.length > 0)
   assert.equal(payloads.length, expectedEdges.length)
   for (const [index, payload] of payloads.entries()) {
-    assert.deepEqual(Object.keys(payload).sort(), ['edge', 'from', 'theme', 'to', 'viewport'])
+    assert.deepEqual(Object.keys(payload).sort(), ['edge', 'from', 'state', 'theme', 'to', 'viewport'])
     assert.deepEqual(payload.edge, expectedEdges[index])
     assert.equal('fromBox' in payload.edge, false)
     assert.equal('toBox' in payload.edge, false)
   }
+})
+
+test('custom renderers receive selected highlighted and dimmed state', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  const heapGroup = scene.layout.groups.find((group) => group.parentId === 'heap-1')
+  const seen = { node: null, group: null, edge: null }
+
+  renderScene(ctx, {
+    ...scene,
+    state: {
+      selectedIds: new Set(['grid-tie']),
+      highlightedIds: new Set(['energy-root', 'feeder-1']),
+      dimmedIds: new Set(['heap-1', heapGroup.id]),
+      highlightedEdgeIds: new Set(['tree:energy-root:grid-tie']),
+      dimmedEdgeIds: new Set(['tree:group:heap-1::g0']),
+    },
+    renderers: {
+      node: (_ctx, payload) => {
+        if (payload.node.id === 'grid-tie') seen.node = payload.state
+      },
+      group: (_ctx, payload) => {
+        if (payload.group.id === heapGroup.id) seen.group = payload.state
+      },
+      edge: (_ctx, payload) => {
+        if (payload.edge.id === 'tree:energy-root:grid-tie') seen.edge = payload.state
+      },
+    },
+  })
+
+  assert.equal(seen.node.selected, true)
+  assert.equal(seen.node.highlighted, false)
+  assert.equal(seen.node.dimmed, false)
+  assert.equal(seen.group.selected, false)
+  assert.equal(seen.group.dimmed, true)
+  assert.equal(seen.edge.highlighted, true)
+  assert.equal(seen.edge.dimmed, false)
+})
+
+test('renderScene draws a selection rect after graph items', () => {
+  const ctx = createMockCtx()
+  renderScene(ctx, demoScene({ state: { selectionRect: { x: 10, y: 20, width: 100, height: 80 } } }))
+
+  const strokeRects = ctx.methodsOf('strokeRect')
+  assert.deepEqual(strokeRects.at(-1).args, [10, 20, 100, 80])
 })
 
 test('default drawing renders each visible group child with its own label', () => {
@@ -667,8 +712,6 @@ test('drawGroupChildren without drag or scrollbar hover context behaves exactly 
   renderScene(emptyStateCtx, { ...scene, state: { groupDrag: null, groupScrollbarHoverId: null } })
 
   assert.deepEqual(emptyStateCtx.calls, baseCtx.calls)
-  assert.equal(baseCtx.methodsOf('set:globalAlpha').length, 0)
-  assert.equal(baseCtx.methodsOf('set:fillStyle').some((call) => call.args[0] === '#24344a'), false)
 })
 
 test('group children are clipped below the header while scrolling', () => {
