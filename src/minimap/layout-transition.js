@@ -15,7 +15,7 @@ export function easeOutCubic(value) {
 }
 
 function itemKey(item) {
-  return item.type === 'group' ? `group:${item.parentId}` : `node:${item.id}`
+  return item.type === 'group' ? `group:${item.id}` : `node:${item.id}`
 }
 
 function rectOf(item) {
@@ -106,7 +106,7 @@ export function layoutAt(transition, progress) {
 
   const groups = transition.toLayout.groups.map((group) => ({
     ...group,
-    ...(rectByKey.get(`group:${group.parentId}`) || rectOf(group)),
+    ...(rectByKey.get(`group:${group.id}`) || rectOf(group)),
   }))
 
   return {
