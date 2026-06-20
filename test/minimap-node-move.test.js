@@ -222,3 +222,25 @@ test('plain node drop target is recognized and can be dropped on', () => {
 
   wrapper.destroy()
 })
+
+test('dragging near the canvas edge pans the viewport', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, { x: 795, y: 300 })
+
+  // handlePointerMove schedules both the existing auto-scroll/slot-fade RAF loop
+  // and the new edge-pan RAF loop on this first move past the drag threshold;
+  // drain several frames so the edge-pan tick (whichever order it lands in) runs.
+  for (let i = 0; i < 5; i++) frames.runNext(16 * (i + 1))
+
+  assert.equal(wrapper.emitted('viewport-change').length > 0, true)
+  const lastViewport = wrapper.emitted('viewport-change').at(-1)[0]
+  assert.notEqual(lastViewport.x, 0)
+
+  dispatchPointerUp(wrapper, { x: 795, y: 300 })
+  wrapper.destroy()
+})

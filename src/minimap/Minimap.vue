@@ -41,6 +41,7 @@ import {
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
   resolveDropTarget,
+  edgePanVelocity,
 } from './interaction.js'
 import { createGraphOperationManager, captureSubtreeSnapshot } from './graph-operations.js'
 import { deserializeGraph, serializeGraph } from './graph-serialization.js'
@@ -617,10 +618,40 @@ function ensureAutoScrollLoop() {
   startAutoScrollLoop()
 }
 
+function edgePanActive() {
+  if (!dragState?.dragging || !dragState.lastScreenPoint) return false
+  const velocity = edgePanVelocity(dragState.lastScreenPoint, cssWidth, cssHeight)
+  return velocity.x !== 0 || velocity.y !== 0
+}
+
+function cancelEdgePanLoop() {
+  if (dragState && dragState.edgePanRafId !== null) {
+    cancelAnimationFrame(dragState.edgePanRafId)
+    dragState.edgePanRafId = null
+  }
+}
+
+function ensureEdgePanLoop() {
+  if (!dragState?.dragging || dragState.edgePanRafId != null || !edgePanActive()) return
+  const tick = () => {
+    if (!dragState?.dragging) return
+    const velocity = edgePanVelocity(dragState.lastScreenPoint, cssWidth, cssHeight)
+    if (velocity.x !== 0 || velocity.y !== 0) {
+      applyViewport(panViewportBy(currentViewport(), { x: -velocity.x, y: -velocity.y }, viewportOptions(props.options)))
+      updateDragTarget(screenToWorld(dragState.lastScreenPoint, currentViewport()))
+      renderCurrent()
+    }
+    if (edgePanActive()) dragState.edgePanRafId = requestAnimationFrame(tick)
+    else dragState.edgePanRafId = null
+  }
+  dragState.edgePanRafId = requestAnimationFrame(tick)
+}
+
 function cancelDrag() {
   if (!dragState) return
   cancelAutoScrollLoop()
   cancelDragShiftLoop()
+  cancelEdgePanLoop()
   dragState = null
   renderCurrent()
 }
@@ -704,6 +735,7 @@ function handlePointerDown(event) {
       ghostScreenRect: null,
       lastScreenPoint: null,
       scrollRafId: null,
+      edgePanRafId: null,
       shiftFromById: null,
       shiftToById: null,
       shiftStartedAt: null,
@@ -798,6 +830,7 @@ function handlePointerMove(event) {
   updateDragTarget(worldPoint)
   renderCurrent()
   ensureAutoScrollLoop()
+  ensureEdgePanLoop()
   if (dragShiftActive()) ensureDragShiftLoop()
 }
 
@@ -830,6 +863,7 @@ function handlePointerUp() {
   if (dragState.dragging) {
     cancelAutoScrollLoop()
     cancelDragShiftLoop()
+    cancelEdgePanLoop()
     if (dragState.targetParentId) {
       const parent = props.graph.nodes.get(dragState.targetParentId)
       const targetGroup = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
