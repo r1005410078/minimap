@@ -47,7 +47,7 @@ function onDragStart(item, event) {
         @keydown.enter.prevent="toggleCategory(category)"
         @keydown.space.prevent="toggleCategory(category)"
       >
-        <span class="resource-category-caret">{{ isExpanded(category) ? '⌄' : '›' }}</span>
+        <span class="resource-category-caret">{{ isExpanded(category) ? '▾' : '▸' }}</span>
         <span class="resource-category-label">{{ category.category }}</span>
         <span class="resource-category-count">{{ category.items.length }}</span>
       </div>
