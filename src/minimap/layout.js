@@ -4,7 +4,7 @@
 export const GROUP_THRESHOLD = 5
 
 // Phase 1 内置默认值；后续接入组件时由 theme 覆盖。
-const NODE = { width: 120, height: 40 }
+export const NODE = { width: 120, height: 40 }
 const LEVEL_GAP = 80 // 主轴（深度方向）层距
 const SIBLING_GAP = 24 // 交叉轴（兄弟方向）间距
 export const GROUP = { padding: 12, header: 28, itemW: 120, itemH: 40, itemGap: 10 }

@@ -297,6 +297,75 @@ test('resolveDropTarget resolves a sibling plain node hit as a same-parent reord
   assert.equal(afterTarget.insertIndex, 1)
 })
 
+test('resolveDropTarget treats the middle of a sibling rect as a nest target, not a reorder', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('feeder-2')
+  const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 }
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'feeder-2')
+  assert.equal(target.group, null)
+  assert.equal(target.insertIndex, null)
+  assert.equal(target.previewRect, null)
+})
+
+test('resolveDropTarget resolves a hit in the gap between two siblings as an insert between them', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const feeder2Rect = layout.nodes.get('feeder-2')
+  const feeder3Rect = layout.nodes.get('feeder-3')
+  const point = {
+    x: feeder2Rect.x + feeder2Rect.width / 2,
+    y: (feeder2Rect.y + feeder2Rect.height + feeder3Rect.y) / 2,
+  }
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'grid-tie')
+  assert.equal(target.group, null)
+  assert.equal(target.insertIndex, 1)
+  assert.ok(target.previewRect)
+})
+
+test('resolveDropTarget edge-band threshold scales with viewport.scale', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('feeder-2')
+  // 离顶边4个世界单位：scale=1 时阈值是5世界单位，落在窄带内（reorder）；
+  // scale=2 时阈值是2.5世界单位，落在窄带外，应该判定成 nest。
+  const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + 4 }
+
+  const atScale1 = resolveDropTarget(graph, layout, point, 'feeder-3', 'horizontal', 1)
+  const atScale2 = resolveDropTarget(graph, layout, point, 'feeder-3', 'horizontal', 2)
+
+  assert.equal(atScale1.parentId, 'grid-tie')
+  assert.equal(atScale1.insertIndex, 1)
+  assert.equal(atScale2.parentId, 'feeder-2')
+  assert.equal(atScale2.insertIndex, null)
+})
+
+test('resolveDropTarget computes the sibling gap along the cross axis for a vertical layout', () => {
+  const graph = createDemoGraph()
+  const verticalOpts = { ...VIEWPORT, direction: 'vertical' }
+  const layout = computeLayout(graph, verticalOpts)
+  const feeder2Rect = layout.nodes.get('feeder-2')
+  const feeder3Rect = layout.nodes.get('feeder-3')
+  const point = {
+    x: (feeder2Rect.x + feeder2Rect.width + feeder3Rect.x) / 2,
+    y: feeder2Rect.y + feeder2Rect.height / 2,
+  }
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1', 'vertical')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.insertIndex, 1)
+  assert.ok(target.previewRect)
+})
+
 test('resolveDropTarget resolves a group item hit to the group real parent and an insert index', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, VIEWPORT)

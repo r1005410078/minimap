@@ -3,7 +3,7 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 
-import { GROUP, visibleGroupChildren } from './layout.js'
+import { GROUP, NODE, visibleGroupChildren } from './layout.js'
 
 function containsPoint(rect, point) {
   return (
@@ -161,7 +161,13 @@ function isNodeOrDescendant(graph, nodeId, candidateId) {
   return false
 }
 
-function siblingInsertIndexAt(graph, layout, point, draggedNodeId, targetNodeId, direction = 'horizontal') {
+const EDGE_THRESHOLD_SCREEN_PX = 5
+
+// 悬停目标矩形按 cross 轴分三段：起始边/结束边各留一条窄带（插入排序），
+// 中间大片区域是嵌套（变成子节点）。窄带宽度按屏幕像素换算成世界单位传入，
+// 缩放后窄带的视觉宽度不变；矩形太小塞不下两条窄带时各自收缩到一半，
+// 保证不会重叠、也不会出现"中间区域宽度为负"。
+function siblingDropZoneAt(graph, layout, point, draggedNodeId, targetNodeId, direction, edgeThresholdWorld) {
   const dragged = graph.nodes.get(draggedNodeId)
   const target = graph.nodes.get(targetNodeId)
   if (!dragged || !target || dragged.parentId !== target.parentId) return null
@@ -173,19 +179,103 @@ function siblingInsertIndexAt(graph, layout, point, draggedNodeId, targetNodeId,
   const restChildren = parent.children.filter((id) => id !== draggedNodeId)
   const targetIndex = restChildren.indexOf(targetNodeId)
   if (targetIndex === -1) return null
-  const midpoint =
-    direction === 'vertical'
-      ? targetRect.x + targetRect.width / 2
-      : targetRect.y + targetRect.height / 2
+
+  const crossStart = direction === 'vertical' ? targetRect.x : targetRect.y
+  const crossExtent = direction === 'vertical' ? targetRect.width : targetRect.height
   const pointCross = direction === 'vertical' ? point.x : point.y
-  return pointCross < midpoint ? targetIndex : targetIndex + 1
+  const threshold = Math.min(edgeThresholdWorld, crossExtent / 2)
+
+  if (pointCross <= crossStart + threshold) return { mode: 'before', insertIndex: targetIndex }
+  if (pointCross >= crossStart + crossExtent - threshold) return { mode: 'after', insertIndex: targetIndex + 1 }
+  return { mode: 'nest' }
 }
 
-// 拖拽悬停目标解析：命中分组框 item 时返回真实父节点 + 该分组 + 组内插入下标；
-// 命中同父兄弟普通节点时返回共同父节点 + 兄弟插入下标；
-// 命中非兄弟普通节点时该节点本身就是新的目标父节点，不计算插入下标（追加到末尾）；
+// 在"去掉被拖节点后的兄弟列表"里找相邻两个之间的物理空隙（SIBLING_GAP），
+// 命中即判定插入到它们之间——比窄带宽得多，是拖拽时最自然会瞄准的落点，
+// 不要求像素级精确停在某个节点边缘上。只看仍是平铺节点（未被分组框消费）的兄弟，
+// 分组框内部的命中检测走另一套机制，不归这里管。
+function siblingGapHitAt(graph, layout, point, draggedNodeId, direction) {
+  const dragged = graph.nodes.get(draggedNodeId)
+  if (!dragged?.parentId) return null
+  const parent = graph.nodes.get(dragged.parentId)
+  if (!parent) return null
+
+  const restChildren = parent.children.filter((id) => id !== draggedNodeId)
+  const plainRestChildren = restChildren.filter((id) => layout.nodes.has(id))
+
+  for (let i = 0; i < plainRestChildren.length - 1; i++) {
+    const rectA = layout.nodes.get(plainRestChildren[i])
+    const rectB = layout.nodes.get(plainRestChildren[i + 1])
+    const gapRect =
+      direction === 'vertical'
+        ? {
+            x: rectA.x + rectA.width,
+            y: Math.min(rectA.y, rectB.y),
+            width: rectB.x - (rectA.x + rectA.width),
+            height: Math.max(rectA.height, rectB.height),
+          }
+        : {
+            x: Math.min(rectA.x, rectB.x),
+            y: rectA.y + rectA.height,
+            width: Math.max(rectA.width, rectB.width),
+            height: rectB.y - (rectA.y + rectA.height),
+          }
+    if (containsPoint(gapRect, point)) {
+      return { insertIndex: restChildren.indexOf(plainRestChildren[i + 1]) }
+    }
+  }
+  return null
+}
+
+// 插入预览框（跟标准节点同样大小）的世界坐标位置：命中空隙时居中在空隙上。
+// insertIndex 只会是 siblingGapHitAt 命中空隙时返回的下标，两侧节点必然都存在，
+// 不需要兜底分支。
+function siblingGapPreviewRect(graph, layout, draggedNodeId, insertIndex, direction) {
+  const dragged = graph.nodes.get(draggedNodeId)
+  const parent = graph.nodes.get(dragged.parentId)
+  const restChildren = parent.children.filter((id) => id !== draggedNodeId)
+  const rectA = layout.nodes.get(restChildren[insertIndex - 1])
+  const rectB = layout.nodes.get(restChildren[insertIndex])
+  if (direction === 'vertical') {
+    const centerX = (rectA.x + rectA.width + rectB.x) / 2
+    return { x: centerX - NODE.width / 2, y: rectA.y, width: NODE.width, height: NODE.height }
+  }
+  const centerY = (rectA.y + rectA.height + rectB.y) / 2
+  return { x: rectA.x, y: centerY - NODE.height / 2, width: NODE.width, height: NODE.height }
+}
+
+// 命中边缘窄带时（没有相邻空隙可用，比如列表最前/最后一个），预览框贴在目标
+// 节点对应那条边的外侧。
+function siblingEdgePreviewRect(layout, targetNodeId, mode, direction) {
+  const targetRect = layout.nodes.get(targetNodeId)
+  if (direction === 'vertical') {
+    const x = mode === 'before' ? targetRect.x - NODE.width : targetRect.x + targetRect.width
+    return { x, y: targetRect.y, width: NODE.width, height: NODE.height }
+  }
+  const y = mode === 'before' ? targetRect.y - NODE.height : targetRect.y + targetRect.height
+  return { x: targetRect.x, y, width: NODE.width, height: NODE.height }
+}
+
+// 拖拽悬停目标解析：先看是否命中两个相邻兄弟之间的物理空隙（插入排序，最容易瞄准）；
+// 否则命中分组框 item 时返回真实父节点 + 该分组 + 组内插入下标；
+// 命中同父兄弟普通节点的边缘窄带时返回共同父节点 + 兄弟插入下标（插入排序）；
+// 命中同父兄弟普通节点中间区域、或命中非兄弟普通节点时，该节点本身就是新的目标父节点，
+// 不计算插入下标（追加到末尾，嵌套变成子节点）；
 // 命中分组框 header、命中空白、或目标是被拖节点自己/其后代时，返回 invalid。
-export function resolveDropTarget(graph, layout, point, draggedNodeId, direction = 'horizontal') {
+export function resolveDropTarget(graph, layout, point, draggedNodeId, direction = 'horizontal', viewportScale = 1) {
+  const edgeThresholdWorld = EDGE_THRESHOLD_SCREEN_PX / viewportScale
+
+  const gapHit = siblingGapHitAt(graph, layout, point, draggedNodeId, direction)
+  if (gapHit) {
+    return {
+      valid: true,
+      parentId: graph.nodes.get(draggedNodeId).parentId,
+      group: null,
+      insertIndex: gapHit.insertIndex,
+      previewRect: siblingGapPreviewRect(graph, layout, draggedNodeId, gapHit.insertIndex, direction),
+    }
+  }
+
   const hit = hitTest(layout, point)
   if (!hit) return { valid: false }
 
@@ -196,22 +286,23 @@ export function resolveDropTarget(graph, layout, point, draggedNodeId, direction
     if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
     const restGroup = { ...group, children: group.children.filter((id) => id !== draggedNodeId) }
     const insertIndex = groupGridIndexAt(restGroup, point)
-    return { valid: true, parentId, group, insertIndex }
+    return { valid: true, parentId, group, insertIndex, previewRect: null }
   }
 
   if (hit.type === 'node') {
-    const siblingIndex = siblingInsertIndexAt(graph, layout, point, draggedNodeId, hit.id, direction)
-    if (siblingIndex !== null) {
+    const zone = siblingDropZoneAt(graph, layout, point, draggedNodeId, hit.id, direction, edgeThresholdWorld)
+    if (zone && zone.mode !== 'nest') {
       return {
         valid: true,
         parentId: graph.nodes.get(draggedNodeId).parentId,
         group: null,
-        insertIndex: siblingIndex,
+        insertIndex: zone.insertIndex,
+        previewRect: siblingEdgePreviewRect(layout, hit.id, zone.mode, direction),
       }
     }
     const parentId = hit.id
     if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
-    return { valid: true, parentId, group: null, insertIndex: null }
+    return { valid: true, parentId, group: null, insertIndex: null, previewRect: null }
   }
 
   return { valid: false }
