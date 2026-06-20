@@ -204,8 +204,14 @@ function siblingGapHitAt(graph, layout, point, draggedNodeId, direction) {
   const plainRestChildren = restChildren.filter((id) => layout.nodes.has(id))
 
   for (let i = 0; i < plainRestChildren.length - 1; i++) {
-    const rectA = layout.nodes.get(plainRestChildren[i])
-    const rectB = layout.nodes.get(plainRestChildren[i + 1])
+    const idA = plainRestChildren[i]
+    const idB = plainRestChildren[i + 1]
+    // 两者在过滤前的兄弟顺序里必须真的紧挨着——如果中间隔着被分组框消费掉的
+    // 子节点（一个或多个），它们在屏幕上并不物理相邻，中间隔着那个分组框，
+    // 不能把分组框所在的区域误判成"空隙"。
+    if (restChildren.indexOf(idB) !== restChildren.indexOf(idA) + 1) continue
+    const rectA = layout.nodes.get(idA)
+    const rectB = layout.nodes.get(idB)
     const gapRect =
       direction === 'vertical'
         ? {
@@ -221,7 +227,7 @@ function siblingGapHitAt(graph, layout, point, draggedNodeId, direction) {
             height: rectB.y - (rectA.y + rectA.height),
           }
     if (containsPoint(gapRect, point)) {
-      return { insertIndex: restChildren.indexOf(plainRestChildren[i + 1]) }
+      return { insertIndex: restChildren.indexOf(idB) }
     }
   }
   return null

@@ -38,6 +38,39 @@ function multiGroupGraph() {
   return { version: 1, nodes, rootIds: ['root'], edges: [] }
 }
 
+// root -> p -> [x2, break, g0..g5, x3, break2]
+// x2 和 x3 在 plainRestChildren（去掉被拖元素x1后）里相邻，
+// 但在 restChildren 原列表里不相邻（中间隔着 break、g0..g5）。
+// break 和 break2 是非叶节点，使得 g0..g5 形成单独的分组段；x2 和 x3 都是叶子，
+// 拖走 x2 后，x3 的前一个 plain 兄弟是 x2，但中间隔着被分组的 g0..g5。
+function mixedGroupAndPlainGraph() {
+  const nodes = new Map()
+  nodes.set('root', { id: 'root', label: 'root', parentId: null, children: ['p'] })
+
+  nodes.set('x2', { id: 'x2', label: 'x2', parentId: 'p', children: [] })
+
+  // 非叶节点打破连续性
+  nodes.set('break', { id: 'break', label: 'break', parentId: 'p', children: ['break-child'] })
+  nodes.set('break-child', { id: 'break-child', label: 'break-child', parentId: 'break', children: [] })
+
+  // 6 个叶子（会因为超过阈值 5 而单独成一个分组框）
+  const groupChildren = []
+  for (let i = 0; i < 6; i++) {
+    const id = `g${i}`
+    groupChildren.push(id)
+    nodes.set(id, { id, label: id, parentId: 'p', children: [] })
+  }
+
+  nodes.set('x3', { id: 'x3', label: 'x3', parentId: 'p', children: [] })
+
+  // 另一个非叶节点，使 g0..g5 成为单独的段
+  nodes.set('break2', { id: 'break2', label: 'break2', parentId: 'p', children: ['break2-child'] })
+  nodes.set('break2-child', { id: 'break2-child', label: 'break2-child', parentId: 'break2', children: [] })
+
+  nodes.set('p', { id: 'p', label: 'p', parentId: 'root', children: ['x2', 'break', ...groupChildren, 'x3', 'break2'] })
+  return { version: 1, nodes, rootIds: ['root'], edges: [] }
+}
+
 function firstItemCenter(group) {
   return {
     x: group.x + GROUP.padding + GROUP.itemW / 2,
@@ -404,6 +437,19 @@ test('resolveDropTarget returns invalid for a miss or a group header hit', () =>
 
   assert.equal(resolveDropTarget(graph, layout, { x: -9999, y: -9999 }, 'feeder-1').valid, false)
   assert.equal(resolveDropTarget(graph, layout, headerPoint, 'feeder-1').valid, false)
+})
+
+test('resolveDropTarget does not treat the area spanning a group box as a gap between two non-adjacent plain siblings', () => {
+  const graph = mixedGroupAndPlainGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const group = layout.groups.find((g) => g.parentId === 'p')
+  const point = firstItemCenter(group)
+
+  const target = resolveDropTarget(graph, layout, point, 'x2')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'p')
+  assert.ok(target.group, 'should resolve to a group-item hit, not a sibling-gap insert spanning the group box')
 })
 
 test('edgePanVelocity returns nonzero velocity only near container edges', () => {
