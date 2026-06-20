@@ -471,3 +471,152 @@ test('undo and redo are empty no-ops when history stacks are empty', () => {
   assert.equal(wrapper.emitted('change'), undefined)
   wrapper.destroy()
 })
+
+function dispatchKey(wrapper, key, options = {}) {
+  wrapper.find('canvas').element.dispatchEvent(
+    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options }),
+  )
+}
+
+test('deleteSelection deletes selected nodes, emits events, and supports undo', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['grid-tie'])
+  const result = wrapper.vm.deleteSelection()
+
+  assert.equal(result.applied, true)
+  assert.equal(graph.nodes.has('grid-tie'), false)
+  assert.equal(graph.nodes.has('feeder-1'), false)
+  assert.deepEqual(wrapper.emitted('delete')[0][0].deletedIds.sort(), ['feeder-1', 'feeder-2', 'feeder-3', 'grid-tie'])
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'delete-nodes')
+  assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
+
+  wrapper.vm.undo()
+  assert.equal(graph.nodes.has('grid-tie'), true)
+  wrapper.destroy()
+})
+
+test('copySelection duplicates selected nodes and emits events', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['grid-tie'])
+  const result = wrapper.vm.copySelection()
+
+  assert.equal(result.applied, true)
+  const copiedId = wrapper.emitted('copy')[0][0].idMap['grid-tie']
+  assert.equal(graph.nodes.has(copiedId), true)
+  assert.equal(graph.nodes.get(copiedId).children.length, 3)
+  assert.deepEqual(graph.nodes.get('energy-root').children.slice(0, 2), ['grid-tie', copiedId])
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'copy-nodes')
+  wrapper.destroy()
+})
+
+test('exportGraph returns JSON-safe data and does not enter history', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const exported = wrapper.vm.exportGraph()
+
+  assert.equal(Array.isArray(exported.nodes), true)
+  assert.equal(exported.nodes.some((node) => node.id === 'energy-root'), true)
+  assert.equal(wrapper.vm.canUndo(), false)
+  assert.equal(wrapper.emitted('export')[0][0].graph, exported)
+  assert.equal(wrapper.emitted('change'), undefined)
+  wrapper.destroy()
+})
+
+test('importGraph replaces graph contents and supports undo', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const data = {
+    version: 1,
+    nodes: [{ id: 'new-root', label: 'New Root', parentId: null, children: [] }],
+    rootIds: ['new-root'],
+    edges: [],
+  }
+
+  const result = wrapper.vm.importGraph(data)
+
+  assert.equal(result.applied, true)
+  assert.equal(graph.nodes.has('energy-root'), false)
+  assert.equal(graph.nodes.has('new-root'), true)
+  assert.equal(wrapper.emitted('import')[0][0].graph, graph)
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'replace-graph')
+
+  wrapper.vm.undo()
+  assert.equal(graph.nodes.has('energy-root'), true)
+  wrapper.destroy()
+})
+
+test('invalid importGraph returns a failed result without emitting change', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const result = wrapper.vm.importGraph({ version: 999, nodes: [], rootIds: [] })
+
+  assert.equal(result.applied, false)
+  assert.equal(result.reason, 'invalid-version')
+  assert.equal(graph.nodes.has('energy-root'), true)
+  assert.equal(wrapper.emitted('change'), undefined)
+  wrapper.destroy()
+})
+
+test('readonly and before hooks block delete copy and import methods', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, {
+    propsData: {
+      graph,
+      readonly: true,
+      beforeDelete: () => {
+        throw new Error('readonly should short-circuit before hooks')
+      },
+    },
+  })
+  wrapper.vm.select(['grid-tie'])
+
+  assert.equal(wrapper.vm.deleteSelection().reason, 'readonly')
+  assert.equal(wrapper.vm.copySelection().reason, 'readonly')
+  assert.equal(wrapper.vm.importGraph({ version: 1, nodes: [], rootIds: [] }).reason, 'readonly')
+  assert.equal(graph.nodes.has('grid-tie'), true)
+  wrapper.destroy()
+
+  const blockedGraph = createDemoGraph()
+  const blocked = mount(Minimap, {
+    propsData: {
+      graph: blockedGraph,
+      beforeDelete: () => false,
+      beforeCopy: () => false,
+      beforeImport: () => false,
+    },
+  })
+  blocked.vm.select(['grid-tie'])
+
+  assert.equal(blocked.vm.deleteSelection().reason, 'blocked')
+  assert.equal(blocked.vm.copySelection().reason, 'blocked')
+  assert.equal(blocked.vm.importGraph({ version: 1, nodes: [], rootIds: [] }).reason, 'blocked')
+  assert.equal(blockedGraph.nodes.has('grid-tie'), true)
+  blocked.destroy()
+})
+
+test('keyboard Delete Backspace and Cmd/Ctrl+C trigger edit commands', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['grid-tie'])
+  dispatchKey(wrapper, 'Delete')
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  wrapper.vm.undo()
+  wrapper.vm.select(['grid-tie'])
+  dispatchKey(wrapper, 'Backspace')
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  wrapper.vm.undo()
+  wrapper.vm.select(['grid-tie'])
+  dispatchKey(wrapper, 'c', { metaKey: true })
+  assert.equal(wrapper.emitted('copy').length, 1)
+
+  wrapper.destroy()
+})

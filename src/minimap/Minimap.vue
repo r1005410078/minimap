@@ -42,6 +42,7 @@ import {
   groupInsertIndexToParentIndex,
 } from './interaction.js'
 import { createGraphOperationManager } from './graph-operations.js'
+import { deserializeGraph, serializeGraph } from './graph-serialization.js'
 import {
   buildVirtualOrder,
   childWorldRectsById,
@@ -79,6 +80,9 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
   beforeNodeDrop: { type: Function, default: null },
   beforeGroupReorder: { type: Function, default: null },
+  beforeDelete: { type: Function, default: null },
+  beforeCopy: { type: Function, default: null },
+  beforeImport: { type: Function, default: null },
 })
 
 const emit = defineEmits([
@@ -89,6 +93,10 @@ const emit = defineEmits([
   'group-reorder',
   'viewport-change',
   'search',
+  'delete',
+  'copy',
+  'import',
+  'export',
 ])
 
 const containerRef = ref(null)
@@ -824,10 +832,21 @@ function handleWheel(event) {
 }
 
 function handleKeyDown(event) {
-  if (event.key !== 'Escape') return
-  if (currentSelectedIds().length === 0) return
-  event.preventDefault()
-  setSelected([])
+  if (event.key === 'Escape') {
+    if (currentSelectedIds().length === 0) return
+    event.preventDefault()
+    setSelected([])
+    return
+  }
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    event.preventDefault()
+    deleteSelection()
+    return
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+    event.preventDefault()
+    copySelection()
+  }
 }
 
 function handleDragOver(event) {
@@ -1028,6 +1047,132 @@ function canRedo() {
   return graphOperations().canRedo()
 }
 
+function selectedRealNodeIds() {
+  if (!layout) return currentSelectedIds()
+  const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
+  const ids = []
+  for (const id of currentSelectedIds()) {
+    const group = groupsById.get(id)
+    if (group) ids.push(...group.children)
+    else ids.push(id)
+  }
+  return [...new Set(ids)]
+}
+
+function collectCopyIds(id, ids = new Set()) {
+  const node = props.graph.nodes.get(id)
+  if (!node || ids.has(id)) return ids
+  ids.add(id)
+  for (const childId of node.children || []) collectCopyIds(childId, ids)
+  return ids
+}
+
+function nextCopyId(sourceId, usedIds) {
+  let index = 1
+  let id = `copy-${sourceId}-${index}`
+  while (usedIds.has(id)) {
+    index += 1
+    id = `copy-${sourceId}-${index}`
+  }
+  usedIds.add(id)
+  return id
+}
+
+function createCopyIdMap(ids) {
+  const usedIds = new Set(props.graph.nodes.keys())
+  const copyIds = new Set()
+  for (const id of ids) collectCopyIds(id, copyIds)
+  const idMap = {}
+  for (const id of copyIds) idMap[id] = nextCopyId(id, usedIds)
+  return idMap
+}
+
+function selectionAfterDeleting(deletedIds) {
+  const deleted = new Set(deletedIds)
+  return currentSelectedIds().filter((id) => !deleted.has(id))
+}
+
+function deleteSelection() {
+  const ids = currentSelectedIds()
+  const expandedIds = selectedRealNodeIds()
+  const operation = { type: 'delete-nodes', payload: { ids, expandedIds } }
+  const result = graphOperations().apply(operation, {
+    readonly: props.readonly,
+    before: props.beforeDelete,
+  })
+  if (!result.applied) return result
+
+  updateLayout({ animate: false })
+  setSelected(selectionAfterDeleting(result.operation.payload.deletedIds || []))
+  emit('delete', { ids, deletedIds: result.operation.payload.deletedIds || [] })
+  emitChange(result)
+  return result
+}
+
+function copySelection() {
+  const ids = currentSelectedIds()
+  const expandedIds = selectedRealNodeIds()
+  const idMap = createCopyIdMap(expandedIds)
+  const operation = { type: 'copy-nodes', payload: { ids, expandedIds, idMap } }
+  const result = graphOperations().apply(operation, {
+    readonly: props.readonly,
+    before: props.beforeCopy,
+  })
+  if (!result.applied) return result
+
+  updateLayout()
+  emit('copy', {
+    ids,
+    copiedIds: result.operation.payload.copiedIds || [],
+    idMap,
+  })
+  emitChange(result)
+  return result
+}
+
+function exportGraph() {
+  const graph = serializeGraph(props.graph)
+  emit('export', { graph })
+  return graph
+}
+
+function importGraph(data) {
+  if (props.readonly) {
+    return {
+      applied: false,
+      type: 'replace-graph',
+      operation: { type: 'replace-graph', payload: { data } },
+      inverse: null,
+      previousGraph: props.graph,
+      nextGraph: props.graph,
+      reason: 'readonly',
+    }
+  }
+  const parsed = deserializeGraph(data)
+  if (!parsed.valid) {
+    return {
+      applied: false,
+      type: 'replace-graph',
+      operation: { type: 'replace-graph', payload: { data } },
+      inverse: null,
+      previousGraph: props.graph,
+      nextGraph: props.graph,
+      reason: parsed.reason,
+    }
+  }
+  const operation = { type: 'replace-graph', payload: { graph: parsed.graph } }
+  const result = graphOperations().apply(operation, {
+    before: props.beforeImport,
+  })
+  if (!result.applied) return result
+
+  updateLayout({ animate: false })
+  setSelected([])
+  emit('import', { graph: props.graph })
+  emitChange(result)
+  return result
+}
+
 defineExpose({
   fitToScreen,
   centerOnNode,
@@ -1044,6 +1189,10 @@ defineExpose({
   redo,
   canUndo,
   canRedo,
+  deleteSelection,
+  copySelection,
+  exportGraph,
+  importGraph,
 })
 
 function syncCanvasSize() {
