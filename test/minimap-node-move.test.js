@@ -43,6 +43,10 @@ function nodeCenter(layout, nodeId) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
 }
 
+function clientPoint(point, offset = { left: 0, top: 0 }) {
+  return { x: point.x + offset.left, y: point.y + offset.top }
+}
+
 function firstItemCenter(group) {
   return {
     x: group.x + GROUP.padding + GROUP.itemW / 2,
@@ -164,6 +168,25 @@ test('readonly and beforeNodeMove block cross-parent moves', () => {
   blockedWrapper.destroy()
 })
 
+test('blocked cross-parent moves clear the plain-node drop target highlight', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, {
+    propsData: { graph, beforeNodeMove: () => false },
+  })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodeCenter(layout, 'feeder-2')
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
+  assert.equal(highlightedLabels(contexts.at(-1), defaultTheme).includes('Feeder 2'), false)
+  wrapper.destroy()
+})
+
 test('clicking a plain node without moving still selects it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
@@ -242,5 +265,34 @@ test('dragging near the canvas edge pans the viewport', () => {
   assert.notEqual(lastViewport.x, 0)
 
   dispatchPointerUp(wrapper, { x: 795, y: 300 })
+  wrapper.destroy()
+})
+
+test('dragging near an offset canvas edge uses canvas-local coordinates for edge pan', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const canvasEl = wrapper.find('canvas').element
+  const offset = { left: 360, top: 24 }
+  canvasEl.getBoundingClientRect = () => ({
+    left: offset.left,
+    top: offset.top,
+    right: offset.left + 800,
+    bottom: offset.top + 600,
+    width: 800,
+    height: 600,
+  })
+
+  const from = clientPoint(nodeCenter(layout, 'feeder-1'), offset)
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, clientPoint({ x: 10, y: 300 }, offset))
+
+  for (let i = 0; i < 5; i++) frames.runNext(16 * (i + 1))
+
+  assert.equal(wrapper.emitted('viewport-change').length > 0, true)
+  const lastViewport = wrapper.emitted('viewport-change').at(-1)[0]
+  assert.notEqual(lastViewport.x, 0)
+
+  dispatchPointerUp(wrapper, clientPoint({ x: 10, y: 300 }, offset))
   wrapper.destroy()
 })

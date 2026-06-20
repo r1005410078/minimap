@@ -726,7 +726,7 @@ function handlePointerDown(event) {
       nodeId,
       fromParentId: node.parentId,
       additive: isAdditiveSelection(event),
-      startScreen: { x: event.clientX, y: event.clientY },
+      startScreen: screenPointFromEvent(event),
       dragging: false,
       targetParentId: null,
       targetGroupId: null,
@@ -816,7 +816,7 @@ function handlePointerMove(event) {
     updateScrollbarHover(scrollbarHit?.group.id ?? null)
     return
   }
-  const screenPoint = { x: event.clientX, y: event.clientY }
+  const screenPoint = screenPointFromEvent(event)
   const worldPoint = pointFromEvent(event)
   dragState.lastScreenPoint = screenPoint
 
@@ -864,6 +864,13 @@ function handlePointerUp() {
     cancelAutoScrollLoop()
     cancelDragShiftLoop()
     cancelEdgePanLoop()
+    let renderAfterDrag = false
+    let updateLayoutAfterDrag = false
+    let groupScrollPatch = null
+    let groupReorderPayload = null
+    let nodeMovePayload = null
+    let changeResult = null
+
     if (dragState.targetParentId) {
       const parent = props.graph.nodes.get(dragState.targetParentId)
       const targetGroup = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
@@ -886,16 +893,16 @@ function handlePointerUp() {
           before: props.beforeGroupReorder,
         })
         if (result.applied) {
-          if (targetGroup) updateGroupState(targetGroup.id, { scrollTop: targetGroup.scrollTop })
-          updateLayout()
-          emit('group-reorder', {
+          if (targetGroup) groupScrollPatch = { groupId: targetGroup.id, scrollTop: targetGroup.scrollTop }
+          updateLayoutAfterDrag = true
+          groupReorderPayload = {
             groupId: dragState.targetGroupId,
             childId: dragState.nodeId,
             index: result.operation.payload.index,
-          })
-          emitChange(result)
+          }
+          changeResult = result
         } else {
-          renderCurrent()
+          renderAfterDrag = true
         }
       } else {
         const operation = {
@@ -907,21 +914,30 @@ function handlePointerUp() {
           before: props.beforeNodeMove,
         })
         if (result.applied) {
-          updateLayout()
-          emit('node-move', {
+          updateLayoutAfterDrag = true
+          nodeMovePayload = {
             nodeId: dragState.nodeId,
             fromParentId: dragState.fromParentId,
             toParentId: dragState.targetParentId,
             index: result.operation.payload.index,
-          })
-          emitChange(result)
+          }
+          changeResult = result
         } else {
-          renderCurrent()
+          renderAfterDrag = true
         }
       }
     } else {
-      renderCurrent()
+      renderAfterDrag = true
     }
+
+    dragState = null
+    if (groupScrollPatch) updateGroupState(groupScrollPatch.groupId, { scrollTop: groupScrollPatch.scrollTop })
+    if (updateLayoutAfterDrag) updateLayout()
+    if (groupReorderPayload) emit('group-reorder', groupReorderPayload)
+    if (nodeMovePayload) emit('node-move', nodeMovePayload)
+    if (changeResult) emitChange(changeResult)
+    if (renderAfterDrag) renderCurrent()
+    return
   } else {
     setSelected(applySelectionClick(currentSelectedIds(), dragState.nodeId, { additive: dragState.additive }))
   }
