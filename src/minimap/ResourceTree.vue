@@ -92,11 +92,11 @@ function onDragStart(item, event) {
 }
 .resource-category-row {
   display: grid;
-  grid-template-columns: 12px 1fr auto;
+  grid-template-columns: 8px 1fr auto;
   align-items: center;
   gap: 4px;
   min-height: 28px;
-  padding: 0 6px;
+  padding: 0 4px;
   color: #87909c;
   font-weight: 600;
 }
