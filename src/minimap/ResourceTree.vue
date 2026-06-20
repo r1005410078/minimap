@@ -2,9 +2,24 @@
 // 资源树展示：两层——分类（不可拖）+ 叶子资源项（可拖）。
 // 拖拽信息走原生 dataTransfer，由 Minimap.vue 的 drop 处理器读取。
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
+import { ref } from 'vue'
+
 defineProps({
   resources: { type: Array, default: () => [] },
 })
+
+const expandedOverrides = ref({})
+
+function isExpanded(category) {
+  return expandedOverrides.value[category.category] ?? category.expanded !== false
+}
+
+function toggleCategory(category) {
+  expandedOverrides.value = {
+    ...expandedOverrides.value,
+    [category.category]: !isExpanded(category),
+  }
+}
 
 function onDragStart(item, event) {
   event.dataTransfer.setData('application/json', JSON.stringify(item))
@@ -23,12 +38,20 @@ function onDragStart(item, event) {
       <span class="resource-search-placeholder">搜索节点...</span>
     </div>
     <div v-for="category in resources" :key="category.category" class="resource-category">
-      <div class="resource-category-row" :class="{ 'is-collapsed': category.expanded === false }">
-        <span class="resource-category-caret">{{ category.expanded === false ? '›' : '⌄' }}</span>
+      <div
+        class="resource-category-row"
+        :class="{ 'is-collapsed': !isExpanded(category) }"
+        role="button"
+        tabindex="0"
+        @click="toggleCategory(category)"
+        @keydown.enter.prevent="toggleCategory(category)"
+        @keydown.space.prevent="toggleCategory(category)"
+      >
+        <span class="resource-category-caret">{{ isExpanded(category) ? '⌄' : '›' }}</span>
         <span class="resource-category-label">{{ category.category }}</span>
         <span class="resource-category-count">{{ category.count ?? category.items.length }}</span>
       </div>
-      <div v-show="category.expanded !== false" class="resource-items">
+      <div v-show="isExpanded(category)" class="resource-items">
         <div
           v-for="item in category.items"
           :key="item.id"

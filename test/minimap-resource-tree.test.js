@@ -43,6 +43,22 @@ test('renders the reference resource tree categories, counts, and draggable item
   wrapper.destroy()
 })
 
+test('clicking a category row toggles its expanded state locally', async () => {
+  const wrapper = mount(ResourceTree, { propsData: { resources } })
+  const firstCategory = wrapper.findAll('.resource-category').at(0)
+
+  assert.equal(firstCategory.find('[data-resource-id="site"]').exists(), true)
+
+  await firstCategory.find('.resource-category-row').trigger('click')
+  assert.equal(firstCategory.find('[data-resource-id="site"]').isVisible(), false)
+  assert.equal(firstCategory.find('.resource-category-caret').text(), '›')
+
+  await firstCategory.find('.resource-category-row').trigger('click')
+  assert.equal(firstCategory.find('[data-resource-id="site"]').isVisible(), true)
+  assert.equal(firstCategory.find('.resource-category-caret').text(), '⌄')
+  wrapper.destroy()
+})
+
 test('dragstart serializes the resource payload into dataTransfer', () => {
   const wrapper = mount(ResourceTree, { propsData: { resources } })
   const fakeDataTransfer = {
