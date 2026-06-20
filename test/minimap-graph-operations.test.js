@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDemoGraph } from '../src/minimap/graph.js'
-import { createGraphOperationManager } from '../src/minimap/graph-operations.js'
+import { createGraphOperationManager, captureSubtreeSnapshot } from '../src/minimap/graph-operations.js'
 
 function labels(graph, parentId) {
   return graph.nodes.get(parentId).children.slice()
@@ -206,59 +206,6 @@ test('delete-nodes removes selected subtrees, root ids, and related edges with u
   assert.deepEqual(graph.edges, [])
 })
 
-test('copy-nodes duplicates selected subtrees with stable ids and undo redo', () => {
-  const graph = createDemoGraph()
-  const manager = createGraphOperationManager(graph)
-
-  const result = manager.apply({
-    type: 'copy-nodes',
-    payload: {
-      ids: ['grid-tie', 'feeder-1'],
-      expandedIds: ['grid-tie', 'feeder-1'],
-      idMap: {
-        'grid-tie': 'copy-grid-tie-1',
-        'feeder-1': 'copy-feeder-1-1',
-        'feeder-2': 'copy-feeder-2-1',
-        'feeder-3': 'copy-feeder-3-1',
-      },
-    },
-  })
-
-  assert.equal(result.applied, true)
-  assert.equal(graph.nodes.has('copy-grid-tie-1'), true)
-  assert.deepEqual(graph.nodes.get('copy-grid-tie-1').children, [
-    'copy-feeder-1-1',
-    'copy-feeder-2-1',
-    'copy-feeder-3-1',
-  ])
-  assert.equal(graph.nodes.get('copy-feeder-1-1').parentId, 'copy-grid-tie-1')
-  assert.deepEqual(graph.nodes.get('energy-root').children.slice(0, 2), ['grid-tie', 'copy-grid-tie-1'])
-
-  manager.undo()
-  assert.equal(graph.nodes.has('copy-grid-tie-1'), false)
-
-  manager.redo()
-  assert.equal(graph.nodes.has('copy-grid-tie-1'), true)
-})
-
-test('copy-nodes can copy a root and insert the copied root after the original', () => {
-  const graph = createDemoGraph()
-  const manager = createGraphOperationManager(graph)
-
-  const result = manager.apply({
-    type: 'copy-nodes',
-    payload: {
-      ids: ['energy-root'],
-      expandedIds: ['energy-root'],
-      idMap: Object.fromEntries([...graph.nodes.keys()].map((id) => [id, `copy-${id}-1`])),
-    },
-  })
-
-  assert.equal(result.applied, true)
-  assert.deepEqual(graph.rootIds, ['energy-root', 'copy-energy-root-1'])
-  assert.equal(graph.nodes.get('copy-energy-root-1').parentId, null)
-})
-
 test('replace-graph swaps graph contents and can undo redo', () => {
   const graph = createDemoGraph()
   const manager = createGraphOperationManager(graph)
@@ -299,9 +246,10 @@ test('replace-graph rejects graph payloads with missing edges', () => {
   assert.equal(result.reason, 'invalid')
 })
 
-test('delete copy and import operations respect readonly and before hooks', () => {
+test('delete paste and import operations respect readonly and before hooks', () => {
   const graph = createDemoGraph()
   const manager = createGraphOperationManager(graph)
+  const snapshot = captureSubtreeSnapshot(graph, ['grid-tie'])
 
   assert.equal(
     manager.apply(
@@ -313,8 +261,17 @@ test('delete copy and import operations respect readonly and before hooks', () =
   assert.equal(
     manager.apply(
       {
-        type: 'copy-nodes',
-        payload: { ids: ['grid-tie'], expandedIds: ['grid-tie'], idMap: { 'grid-tie': 'copy-grid-tie-1' } },
+        type: 'paste-nodes',
+        payload: {
+          targetParentId: 'cluster-25',
+          snapshot,
+          idMap: {
+            'grid-tie': 'paste-grid-tie-1',
+            'feeder-1': 'paste-feeder-1-1',
+            'feeder-2': 'paste-feeder-2-1',
+            'feeder-3': 'paste-feeder-3-1',
+          },
+        },
       },
       { before: () => false },
     ).reason,
@@ -329,17 +286,118 @@ test('delete copy and import operations respect readonly and before hooks', () =
   )
 })
 
-test('delete and copy return empty or invalid for unusable payloads', () => {
+test('delete and paste return empty or invalid for unusable payloads', () => {
   const graph = createDemoGraph()
   const manager = createGraphOperationManager(graph)
+  const snapshot = captureSubtreeSnapshot(graph, ['grid-tie'])
 
   assert.equal(manager.apply({ type: 'delete-nodes', payload: { ids: [], expandedIds: [] } }).reason, 'empty')
-  assert.equal(manager.apply({ type: 'copy-nodes', payload: { ids: [], expandedIds: [], idMap: {} } }).reason, 'empty')
+  assert.equal(
+    manager.apply({ type: 'paste-nodes', payload: { targetParentId: null, snapshot, idMap: {} } }).reason,
+    'empty',
+  )
   assert.equal(
     manager.apply({
-      type: 'copy-nodes',
-      payload: { ids: ['grid-tie'], expandedIds: ['grid-tie'], idMap: {} },
+      type: 'paste-nodes',
+      payload: { targetParentId: 'cluster-25', snapshot: { rootIds: [], nodes: [] }, idMap: {} },
+    }).reason,
+    'empty',
+  )
+  assert.equal(
+    manager.apply({
+      type: 'paste-nodes',
+      payload: { targetParentId: 'cluster-25', snapshot, idMap: {} },
     }).reason,
     'invalid',
   )
+})
+
+test('captureSubtreeSnapshot returns a JSON-safe snapshot decoupled from the live graph', () => {
+  const graph = createDemoGraph()
+
+  const snapshot = captureSubtreeSnapshot(graph, ['grid-tie'])
+
+  assert.deepEqual(snapshot.rootIds, ['grid-tie'])
+  assert.equal(snapshot.nodes.length, 4)
+  assert.equal(snapshot.nodes.some((node) => node.id === 'grid-tie'), true)
+  assert.equal(snapshot.nodes.some((node) => node.id === 'feeder-1'), true)
+  assert.equal(JSON.parse(JSON.stringify(snapshot)).nodes.length, 4)
+
+  const clonedNode = snapshot.nodes.find((node) => node.id === 'grid-tie')
+  clonedNode.children.push('mutated')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-1', 'feeder-2', 'feeder-3'])
+})
+
+test('captureSubtreeSnapshot deduplicates a selected parent and its own descendant', () => {
+  const graph = createDemoGraph()
+
+  const snapshot = captureSubtreeSnapshot(graph, ['grid-tie', 'feeder-1'])
+
+  assert.deepEqual(snapshot.rootIds, ['grid-tie'])
+  assert.equal(snapshot.nodes.length, 4)
+})
+
+test('captureSubtreeSnapshot returns an empty snapshot for an empty selection', () => {
+  const graph = createDemoGraph()
+
+  assert.deepEqual(captureSubtreeSnapshot(graph, []), { rootIds: [], nodes: [] })
+})
+
+test('paste-nodes inserts a snapshot as children of the target and can undo redo', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+  const snapshot = captureSubtreeSnapshot(graph, ['grid-tie'])
+
+  const result = manager.apply({
+    type: 'paste-nodes',
+    payload: {
+      targetParentId: 'cluster-25',
+      snapshot,
+      idMap: {
+        'grid-tie': 'paste-grid-tie-1',
+        'feeder-1': 'paste-feeder-1-1',
+        'feeder-2': 'paste-feeder-2-1',
+        'feeder-3': 'paste-feeder-3-1',
+      },
+    },
+  })
+
+  assert.equal(result.applied, true)
+  assert.deepEqual(result.operation.payload.pastedIds, ['paste-grid-tie-1'])
+  assert.equal(graph.nodes.has('paste-grid-tie-1'), true)
+  assert.deepEqual(graph.nodes.get('paste-grid-tie-1').children, [
+    'paste-feeder-1-1',
+    'paste-feeder-2-1',
+    'paste-feeder-3-1',
+  ])
+  assert.equal(graph.nodes.get('paste-feeder-1-1').parentId, 'paste-grid-tie-1')
+  assert.equal(graph.nodes.get('paste-grid-tie-1').parentId, 'cluster-25')
+  assert.equal(graph.nodes.get('cluster-25').children.at(-1), 'paste-grid-tie-1')
+  assert.equal(graph.nodes.has('grid-tie'), true)
+
+  manager.undo()
+  assert.equal(graph.nodes.has('paste-grid-tie-1'), false)
+  assert.equal(graph.nodes.get('cluster-25').children.includes('paste-grid-tie-1'), false)
+
+  manager.redo()
+  assert.equal(graph.nodes.has('paste-grid-tie-1'), true)
+})
+
+test('paste-nodes can be applied twice with different idMaps without id collisions', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+  const snapshot = captureSubtreeSnapshot(graph, ['feeder-1'])
+
+  manager.apply({
+    type: 'paste-nodes',
+    payload: { targetParentId: 'cluster-25', snapshot, idMap: { 'feeder-1': 'paste-feeder-1-1' } },
+  })
+  manager.apply({
+    type: 'paste-nodes',
+    payload: { targetParentId: 'cluster-25', snapshot, idMap: { 'feeder-1': 'paste-feeder-1-2' } },
+  })
+
+  assert.equal(graph.nodes.has('paste-feeder-1-1'), true)
+  assert.equal(graph.nodes.has('paste-feeder-1-2'), true)
+  assert.deepEqual(graph.nodes.get('cluster-25').children.slice(-2), ['paste-feeder-1-1', 'paste-feeder-1-2'])
 })

@@ -154,52 +154,55 @@ function applyDeleteNodes(graph, operation) {
   })
 }
 
-function cloneSubtree(graph, sourceId, idMap, copiedNodes) {
-  const source = graph.nodes.get(sourceId)
-  const copyId = idMap[sourceId]
-  if (!source || !copyId || graph.nodes.has(copyId)) return false
-  const childCopies = []
-  for (const childId of source.children || []) {
-    if (!cloneSubtree(graph, childId, idMap, copiedNodes)) return false
-    childCopies.push(idMap[childId])
-  }
-  copiedNodes.set(copyId, {
-    ...source,
-    id: copyId,
-    parentId: source.parentId && idMap[source.parentId] ? idMap[source.parentId] : source.parentId,
-    children: childCopies,
+export function captureSubtreeSnapshot(graph, expandedIds) {
+  const ids = highestExistingIds(graph, expandedIds || [])
+  if (ids.length === 0) return { rootIds: [], nodes: [] }
+  const included = new Set()
+  for (const id of ids) collectDescendants(graph, id, included)
+  const nodes = [...included].map((id) => {
+    const node = graph.nodes.get(id)
+    return { ...node, children: [...(node.children || [])] }
   })
-  return true
+  return { rootIds: ids, nodes }
 }
 
-function applyCopyNodes(graph, operation) {
-  const ids = highestExistingIds(graph, operation.payload.expandedIds || operation.payload.ids || [])
-  if (ids.length === 0) return blockedResult(graph, operation, 'empty')
-  const before = cloneGraphData(graph)
-  const copiedNodes = new Map()
-  const idMap = operation.payload.idMap || {}
-  for (const id of ids) {
-    if (!cloneSubtree(graph, id, idMap, copiedNodes)) return blockedResult(graph, operation, 'invalid')
+function applyPasteNodes(graph, operation) {
+  const { targetParentId, snapshot, idMap } = operation.payload
+  const target = targetParentId ? graph.nodes.get(targetParentId) : null
+  if (!target) return blockedResult(graph, operation, 'empty')
+  if (
+    !snapshot ||
+    !Array.isArray(snapshot.nodes) ||
+    snapshot.nodes.length === 0 ||
+    !Array.isArray(snapshot.rootIds) ||
+    snapshot.rootIds.length === 0
+  ) {
+    return blockedResult(graph, operation, 'empty')
+  }
+  const map = idMap || {}
+  for (const node of snapshot.nodes) {
+    if (!map[node.id]) return blockedResult(graph, operation, 'invalid')
   }
 
-  for (const [id, node] of copiedNodes) graph.nodes.set(id, node)
-  for (const sourceId of ids) {
-    const source = graph.nodes.get(sourceId)
-    const copyId = idMap[sourceId]
-    if (source.parentId) {
-      const parent = graph.nodes.get(source.parentId)
-      const sourceIndex = parent.children.indexOf(sourceId)
-      parent.children.splice(sourceIndex + 1, 0, copyId)
-    } else {
-      const sourceIndex = graph.rootIds.indexOf(sourceId)
-      graph.rootIds.splice(sourceIndex + 1, 0, copyId)
-    }
+  const before = cloneGraphData(graph)
+  const snapshotIds = new Set(snapshot.nodes.map((node) => node.id))
+  for (const node of snapshot.nodes) {
+    const newId = map[node.id]
+    const parentId = node.parentId && snapshotIds.has(node.parentId) ? map[node.parentId] : targetParentId
+    graph.nodes.set(newId, {
+      ...node,
+      id: newId,
+      parentId,
+      children: (node.children || []).map((childId) => map[childId]),
+    })
   }
+  const pastedIds = snapshot.rootIds.map((id) => map[id])
+  target.children = [...target.children, ...pastedIds]
 
   return result({
     applied: true,
     type: operation.type,
-    operation: { ...operation, payload: { ...operation.payload, copiedIds: [...copiedNodes.keys()] } },
+    operation: { ...operation, payload: { ...operation.payload, pastedIds } },
     inverse: { type: 'replace-graph', payload: { graph: before } },
     graph,
   })
@@ -226,7 +229,7 @@ function applyOperation(graph, operation) {
   if (operation.type === 'remove-dropped-node') return applyRemoveDroppedNode(graph, operation)
   if (operation.type === 'reorder-group-child') return applyReorderGroupChild(graph, operation)
   if (operation.type === 'delete-nodes') return applyDeleteNodes(graph, operation)
-  if (operation.type === 'copy-nodes') return applyCopyNodes(graph, operation)
+  if (operation.type === 'paste-nodes') return applyPasteNodes(graph, operation)
   if (operation.type === 'replace-graph') return applyReplaceGraph(graph, operation)
   return blockedResult(graph, operation, 'invalid')
 }
