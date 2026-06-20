@@ -7,7 +7,7 @@
 ## 目标
 
 - 资源树条目可以直接拖到任意普通节点上，新增为该节点的子节点。
-- 资源拖到分组框内部 item 上时，新增到该分组真实父节点下，并尽量按鼠标位置计算插入下标。
+- 资源拖到分组框内部 item 上时，该 item 也按真实节点处理，新增为这个 item 节点的子节点。
 - 资源拖到空白区域时保留旧行为：优先挂到当前选中节点，否则挂到第一个 root。
 - 继续复用现有 `drop-node` operation，不新增新的 graph mutation 通道。
 
@@ -20,10 +20,10 @@
 3. 如果命中普通节点 `{ type: 'node', id }`：
    - `parentId = id`
    - `index = graph.nodes.get(id).children.length`
-4. 如果命中分组框 item `{ type: 'group', zone: 'item' }`：
-   - `parentId = group.parentId`
-   - `index = groupInsertIndexToParentIndex(parent, group, null, groupGridIndexAt(group, point))`
-   - 这里没有被拖动的现有 child，所以不需要从 children 中过滤某个 id。
+4. 如果命中分组框 item `{ type: 'group', zone: 'item', childId }`：
+   - `parentId = childId`
+   - `index = graph.nodes.get(childId).children.length`
+   - 这样分组框内部 item 与普通节点保持一致，都能直接接收资源作为子节点。
 5. 其他命中（分组 header/body）或未命中：
    - `parentId = selectedIds[0] ?? graph.rootIds[0]`
    - `index = findInsertionIndex(graph, layout, parentId, point, layoutDirection)`
@@ -38,4 +38,5 @@
 
 - 新增测试：资源拖到普通节点上，新增节点的 `parentId` 等于该节点 id，插入到其 `children` 末尾，并触发 `node-drop/change`。
 - 新增测试：即使当前已有选中节点，资源拖到另一个普通节点上时，鼠标命中的节点优先于选中节点。
+- 回归测试：资源拖到已选中的分组框 item 上时，新增为该 item 的子节点，保持原有“拆出分组”能力。
 - 回归测试：空白区域拖入仍使用选中节点或 root。

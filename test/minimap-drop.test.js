@@ -36,6 +36,11 @@ function dispatchDrop(wrapper, payload, point) {
   canvasEl.dispatchEvent(evt)
 }
 
+function nodeCenter(layout, nodeId) {
+  const rect = layout.nodes.get(nodeId)
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
 test('dropping with no selection adds a child under graph.rootIds[0]', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
@@ -57,6 +62,39 @@ test('dropping with no selection adds a child under graph.rootIds[0]', () => {
   assert.equal(change.operation.payload.index, 0)
   assert.equal(change.nextGraph, graph)
   assert.equal(change.reason, null)
+  wrapper.destroy()
+})
+
+test('dropping onto a plain node adds the resource as that node child', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const targetPoint = nodeCenter(layout, 'feeder-2')
+
+  dispatchDrop(wrapper, { id: 'battery-bank', label: 'Battery Bank' }, targetPoint)
+
+  const payload = wrapper.emitted('node-drop')[0][0]
+  assert.equal(payload.parentId, 'feeder-2')
+  assert.equal(payload.index, 0)
+  const feeder2 = graph.nodes.get('feeder-2')
+  assert.equal(feeder2.children.length, 1)
+  assert.ok(feeder2.children[0].startsWith('res-battery-bank-'))
+  assert.equal(graph.nodes.get(feeder2.children[0]).parentId, 'feeder-2')
+  wrapper.destroy()
+})
+
+test('dropping onto a plain node takes precedence over the current selection', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['grid-tie'] } })
+  const targetPoint = nodeCenter(layout, 'feeder-2')
+
+  dispatchDrop(wrapper, { id: 'pcs-device', label: 'PCS Device' }, targetPoint)
+
+  const payload = wrapper.emitted('node-drop')[0][0]
+  assert.equal(payload.parentId, 'feeder-2')
+  assert.equal(graph.nodes.get('feeder-2').children.length, 1)
+  assert.equal(graph.nodes.get('grid-tie').children.some((id) => id.startsWith('res-pcs-device-')), false)
   wrapper.destroy()
 })
 

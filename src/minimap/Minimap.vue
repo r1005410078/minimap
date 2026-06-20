@@ -1015,6 +1015,28 @@ function emitChange(result) {
   })
 }
 
+function resolveResourceDropTarget(point) {
+  const hit = hitTest(layout, point)
+  if (hit?.type === 'node') {
+    const parent = props.graph.nodes.get(hit.id)
+    if (parent) return { parentId: hit.id, index: parent.children.length }
+  }
+
+  if (hit?.type === 'group' && hit.zone === 'item') {
+    const parent = props.graph.nodes.get(hit.childId)
+    if (parent) return { parentId: hit.childId, index: parent.children.length }
+  }
+
+  const selected = currentSelectedIds()
+  const parentId = selected[0] ?? props.graph.rootIds[0]
+  const parent = props.graph.nodes.get(parentId)
+  if (!parent) return null
+  return {
+    parentId,
+    index: findInsertionIndex(props.graph, layout, parentId, point, props.layoutDirection),
+  }
+}
+
 function handleDrop(event) {
   event.preventDefault()
   settleAnimation()
@@ -1024,12 +1046,9 @@ function handleDrop(event) {
   const resource = JSON.parse(raw)
 
   const point = pointFromEvent(event)
-  const selected = currentSelectedIds()
-  const parentId = selected[0] ?? props.graph.rootIds[0]
-  const parent = props.graph.nodes.get(parentId)
-  if (!parent) return
-
-  const index = findInsertionIndex(props.graph, layout, parentId, point, props.layoutDirection)
+  const target = resolveResourceDropTarget(point)
+  if (!target) return
+  const { parentId, index } = target
   const id = `res-${resource.id}-${Date.now()}`
   const operation = {
     type: 'drop-node',
