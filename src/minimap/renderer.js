@@ -442,18 +442,18 @@ function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, 
     if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
     else drawNode(ctx, node, childRect, itemState, theme)
   }
-  if (dragContext) {
-    const node = graph.nodes.get(dragContext.draggingChildId)
-    if (node) {
-      const itemState = { ...makeState(dragContext.draggingChildId, selectedIds, highlightedIds, dimmedIds), dragging: true }
-      const previousAlpha = ctx.globalAlpha ?? 1
-      ctx.globalAlpha = 0.85
-      if (renderers.node) renderers.node(ctx, { node, rect: dragContext.ghostRect, state: itemState, theme, viewport })
-      else drawNode(ctx, node, dragContext.ghostRect, itemState, theme)
-      ctx.globalAlpha = previousAlpha
-    }
-  }
   ctx.restore()
+}
+
+function drawNodeDragGhost(ctx, graph, nodeDrag, theme, renderers, viewport, selectedIds, highlightedIds, dimmedIds) {
+  const node = graph.nodes.get(nodeDrag.draggingChildId)
+  if (!node) return
+  const itemState = { ...makeState(nodeDrag.draggingChildId, selectedIds, highlightedIds, dimmedIds), dragging: true }
+  const previousAlpha = ctx.globalAlpha ?? 1
+  ctx.globalAlpha = 0.85
+  if (renderers.node) renderers.node(ctx, { node, rect: nodeDrag.ghostRect, state: itemState, theme, viewport })
+  else drawNode(ctx, node, nodeDrag.ghostRect, itemState, theme)
+  ctx.globalAlpha = previousAlpha
 }
 
 // --- 入口 ---
@@ -537,11 +537,16 @@ export function renderScene(ctx, scene) {
 
   for (const { item, screen } of items) {
     if (item.type !== 'node') continue
+    if (state.groupDrag?.draggingChildId === item.id) continue
     const node = graph.nodes.get(item.id)
     const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })
     else drawNode(ctx, node, screen, itemState, theme)
     drawn++
+  }
+
+  if (state.groupDrag) {
+    drawNodeDragGhost(ctx, graph, state.groupDrag, theme, renderers, viewport, selectedIds, highlightedIds, dimmedIds)
   }
 
   if (state.selectionRect) drawSelectionRect(ctx, state.selectionRect, theme)

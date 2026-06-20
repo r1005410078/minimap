@@ -754,3 +754,29 @@ test('group children are clipped below the header while scrolling', () => {
   })
   assert.notEqual(clipIndex, -1)
 })
+
+test('renderScene draws a node drag ghost even when no group is the active drop target', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  const draggingNodeId = 'feeder-1'
+  const ghostRect = { x: 420, y: 180, width: 160, height: 34 }
+
+  renderScene(ctx, {
+    ...scene,
+    state: {
+      groupDrag: {
+        groupId: null,
+        order: null,
+        draggingChildId: draggingNodeId,
+        ghostRect,
+        childRectsById: null,
+        dropSlotOpacity: 1,
+      },
+    },
+  })
+
+  const draggedNode = scene.graph.nodes.get(draggingNodeId)
+  const draggedLabelCalls = ctx.methodsOf('fillText').filter((call) => call.args[0] === draggedNode.label)
+  assert.equal(draggedLabelCalls.length, 1)
+  assert.deepEqual(draggedLabelCalls[0].args.slice(1), [ghostRect.x + 10, ghostRect.y + ghostRect.height / 2])
+})
