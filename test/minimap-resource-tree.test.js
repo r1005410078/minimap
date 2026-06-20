@@ -51,11 +51,11 @@ test('clicking a category row toggles its expanded state locally', async () => {
 
   await firstCategory.find('.resource-category-row').trigger('click')
   assert.equal(firstCategory.find('[data-resource-id="site"]').isVisible(), false)
-  assert.equal(firstCategory.find('.resource-category-caret').text(), '▸')
+  assert.equal(firstCategory.find('.resource-category-row').classes().includes('is-collapsed'), true)
 
   await firstCategory.find('.resource-category-row').trigger('click')
   assert.equal(firstCategory.find('[data-resource-id="site"]').isVisible(), true)
-  assert.equal(firstCategory.find('.resource-category-caret').text(), '▾')
+  assert.equal(firstCategory.find('.resource-category-row').classes().includes('is-collapsed'), false)
   wrapper.destroy()
 })
 

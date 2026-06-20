@@ -47,7 +47,7 @@ function onDragStart(item, event) {
         @keydown.enter.prevent="toggleCategory(category)"
         @keydown.space.prevent="toggleCategory(category)"
       >
-        <span class="resource-category-caret">{{ isExpanded(category) ? '▾' : '▸' }}</span>
+        <span class="resource-category-caret" aria-hidden="true"></span>
         <span class="resource-category-label">{{ category.category }}</span>
         <span class="resource-category-count">{{ category.items.length }}</span>
       </div>
@@ -124,7 +124,24 @@ function onDragStart(item, event) {
   font-weight: 600;
 }
 .resource-category-caret {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 8px;
+}
+.resource-category-caret::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transform: rotate(90deg);
+  transform-origin: 45% 50%;
+}
+.resource-category-row.is-collapsed .resource-category-caret::before {
+  transform: rotate(0deg);
 }
 .resource-category-count {
   min-width: 22px;
