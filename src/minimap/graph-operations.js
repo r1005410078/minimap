@@ -182,6 +182,7 @@ function applyPasteNodes(graph, operation) {
   const map = idMap || {}
   for (const node of snapshot.nodes) {
     if (!map[node.id]) return blockedResult(graph, operation, 'invalid')
+    if (graph.nodes.has(map[node.id])) return blockedResult(graph, operation, 'invalid')
   }
 
   const before = cloneGraphData(graph)

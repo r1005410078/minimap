@@ -401,3 +401,27 @@ test('paste-nodes can be applied twice with different idMaps without id collisio
   assert.equal(graph.nodes.has('paste-feeder-1-2'), true)
   assert.deepEqual(graph.nodes.get('cluster-25').children.slice(-2), ['paste-feeder-1-1', 'paste-feeder-1-2'])
 })
+
+test('paste-nodes rejects idMap values that collide with existing node ids', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+  const snapshot = captureSubtreeSnapshot(graph, ['feeder-1'])
+  const gridTieOriginalLabel = graph.nodes.get('grid-tie').label
+  const gridTieOriginalParentId = graph.nodes.get('grid-tie').parentId
+  const cluster25ChildrenBefore = graph.nodes.get('cluster-25').children.slice()
+
+  const result = manager.apply({
+    type: 'paste-nodes',
+    payload: {
+      targetParentId: 'cluster-25',
+      snapshot,
+      idMap: { 'feeder-1': 'grid-tie' },
+    },
+  })
+
+  assert.equal(result.applied, false)
+  assert.equal(result.reason, 'invalid')
+  assert.equal(graph.nodes.get('grid-tie').label, gridTieOriginalLabel)
+  assert.equal(graph.nodes.get('grid-tie').parentId, gridTieOriginalParentId)
+  assert.deepEqual(graph.nodes.get('cluster-25').children, cluster25ChildrenBefore)
+})
