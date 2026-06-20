@@ -317,6 +317,36 @@ test('plain node drop target is recognized and can be dropped on', () => {
   wrapper.destroy()
 })
 
+test('dragging an already-selected node shows the live drop target highlight, not the stale selection relation', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  // feeder-1 is selected before the drag starts (e.g. from an earlier click), so
+  // buildSelectionRelations would normally highlight its parent (grid-tie) and dim
+  // everything else - that must not fight with the live drag-target highlight.
+  wrapper.vm.select(['feeder-1'])
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodeCenter(layout, 'cluster-25')
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+
+  const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
+  assert.ok(
+    highlightedMidDrag.includes('Cluster 25'),
+    `cluster-25 should be highlighted as the live drop target even though feeder-1 was already selected; got: ${highlightedMidDrag}`,
+  )
+  assert.ok(
+    !highlightedMidDrag.includes('Grid Tie'),
+    `feeder-1's old parent (grid-tie) should not show the stale selection-relation highlight while dragging; got: ${highlightedMidDrag}`,
+  )
+
+  dispatchPointerUp(wrapper, to)
+  wrapper.destroy()
+})
+
 test('dragging near the canvas edge pans the viewport', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)

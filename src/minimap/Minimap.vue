@@ -381,7 +381,11 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
   if (!ctx || !currentLayout) return
   lastRenderedLayout = currentLayout
   lastRenderedViewport = { ...renderViewport }
-  const relations = buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
+  // 拖拽过程中暂时不展示旧选区的父子关系高亮/降权——否则会跟拖拽目标高亮互相打架，
+  // 视觉上显得"父节点亮了"而不是真正悬停的目标（旧选区跟当前拖拽目标是两件不相关的事）。
+  const relations = dragState?.dragging
+    ? buildSelectionRelations(props.graph, currentLayout, [])
+    : buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
   const dragHighlightId =
     dragState?.dragging && !dragState.targetGroupId && dragState.targetParentId ? dragState.targetParentId : null
   const highlightedIds = dragHighlightId
