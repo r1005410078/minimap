@@ -306,13 +306,12 @@ test('plain node drop target is recognized and can be dropped on', () => {
 
   // Start drag on feeder-1
   dispatchPointerDown(wrapper, from)
-  // Hover over a non-sibling plain node WITHOUT releasing yet - this should highlight it as drop target
+  // Hover over a non-sibling plain node - this should show an attach preview
   dispatchPointerMove(wrapper, to)
 
-  // Verify that cluster-25 is highlighted mid-drag (before pointerup)
-  const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
-  assert.ok(highlightedMidDrag.includes('Cluster 25'),
-    `cluster-25 should be highlighted mid-drag; got: ${highlightedMidDrag}`)
+  // Verify that a preview box is drawn (nest-mode attach preview)
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true,
+    'an attach preview should be drawn when hovering over a non-sibling node')
 
   // Complete the drag by releasing
   dispatchPointerUp(wrapper, to)
@@ -324,14 +323,14 @@ test('plain node drop target is recognized and can be dropped on', () => {
   wrapper.destroy()
 })
 
-test('dragging an already-selected node shows the live drop target highlight, not the stale selection relation', () => {
+test('dragging an already-selected node shows the live drop target preview, not the stale selection relation', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const wrapper = mount(Minimap, { propsData: { graph } })
 
   // feeder-1 is selected before the drag starts (e.g. from an earlier click), so
   // buildSelectionRelations would normally highlight its parent (grid-tie) and dim
-  // everything else - that must not fight with the live drag-target highlight.
+  // everything else - that must not fight with the live drag-target preview.
   wrapper.vm.select(['feeder-1'])
 
   const from = nodeCenter(layout, 'feeder-1')
@@ -340,11 +339,11 @@ test('dragging an already-selected node shows the live drop target highlight, no
   dispatchPointerDown(wrapper, from)
   dispatchPointerMove(wrapper, to)
 
+  // The attach preview (drop slot) should be drawn, and the stale selection highlight
+  // should not appear
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true,
+    'an attach preview should be drawn as the live drop target')
   const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
-  assert.ok(
-    highlightedMidDrag.includes('Cluster 25'),
-    `cluster-25 should be highlighted as the live drop target even though feeder-1 was already selected; got: ${highlightedMidDrag}`,
-  )
   assert.ok(
     !highlightedMidDrag.includes('Grid Tie'),
     `feeder-1's old parent (grid-tie) should not show the stale selection-relation highlight while dragging; got: ${highlightedMidDrag}`,
@@ -464,7 +463,7 @@ test('dragging a sibling onto the trailing edge of the last remaining sibling in
   wrapper.destroy()
 })
 
-test('dragging a sibling onto the middle of another sibling highlights that sibling itself, not the shared parent, and shows no insert preview', () => {
+test('dragging a sibling onto the middle of another sibling shows an attach preview for nesting it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const wrapper = mount(Minimap, { propsData: { graph } })
@@ -475,19 +474,14 @@ test('dragging a sibling onto the middle of another sibling highlights that sibl
   dispatchPointerDown(wrapper, from)
   dispatchPointerMove(wrapper, to)
 
-  const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
-  assert.ok(
-    highlightedMidDrag.includes('Feeder 2'),
-    `feeder-2 should be highlighted as the live nest target; got: ${highlightedMidDrag}`,
-  )
-  assert.ok(
-    !highlightedMidDrag.includes('Grid Tie'),
-    `the shared parent (grid-tie) should not be highlighted; got: ${highlightedMidDrag}`,
-  )
-  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), false)
+  // When dragging a sibling onto another sibling's middle (nest mode), a preview rect
+  // is drawn instead of highlighting the target node
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true,
+    'an attach preview (drop slot) should be drawn when nesting')
 
   dispatchPointerUp(wrapper, to)
 
+  // The drop should succeed, making feeder-1 a child of feeder-2
   assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2')
   assert.equal(graph.nodes.get('grid-tie').children.includes('feeder-1'), false)
   assert.equal(graph.nodes.get('feeder-2').children.includes('feeder-1'), true)

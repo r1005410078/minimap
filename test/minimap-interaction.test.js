@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout, GROUP, visibleGroupChildren } from '../src/minimap/layout.js'
+import { computeLayout, GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from '../src/minimap/layout.js'
 import {
   hitTest,
   findInsertionIndex,
@@ -342,7 +342,64 @@ test('resolveDropTarget treats the middle of a sibling rect as a nest target, no
   assert.equal(target.parentId, 'feeder-2')
   assert.equal(target.group, null)
   assert.equal(target.insertIndex, null)
-  assert.equal(target.previewRect, null)
+  assert.ok(target.previewRect)
+})
+
+test('resolveDropTarget anchors the nest-mode attach preview after the target\'s last plain child', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('grid-tie')
+  const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 }
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'grid-tie')
+  const feeder3Rect = layout.nodes.get('feeder-3')
+  assert.deepEqual(target.previewRect, {
+    x: feeder3Rect.x,
+    y: feeder3Rect.y + feeder3Rect.height,
+    width: NODE.width,
+    height: NODE.height,
+  })
+})
+
+test('resolveDropTarget falls back to a fixed offset for the nest-mode attach preview when the target has no plain children', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const feeder1Rect = layout.nodes.get('feeder-1')
+  const point = { x: feeder1Rect.x + feeder1Rect.width / 2, y: feeder1Rect.y + feeder1Rect.height / 2 }
+
+  const target = resolveDropTarget(graph, layout, point, 'cluster-25')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'feeder-1')
+  assert.deepEqual(target.previewRect, {
+    x: feeder1Rect.x + feeder1Rect.width + LEVEL_GAP,
+    y: feeder1Rect.y,
+    width: NODE.width,
+    height: NODE.height,
+  })
+})
+
+test('resolveDropTarget anchors the nest-mode attach preview along the cross axis for a vertical layout', () => {
+  const graph = createDemoGraph()
+  const verticalOpts = { ...VIEWPORT, direction: 'vertical' }
+  const layout = computeLayout(graph, verticalOpts)
+  const targetRect = layout.nodes.get('grid-tie')
+  const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 }
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1', 'vertical')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'grid-tie')
+  const feeder3Rect = layout.nodes.get('feeder-3')
+  assert.deepEqual(target.previewRect, {
+    x: feeder3Rect.x + feeder3Rect.width,
+    y: feeder3Rect.y,
+    width: NODE.width,
+    height: NODE.height,
+  })
 })
 
 test('resolveDropTarget resolves a hit in the gap between two siblings as an insert between them', () => {
