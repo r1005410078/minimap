@@ -9,6 +9,8 @@ import {
   exceedsDragThreshold,
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
+  resolveDropTarget,
+  edgePanVelocity,
 } from '../src/minimap/interaction.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
@@ -34,6 +36,13 @@ function multiGroupGraph() {
   }
   nodes.set('p', { id: 'p', label: 'p', parentId: 'root', children: childIds })
   return { version: 1, nodes, rootIds: ['root'], edges: [] }
+}
+
+function firstItemCenter(group) {
+  return {
+    x: group.x + GROUP.padding + GROUP.itemW / 2,
+    y: group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2,
+  }
 }
 
 test('hitTest finds the node under a point', () => {
@@ -252,4 +261,73 @@ test('groupInsertIndexToParentIndex offsets by the segment start when the group 
   // rest = [b0,b1,b2,b4,b5]；插到下标2，即夹在 b1 和 b2 之间。
   const index = groupInsertIndexToParentIndex(parent, bGroup, 'b3', 2)
   assert.equal(index, 9)
+})
+
+test('resolveDropTarget resolves a plain node hit as the new parent', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('feeder-2')
+  const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 }
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'feeder-2')
+  assert.equal(target.group, null)
+  assert.equal(target.insertIndex, null)
+})
+
+test('resolveDropTarget resolves a group item hit to the group real parent and an insert index', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const point = firstItemCenter(group)
+
+  const target = resolveDropTarget(graph, layout, point, 'feeder-1')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'heap-1')
+  assert.equal(target.group.id, group.id)
+  assert.equal(target.insertIndex, 0)
+})
+
+test('resolveDropTarget rejects dropping a node onto itself or its own descendant', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const selfRect = layout.nodes.get('grid-tie')
+  const descendantRect = layout.nodes.get('feeder-1')
+
+  assert.equal(
+    resolveDropTarget(graph, layout, { x: selfRect.x + 1, y: selfRect.y + 1 }, 'grid-tie').valid,
+    false,
+  )
+  assert.equal(
+    resolveDropTarget(graph, layout, { x: descendantRect.x + 1, y: descendantRect.y + 1 }, 'grid-tie').valid,
+    false,
+  )
+})
+
+test('resolveDropTarget returns invalid for a miss or a group header hit', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const headerPoint = { x: group.x + 5, y: group.y + 5 }
+
+  assert.equal(resolveDropTarget(graph, layout, { x: -9999, y: -9999 }, 'feeder-1').valid, false)
+  assert.equal(resolveDropTarget(graph, layout, headerPoint, 'feeder-1').valid, false)
+})
+
+test('edgePanVelocity returns nonzero velocity only near container edges', () => {
+  assert.deepEqual(edgePanVelocity({ x: 400, y: 300 }, 800, 600), { x: 0, y: 0 })
+  assert.ok(edgePanVelocity({ x: 2, y: 300 }, 800, 600).x < 0)
+  assert.ok(edgePanVelocity({ x: 798, y: 300 }, 800, 600).x > 0)
+  assert.ok(edgePanVelocity({ x: 400, y: 2 }, 800, 600).y < 0)
+  assert.ok(edgePanVelocity({ x: 400, y: 598 }, 800, 600).y > 0)
+})
+
+test('edgePanVelocity scales toward maxSpeed at the very edge', () => {
+  const atEdge = edgePanVelocity({ x: 0, y: 300 }, 800, 600, 24, 12)
+  const nearEdge = edgePanVelocity({ x: 20, y: 300 }, 800, 600, 24, 12)
+  assert.ok(Math.abs(atEdge.x) > Math.abs(nearEdge.x))
+  assert.ok(Math.abs(atEdge.x) <= 12)
 })

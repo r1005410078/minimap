@@ -151,3 +151,51 @@ export function groupInsertIndexToParentIndex(parent, group, draggingChildId, in
   const segmentStart = filteredParentChildren.indexOf(restGroupChildren[0])
   return segmentStart + insertIndexInRest
 }
+
+function isNodeOrDescendant(graph, nodeId, candidateId) {
+  let current = candidateId
+  while (current) {
+    if (current === nodeId) return true
+    current = graph.nodes.get(current)?.parentId ?? null
+  }
+  return false
+}
+
+// 拖拽悬停目标解析：命中分组框 item 时返回真实父节点 + 该分组 + 组内插入下标；
+// 命中普通节点时该节点本身就是新的目标父节点，不计算插入下标（追加到末尾）；
+// 命中分组框 header、命中空白、或目标是被拖节点自己/其后代时，返回 invalid。
+export function resolveDropTarget(graph, layout, point, draggedNodeId) {
+  const hit = hitTest(layout, point)
+  if (!hit) return { valid: false }
+
+  if (hit.type === 'group' && hit.zone === 'item') {
+    const group = layout.groups.find((g) => g.id === hit.id)
+    if (!group) return { valid: false }
+    const parentId = group.parentId
+    if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
+    const restGroup = { ...group, children: group.children.filter((id) => id !== draggedNodeId) }
+    const insertIndex = groupGridIndexAt(restGroup, point)
+    return { valid: true, parentId, group, insertIndex }
+  }
+
+  if (hit.type === 'node') {
+    const parentId = hit.id
+    if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
+    return { valid: true, parentId, group: null, insertIndex: null }
+  }
+
+  return { valid: false }
+}
+
+// 屏幕坐标点靠近容器边缘时返回应叠加的视口平移速度；中心区域返回 {x:0, y:0}。
+export function edgePanVelocity(screenPoint, containerWidth, containerHeight, edgeZone = 24, maxSpeed = 12) {
+  const axisVelocity = (coord, size) => {
+    if (coord < edgeZone) return -maxSpeed * Math.min(1, (edgeZone - coord) / edgeZone)
+    if (coord > size - edgeZone) return maxSpeed * Math.min(1, (coord - (size - edgeZone)) / edgeZone)
+    return 0
+  }
+  return {
+    x: axisVelocity(screenPoint.x, containerWidth),
+    y: axisVelocity(screenPoint.y, containerHeight),
+  }
+}
