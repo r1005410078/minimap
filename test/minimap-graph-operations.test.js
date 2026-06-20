@@ -284,6 +284,21 @@ test('replace-graph swaps graph contents and can undo redo', () => {
   assert.equal(graph.nodes.has('new-root'), true)
 })
 
+test('replace-graph rejects graph payloads with missing edges', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+  const malformed = {
+    version: 1,
+    nodes: new Map([['new-root', { id: 'new-root', label: 'New Root', parentId: null, children: [] }]]),
+    rootIds: ['new-root'],
+  }
+
+  const result = manager.apply({ type: 'replace-graph', payload: { graph: malformed } })
+
+  assert.equal(result.applied, false)
+  assert.equal(result.reason, 'invalid')
+})
+
 test('delete copy and import operations respect readonly and before hooks', () => {
   const graph = createDemoGraph()
   const manager = createGraphOperationManager(graph)

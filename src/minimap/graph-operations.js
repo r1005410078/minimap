@@ -207,7 +207,7 @@ function applyCopyNodes(graph, operation) {
 
 function applyReplaceGraph(graph, operation) {
   const nextGraph = operation.payload.graph
-  if (!nextGraph?.nodes || !(nextGraph.nodes instanceof Map) || !Array.isArray(nextGraph.rootIds)) {
+  if (!nextGraph?.nodes || !(nextGraph.nodes instanceof Map) || !Array.isArray(nextGraph.rootIds) || !Array.isArray(nextGraph.edges)) {
     return blockedResult(graph, operation, operation.payload.reason || 'invalid')
   }
   const before = cloneGraphData(graph)
