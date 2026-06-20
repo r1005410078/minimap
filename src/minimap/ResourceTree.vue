@@ -92,13 +92,16 @@ function onDragStart(item, event) {
 }
 .resource-category-row {
   display: grid;
-  grid-template-columns: 14px 1fr auto;
+  grid-template-columns: 12px 1fr auto;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-height: 28px;
-  padding: 0 8px;
+  padding: 0 6px;
   color: #87909c;
   font-weight: 600;
+}
+.resource-category-caret {
+  text-align: center;
 }
 .resource-category-count {
   min-width: 22px;
