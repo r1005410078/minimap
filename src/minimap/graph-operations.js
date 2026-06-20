@@ -209,6 +209,45 @@ function applyPasteNodes(graph, operation) {
   })
 }
 
+function isNodeOrDescendant(graph, nodeId, candidateId) {
+  let current = candidateId
+  while (current) {
+    if (current === nodeId) return true
+    current = graph.nodes.get(current)?.parentId ?? null
+  }
+  return false
+}
+
+function applyMoveNode(graph, operation) {
+  const { nodeId, toParentId, index } = operation.payload
+  const node = nodeId ? graph.nodes.get(nodeId) : null
+  const target = toParentId ? graph.nodes.get(toParentId) : null
+  if (!node || !target) return blockedResult(graph, operation, 'invalid')
+  if (isNodeOrDescendant(graph, nodeId, toParentId)) return blockedResult(graph, operation, 'invalid')
+
+  const before = cloneGraphData(graph)
+
+  if (node.parentId) {
+    const oldParent = graph.nodes.get(node.parentId)
+    oldParent.children = oldParent.children.filter((id) => id !== nodeId)
+  } else {
+    graph.rootIds = graph.rootIds.filter((id) => id !== nodeId)
+  }
+
+  const insertIndex = clampIndex(index, target.children.length)
+  target.children = [...target.children]
+  target.children.splice(insertIndex, 0, nodeId)
+  node.parentId = toParentId
+
+  return result({
+    applied: true,
+    type: operation.type,
+    operation: { ...operation, payload: { ...operation.payload, index: insertIndex } },
+    inverse: { type: 'replace-graph', payload: { graph: before } },
+    graph,
+  })
+}
+
 function applyReplaceGraph(graph, operation) {
   const nextGraph = operation.payload.graph
   if (!nextGraph?.nodes || !(nextGraph.nodes instanceof Map) || !Array.isArray(nextGraph.rootIds) || !Array.isArray(nextGraph.edges)) {
@@ -230,6 +269,7 @@ function applyOperation(graph, operation) {
   if (operation.type === 'remove-dropped-node') return applyRemoveDroppedNode(graph, operation)
   if (operation.type === 'reorder-group-child') return applyReorderGroupChild(graph, operation)
   if (operation.type === 'delete-nodes') return applyDeleteNodes(graph, operation)
+  if (operation.type === 'move-node') return applyMoveNode(graph, operation)
   if (operation.type === 'paste-nodes') return applyPasteNodes(graph, operation)
   if (operation.type === 'replace-graph') return applyReplaceGraph(graph, operation)
   return blockedResult(graph, operation, 'invalid')

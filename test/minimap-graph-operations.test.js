@@ -425,3 +425,98 @@ test('paste-nodes rejects idMap values that collide with existing node ids', () 
   assert.equal(graph.nodes.get('grid-tie').parentId, gridTieOriginalParentId)
   assert.deepEqual(graph.nodes.get('cluster-25').children, cluster25ChildrenBefore)
 })
+
+test('move-node moves a node and its subtree to a new parent and can undo redo', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  const result = manager.apply({
+    type: 'move-node',
+    payload: { nodeId: 'grid-tie', toParentId: 'cluster-25', index: 1 },
+  })
+
+  assert.equal(result.applied, true)
+  assert.equal(result.operation.payload.index, 1)
+  assert.equal(graph.nodes.get('grid-tie').parentId, 'cluster-25')
+  assert.equal(graph.nodes.get('energy-root').children.includes('grid-tie'), false)
+  assert.equal(graph.nodes.get('cluster-25').children[1], 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
+
+  manager.undo()
+  assert.equal(graph.nodes.get('grid-tie').parentId, 'energy-root')
+  assert.equal(graph.nodes.get('energy-root').children.includes('grid-tie'), true)
+  assert.equal(graph.nodes.get('cluster-25').children.includes('grid-tie'), false)
+
+  manager.redo()
+  assert.equal(graph.nodes.get('grid-tie').parentId, 'cluster-25')
+})
+
+test('move-node removes a moved root from rootIds', () => {
+  const graph = createDemoGraph()
+  graph.rootIds.push('standalone')
+  graph.nodes.set('standalone', { id: 'standalone', label: 'Standalone', parentId: null, children: [] })
+  const manager = createGraphOperationManager(graph)
+
+  const result = manager.apply({
+    type: 'move-node',
+    payload: { nodeId: 'standalone', toParentId: 'cluster-25', index: 0 },
+  })
+
+  assert.equal(result.applied, true)
+  assert.deepEqual(graph.rootIds, ['energy-root'])
+  assert.equal(graph.nodes.get('standalone').parentId, 'cluster-25')
+
+  manager.undo()
+  assert.deepEqual(graph.rootIds, ['energy-root', 'standalone'])
+})
+
+test('move-node rejects moving a node onto itself or its own descendant', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  assert.equal(
+    manager.apply({ type: 'move-node', payload: { nodeId: 'grid-tie', toParentId: 'grid-tie', index: 0 } }).reason,
+    'invalid',
+  )
+  assert.equal(
+    manager.apply({ type: 'move-node', payload: { nodeId: 'grid-tie', toParentId: 'feeder-1', index: 0 } }).reason,
+    'invalid',
+  )
+  assert.equal(graph.nodes.get('grid-tie').parentId, 'energy-root')
+})
+
+test('move-node returns invalid for a missing node or missing target parent', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  assert.equal(
+    manager.apply({ type: 'move-node', payload: { nodeId: 'missing', toParentId: 'cluster-25', index: 0 } }).reason,
+    'invalid',
+  )
+  assert.equal(
+    manager.apply({ type: 'move-node', payload: { nodeId: 'grid-tie', toParentId: 'missing', index: 0 } }).reason,
+    'invalid',
+  )
+})
+
+test('move-node respects readonly and before hooks', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  assert.equal(
+    manager.apply(
+      { type: 'move-node', payload: { nodeId: 'grid-tie', toParentId: 'cluster-25', index: 0 } },
+      { readonly: true },
+    ).reason,
+    'readonly',
+  )
+  assert.equal(
+    manager.apply(
+      { type: 'move-node', payload: { nodeId: 'grid-tie', toParentId: 'cluster-25', index: 0 } },
+      { before: () => false },
+    ).reason,
+    'blocked',
+  )
+  assert.equal(graph.nodes.get('grid-tie').parentId, 'energy-root')
+})
