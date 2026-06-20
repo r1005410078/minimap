@@ -43,8 +43,13 @@ test('dropping with no selection adds a child under graph.rootIds[0]', () => {
   const root = graph.nodes.get('energy-root')
   assert.equal(root.children.length, 4)
   assert.ok(root.children[0].startsWith('res-solar-array-'))
-  assert.ok(wrapper.emitted('change'))
-  assert.equal(wrapper.emitted('change')[0][0], graph)
+  const change = wrapper.emitted('change')[0][0]
+  assert.equal(change.type, 'drop-node')
+  assert.equal(change.operation.type, 'drop-node')
+  assert.equal(change.operation.payload.parentId, 'energy-root')
+  assert.equal(change.operation.payload.index, 0)
+  assert.equal(change.nextGraph, graph)
+  assert.equal(change.reason, null)
   wrapper.destroy()
 })
 
@@ -87,5 +92,45 @@ test('dropping onto a folded group appends the new node at the end', () => {
   assert.equal(payload.parentId, 'heap-1')
   assert.equal(payload.index, sizeBefore)
   assert.equal(heap.children.length, sizeBefore + 1)
+  wrapper.destroy()
+})
+
+test('readonly prevents dropping a resource into the graph', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph, readonly: true } })
+  const beforeSize = graph.nodes.size
+  const beforeChildren = graph.nodes.get('energy-root').children.slice()
+
+  dispatchDrop(wrapper, { id: 'blocked', label: 'Blocked' }, { x: 0, y: 0 })
+
+  assert.equal(graph.nodes.size, beforeSize)
+  assert.deepEqual(graph.nodes.get('energy-root').children, beforeChildren)
+  assert.equal(wrapper.emitted('node-drop'), undefined)
+  assert.equal(wrapper.emitted('change'), undefined)
+  wrapper.destroy()
+})
+
+test('beforeNodeDrop can block the default drop mutation', () => {
+  const graph = createDemoGraph()
+  const calls = []
+  const wrapper = mount(Minimap, {
+    propsData: {
+      graph,
+      beforeNodeDrop(payload) {
+        calls.push(payload)
+        return false
+      },
+    },
+  })
+  const beforeSize = graph.nodes.size
+
+  dispatchDrop(wrapper, { id: 'blocked-hook', label: 'Blocked Hook' }, { x: 0, y: 0 })
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].parentId, 'energy-root')
+  assert.equal(calls[0].resource.label, 'Blocked Hook')
+  assert.equal(graph.nodes.size, beforeSize)
+  assert.equal(wrapper.emitted('node-drop'), undefined)
+  assert.equal(wrapper.emitted('change'), undefined)
   wrapper.destroy()
 })

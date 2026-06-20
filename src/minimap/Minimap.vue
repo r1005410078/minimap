@@ -41,7 +41,7 @@ import {
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
 } from './interaction.js'
-import { reorderGroupChild } from './graph.js'
+import { createGraphOperationManager } from './graph-operations.js'
 import {
   buildVirtualOrder,
   childWorldRectsById,
@@ -76,6 +76,9 @@ const props = defineProps({
   nodeRenderer: { type: Function, default: null },
   groupRenderer: { type: Function, default: null },
   edgeRenderer: { type: Function, default: null },
+  readonly: { type: Boolean, default: false },
+  beforeNodeDrop: { type: Function, default: null },
+  beforeGroupReorder: { type: Function, default: null },
 })
 
 const emit = defineEmits([
@@ -116,6 +119,7 @@ let lastRenderedLayout = null
 let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
 let activeViewportTween = null
 let viewportTweenFrameId = null
+let operationManager = null
 
 function currentSelectedIds() {
   if (props.selectedIds !== null) return props.selectedIds
@@ -815,6 +819,22 @@ function handleDragOver(event) {
   event.preventDefault()
 }
 
+function graphOperations() {
+  if (!operationManager) operationManager = createGraphOperationManager(props.graph)
+  return operationManager
+}
+
+function emitChange(result) {
+  if (!result.applied) return
+  emit('change', {
+    type: result.type,
+    operation: result.operation,
+    previousGraph: result.previousGraph,
+    nextGraph: result.nextGraph,
+    reason: result.reason,
+  })
+}
+
 function handleDrop(event) {
   event.preventDefault()
   settleAnimation()
@@ -831,12 +851,19 @@ function handleDrop(event) {
 
   const index = findInsertionIndex(props.graph, layout, parentId, point, props.layoutDirection)
   const id = `res-${resource.id}-${Date.now()}`
-  props.graph.nodes.set(id, { id, label: resource.label, parentId, children: [] })
-  parent.children.splice(index, 0, id)
+  const operation = {
+    type: 'drop-node',
+    payload: { resource, parentId, index, id },
+  }
+  const result = graphOperations().apply(operation, {
+    readonly: props.readonly,
+    before: props.beforeNodeDrop,
+  })
+  if (!result.applied) return
 
   updateLayout()
-  emit('node-drop', { resource, parentId, index })
-  emit('change', props.graph)
+  emit('node-drop', { resource, parentId, index: result.operation.payload.index })
+  emitChange(result)
 }
 
 function resolveTargetRect(id) {
@@ -1032,7 +1059,13 @@ onUnmounted(() => {
 })
 
 watch(() => props.layoutDirection, () => updateLayout())
-watch(() => props.graph, () => updateLayout())
+watch(
+  () => props.graph,
+  () => {
+    operationManager = createGraphOperationManager(props.graph)
+    updateLayout()
+  },
+)
 watch(() => props.selectedIds, () => renderCurrent())
 watch(() => props.groupStates, () => updateLayout())
 watch(() => props.viewport, () => renderCurrent())
