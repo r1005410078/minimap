@@ -203,13 +203,20 @@ test('plain node drop target is recognized and can be dropped on', () => {
   const from = nodeCenter(layout, 'feeder-1')
   const to = nodeCenter(layout, 'feeder-2')
 
-  // Drag feeder-1 to feeder-2 and release
+  // Start drag on feeder-1
   dispatchPointerDown(wrapper, from)
+  // Hover over feeder-2 WITHOUT releasing yet - this should highlight feeder-2 as drop target
   dispatchPointerMove(wrapper, to)
+
+  // Verify that feeder-2 is highlighted mid-drag (before pointerup)
+  const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
+  assert.ok(highlightedMidDrag.includes('Feeder 2'),
+    `feeder-2 should be highlighted mid-drag; got: ${highlightedMidDrag}`)
+
+  // Complete the drag by releasing
   dispatchPointerUp(wrapper, to)
 
   // Verify the drop succeeded - feeder-1 should now be a child of feeder-2
-  // This validates that the drag target resolution worked correctly for plain nodes
   assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2',
     'feeder-1 should have been moved to be a child of feeder-2')
 
