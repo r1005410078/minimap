@@ -15,7 +15,7 @@
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
 - **当前阶段**：第五阶段切片 2 —— 删除、复制、导入导出
-- **当前阶段 Spec**：待创建；基于切片 1 的 operation/history 合同继续扩展删除、复制、导入导出
+- **当前阶段 Spec**：[第五阶段切片 2：删除、复制、导入导出设计](docs/superpowers/specs/2026-06-20-phase-5-delete-copy-import-export.md)
 - **当前阶段计划**：待创建；spec 确认后写第五阶段切片 2 implementation plan
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
@@ -48,7 +48,7 @@
   - [ ] 切片 5：性能状态与生命周期收尾（`performance` 事件或调试状态展示总节点数、可见节点数、缩放比例、帧耗时；验证销毁后没有残留事件监听、ResizeObserver 或动画循环）
 - **视觉整理切片**：
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
-- **下一步**：创建第五阶段切片 2「删除、复制、导入导出」spec 和 plan。
+- **下一步**：用户 review 第五阶段切片 2 spec；确认后创建 implementation plan。
 
 ## 目标
 
