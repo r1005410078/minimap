@@ -289,6 +289,13 @@ function highlightedLabels(ctx, theme) {
   return labels
 }
 
+// Helper to check if an insert-preview drop-slot box was drawn in the current frame
+function dropSlotDrawn(ctx, theme) {
+  const lastClear = ctx.calls.map((c) => c.method).lastIndexOf('clearRect')
+  const calls = ctx.calls.slice(lastClear + 1)
+  return calls.some((call) => call.method === 'set:fillStyle' && call.args[0] === theme.group.dropSlot.fill)
+}
+
 test('plain node drop target is recognized and can be dropped on', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
@@ -395,5 +402,94 @@ test('dragging near an offset canvas edge uses canvas-local coordinates for edge
   assert.notEqual(lastViewport.x, 0)
 
   dispatchPointerUp(wrapper, clientPoint({ x: 10, y: 300 }, offset))
+  wrapper.destroy()
+})
+
+test('dragging a sibling into the gap between two other siblings shows an insert preview and inserts it between them', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const feeder2 = layout.nodes.get('feeder-2')
+  const feeder3 = layout.nodes.get('feeder-3')
+  const to = { x: feeder2.x + feeder2.width / 2, y: (feeder2.y + feeder2.height + feeder3.y) / 2 }
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true)
+
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-2', 'feeder-1', 'feeder-3'])
+  assert.equal(wrapper.emitted('group-reorder').length, 1)
+  assert.equal(wrapper.emitted('node-move'), undefined)
+  wrapper.destroy()
+})
+
+test('dragging a sibling onto the leading edge of the first remaining sibling inserts before it', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-2')
+  const to = nodePoint(layout, 'feeder-1', { y: 2 })
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-2').parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-2', 'feeder-1', 'feeder-3'])
+  wrapper.destroy()
+})
+
+test('dragging a sibling onto the trailing edge of the last remaining sibling inserts after it', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-2')
+  const feeder3 = layout.nodes.get('feeder-3')
+  const to = nodePoint(layout, 'feeder-3', { y: feeder3.height - 2 })
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-2').parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-1', 'feeder-3', 'feeder-2'])
+  wrapper.destroy()
+})
+
+test('dragging a sibling onto the middle of another sibling highlights that sibling itself, not the shared parent, and shows no insert preview', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodeCenter(layout, 'feeder-2')
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+
+  const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
+  assert.ok(
+    highlightedMidDrag.includes('Feeder 2'),
+    `feeder-2 should be highlighted as the live nest target; got: ${highlightedMidDrag}`,
+  )
+  assert.ok(
+    !highlightedMidDrag.includes('Grid Tie'),
+    `the shared parent (grid-tie) should not be highlighted; got: ${highlightedMidDrag}`,
+  )
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), false)
+
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2')
+  assert.equal(graph.nodes.get('grid-tie').children.includes('feeder-1'), false)
+  assert.equal(graph.nodes.get('feeder-2').children.includes('feeder-1'), true)
   wrapper.destroy()
 })

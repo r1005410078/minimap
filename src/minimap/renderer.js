@@ -549,6 +549,10 @@ export function renderScene(ctx, scene) {
     drawNodeDragGhost(ctx, graph, state.groupDrag, theme, renderers, viewport, selectedIds, highlightedIds, dimmedIds)
   }
 
+  if (state.siblingInsertPreview) {
+    drawDropSlot(ctx, state.siblingInsertPreview.rect, theme, 1)
+  }
+
   if (state.selectionRect) drawSelectionRect(ctx, state.selectionRect, theme)
 
   return { total: layout.visibleItems.length, drawn, culled, durationMs: now() - t0 }

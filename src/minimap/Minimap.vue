@@ -328,14 +328,23 @@ function updateDragTarget(worldPoint) {
             { ...activeGroup, children: activeGroup.children.filter((id) => id !== dragState.nodeId) },
             worldPoint,
           ),
+          previewRect: null,
         }
-      : resolveDropTarget(props.graph, layout, worldPoint, dragState.nodeId, props.layoutDirection)
+      : resolveDropTarget(
+          props.graph,
+          layout,
+          worldPoint,
+          dragState.nodeId,
+          props.layoutDirection,
+          currentViewport().scale,
+        )
 
   if (!target.valid) {
     clearDragShiftAnimation()
     dragState.targetParentId = null
     dragState.targetGroupId = null
     dragState.insertIndex = 0
+    dragState.insertPreviewRect = null
   } else if (target.group) {
     const autoScrolling = shouldAutoScroll(target.group)
     const groupChanged = previousGroupId !== target.group.id
@@ -348,11 +357,13 @@ function updateDragTarget(worldPoint) {
     dragState.targetParentId = target.parentId
     dragState.targetGroupId = target.group.id
     dragState.insertIndex = target.insertIndex
+    dragState.insertPreviewRect = null
   } else {
     clearDragShiftAnimation()
     dragState.targetParentId = target.parentId
     dragState.targetGroupId = null
     dragState.insertIndex = target.insertIndex
+    dragState.insertPreviewRect = target.previewRect ?? null
   }
 
   dragState.ghostWorldPoint = worldPoint
@@ -387,10 +398,16 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
     ? buildSelectionRelations(props.graph, currentLayout, [])
     : buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
   const dragHighlightId =
-    dragState?.dragging && !dragState.targetGroupId && dragState.targetParentId ? dragState.targetParentId : null
+    dragState?.dragging && !dragState.targetGroupId && !dragState.insertPreviewRect && dragState.targetParentId
+      ? dragState.targetParentId
+      : null
   const highlightedIds = dragHighlightId
     ? new Set([...relations.highlightedIds, dragHighlightId])
     : relations.highlightedIds
+  const siblingInsertPreview =
+    dragState?.dragging && dragState.insertPreviewRect
+      ? { rect: worldRectToScreen(dragState.insertPreviewRect, renderViewport) }
+      : null
   renderScene(ctx, {
     layout: currentLayout,
     graph: props.graph,
@@ -408,6 +425,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
       groupDrag: dragRenderContext(),
       groupScrollbarHoverId: hoveredScrollbarGroupId,
       selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
+      siblingInsertPreview,
     },
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
@@ -735,6 +753,7 @@ function handlePointerDown(event) {
       targetParentId: null,
       targetGroupId: null,
       insertIndex: 0,
+      insertPreviewRect: null,
       ghostWorldPoint: null,
       ghostScreenRect: null,
       lastScreenPoint: null,
