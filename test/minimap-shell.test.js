@@ -498,19 +498,86 @@ test('deleteSelection deletes selected nodes, emits events, and supports undo', 
   wrapper.destroy()
 })
 
-test('copySelection duplicates selected nodes and emits events', () => {
+test('copySelection captures a clipboard snapshot without mutating the graph', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
+  const beforeSize = graph.nodes.size
 
   wrapper.vm.select(['grid-tie'])
   const result = wrapper.vm.copySelection()
 
   assert.equal(result.applied, true)
-  const copiedId = wrapper.emitted('copy')[0][0].idMap['grid-tie']
-  assert.equal(graph.nodes.has(copiedId), true)
-  assert.equal(graph.nodes.get(copiedId).children.length, 3)
-  assert.deepEqual(graph.nodes.get('energy-root').children.slice(0, 2), ['grid-tie', copiedId])
-  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'copy-nodes')
+  assert.equal(graph.nodes.size, beforeSize)
+  assert.deepEqual(wrapper.emitted('copy')[0][0].expandedIds.sort(), ['feeder-1', 'feeder-2', 'feeder-3', 'grid-tie'])
+  assert.equal(wrapper.emitted('change'), undefined)
+  assert.equal(wrapper.vm.canUndo(), false)
+  wrapper.destroy()
+})
+
+test('paste inserts the clipboard snapshot as a child of the selected node and supports undo', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['feeder-1'])
+  wrapper.vm.copySelection()
+  wrapper.vm.select(['cluster-25'])
+  const result = wrapper.vm.paste()
+
+  assert.equal(result.applied, true)
+  const pastedId = result.operation.payload.pastedIds[0]
+  assert.equal(graph.nodes.get('cluster-25').children.includes(pastedId), true)
+  assert.equal(graph.nodes.get(pastedId).parentId, 'cluster-25')
+  assert.equal(wrapper.emitted('paste')[0][0].pastedIds[0], pastedId)
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'paste-nodes')
+
+  wrapper.vm.undo()
+  assert.equal(graph.nodes.has(pastedId), false)
+  wrapper.destroy()
+})
+
+test('pasting the same clipboard twice produces two independent copies', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['feeder-1'])
+  wrapper.vm.copySelection()
+  wrapper.vm.select(['cluster-25'])
+  const first = wrapper.vm.paste()
+  const second = wrapper.vm.paste()
+
+  const firstId = first.operation.payload.pastedIds[0]
+  const secondId = second.operation.payload.pastedIds[0]
+  assert.notEqual(firstId, secondId)
+  assert.equal(graph.nodes.has(firstId), true)
+  assert.equal(graph.nodes.has(secondId), true)
+  assert.deepEqual(graph.nodes.get('cluster-25').children.slice(-2), [firstId, secondId])
+  wrapper.destroy()
+})
+
+test('paste targets the real parent node when the selection is a group box', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['feeder-1'])
+  wrapper.vm.copySelection()
+  wrapper.vm.select(['heap-1::g0'])
+  const result = wrapper.vm.paste()
+
+  assert.equal(result.applied, true)
+  const pastedId = result.operation.payload.pastedIds[0]
+  assert.equal(graph.nodes.get('heap-1').children.includes(pastedId), true)
+  assert.equal(graph.nodes.get(pastedId).parentId, 'heap-1')
+  wrapper.destroy()
+})
+
+test('paste returns empty when there is no selection or no clipboard content', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  assert.equal(wrapper.vm.paste().reason, 'empty')
+
+  wrapper.vm.select(['cluster-25'])
+  assert.equal(wrapper.vm.paste().reason, 'empty')
   wrapper.destroy()
 })
 
@@ -564,7 +631,7 @@ test('invalid importGraph returns a failed result without emitting change', () =
   wrapper.destroy()
 })
 
-test('readonly and before hooks block delete copy and import methods', () => {
+test('readonly and before hooks block delete paste and import methods, but not copy', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, {
     propsData: {
@@ -578,7 +645,8 @@ test('readonly and before hooks block delete copy and import methods', () => {
   wrapper.vm.select(['grid-tie'])
 
   assert.equal(wrapper.vm.deleteSelection().reason, 'readonly')
-  assert.equal(wrapper.vm.copySelection().reason, 'readonly')
+  assert.equal(wrapper.vm.copySelection().applied, true)
+  assert.equal(wrapper.vm.paste().reason, 'readonly')
   assert.equal(wrapper.vm.importGraph({ version: 1, nodes: [], rootIds: [] }).reason, 'readonly')
   assert.equal(graph.nodes.has('grid-tie'), true)
   wrapper.destroy()
@@ -589,6 +657,7 @@ test('readonly and before hooks block delete copy and import methods', () => {
       graph: blockedGraph,
       beforeDelete: () => false,
       beforeCopy: () => false,
+      beforePaste: () => false,
       beforeImport: () => false,
     },
   })
@@ -596,12 +665,13 @@ test('readonly and before hooks block delete copy and import methods', () => {
 
   assert.equal(blocked.vm.deleteSelection().reason, 'blocked')
   assert.equal(blocked.vm.copySelection().reason, 'blocked')
+  assert.equal(blocked.vm.paste().reason, 'blocked')
   assert.equal(blocked.vm.importGraph({ version: 1, nodes: [], rootIds: [] }).reason, 'blocked')
   assert.equal(blockedGraph.nodes.has('grid-tie'), true)
   blocked.destroy()
 })
 
-test('keyboard Delete Backspace and Cmd/Ctrl+C trigger edit commands', () => {
+test('keyboard Delete Backspace Cmd/Ctrl+C and Cmd/Ctrl+V trigger edit commands', () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
 
@@ -615,9 +685,15 @@ test('keyboard Delete Backspace and Cmd/Ctrl+C trigger edit commands', () => {
   assert.equal(graph.nodes.has('grid-tie'), false)
 
   wrapper.vm.undo()
-  wrapper.vm.select(['grid-tie'])
+  wrapper.vm.select(['feeder-1'])
   dispatchKey(wrapper, 'c', { metaKey: true })
   assert.equal(wrapper.emitted('copy').length, 1)
+
+  wrapper.vm.select(['cluster-25'])
+  dispatchKey(wrapper, 'v', { metaKey: true })
+  assert.equal(wrapper.emitted('paste').length, 1)
+  const pastedId = wrapper.emitted('paste')[0][0].pastedIds[0]
+  assert.equal(graph.nodes.get('cluster-25').children.includes(pastedId), true)
 
   wrapper.destroy()
 })

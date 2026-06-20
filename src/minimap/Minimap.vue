@@ -41,7 +41,7 @@ import {
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
 } from './interaction.js'
-import { createGraphOperationManager } from './graph-operations.js'
+import { createGraphOperationManager, captureSubtreeSnapshot } from './graph-operations.js'
 import { deserializeGraph, serializeGraph } from './graph-serialization.js'
 import {
   buildVirtualOrder,
@@ -83,6 +83,7 @@ const props = defineProps({
   beforeDelete: { type: Function, default: null },
   beforeCopy: { type: Function, default: null },
   beforeImport: { type: Function, default: null },
+  beforePaste: { type: Function, default: null },
 })
 
 const emit = defineEmits([
@@ -97,6 +98,7 @@ const emit = defineEmits([
   'copy',
   'import',
   'export',
+  'paste',
 ])
 
 const containerRef = ref(null)
@@ -128,6 +130,7 @@ let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
 let activeViewportTween = null
 let viewportTweenFrameId = null
 let operationManager = null
+let clipboard = null
 
 function currentSelectedIds() {
   if (props.selectedIds !== null) return props.selectedIds
@@ -846,6 +849,11 @@ function handleKeyDown(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
     event.preventDefault()
     copySelection()
+    return
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+    event.preventDefault()
+    paste()
   }
 }
 
@@ -1059,34 +1067,6 @@ function selectedRealNodeIds() {
   return [...new Set(ids)]
 }
 
-function collectCopyIds(id, ids = new Set()) {
-  const node = props.graph.nodes.get(id)
-  if (!node || ids.has(id)) return ids
-  ids.add(id)
-  for (const childId of node.children || []) collectCopyIds(childId, ids)
-  return ids
-}
-
-function nextCopyId(sourceId, usedIds) {
-  let index = 1
-  let id = `copy-${sourceId}-${index}`
-  while (usedIds.has(id)) {
-    index += 1
-    id = `copy-${sourceId}-${index}`
-  }
-  usedIds.add(id)
-  return id
-}
-
-function createCopyIdMap(ids) {
-  const usedIds = new Set(props.graph.nodes.keys())
-  const copyIds = new Set()
-  for (const id of ids) collectCopyIds(id, copyIds)
-  const idMap = {}
-  for (const id of copyIds) idMap[id] = nextCopyId(id, usedIds)
-  return idMap
-}
-
 function selectionAfterDeleting(deletedIds) {
   const deleted = new Set(deletedIds)
   return currentSelectedIds().filter((id) => !deleted.has(id))
@@ -1112,18 +1092,75 @@ function deleteSelection() {
 function copySelection() {
   const ids = currentSelectedIds()
   const expandedIds = selectedRealNodeIds()
-  const idMap = createCopyIdMap(expandedIds)
-  const operation = { type: 'copy-nodes', payload: { ids, expandedIds, idMap } }
+  const payload = { ids, expandedIds }
+  const unapplied = (reason) => ({
+    applied: false,
+    type: 'copy-selection',
+    operation: { type: 'copy-selection', payload },
+    inverse: null,
+    previousGraph: props.graph,
+    nextGraph: props.graph,
+    reason,
+  })
+
+  if (expandedIds.length === 0) return unapplied('empty')
+  if (props.beforeCopy && props.beforeCopy(payload) === false) return unapplied('blocked')
+
+  clipboard = captureSubtreeSnapshot(props.graph, expandedIds)
+  const capturedPayload = { ids, expandedIds: clipboard.nodes.map((node) => node.id) }
+  emit('copy', capturedPayload)
+  return {
+    applied: true,
+    type: 'copy-selection',
+    operation: { type: 'copy-selection', payload: capturedPayload },
+    inverse: null,
+    previousGraph: props.graph,
+    nextGraph: props.graph,
+    reason: null,
+  }
+}
+
+function pasteTargetId() {
+  const id = currentSelectedIds()[0] ?? null
+  if (!id || !layout) return id
+  const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
+  const group = groupsById.get(id)
+  return group ? group.parentId : id
+}
+
+function nextPasteId(sourceId, usedIds) {
+  let index = 1
+  let id = `paste-${sourceId}-${index}`
+  while (usedIds.has(id)) {
+    index += 1
+    id = `paste-${sourceId}-${index}`
+  }
+  usedIds.add(id)
+  return id
+}
+
+function createPasteIdMap(snapshot) {
+  const usedIds = new Set(props.graph.nodes.keys())
+  const idMap = {}
+  for (const node of snapshot.nodes) idMap[node.id] = nextPasteId(node.id, usedIds)
+  return idMap
+}
+
+function paste() {
+  const targetParentId = pasteTargetId()
+  const snapshot = clipboard ?? { rootIds: [], nodes: [] }
+  const idMap = createPasteIdMap(snapshot)
+  const operation = { type: 'paste-nodes', payload: { targetParentId, snapshot, idMap } }
   const result = graphOperations().apply(operation, {
     readonly: props.readonly,
-    before: props.beforeCopy,
+    before: props.beforePaste,
   })
   if (!result.applied) return result
 
   updateLayout()
-  emit('copy', {
-    ids,
-    copiedIds: result.operation.payload.copiedIds || [],
+  emit('paste', {
+    targetParentId,
+    pastedIds: result.operation.payload.pastedIds || [],
     idMap,
   })
   emitChange(result)
@@ -1191,6 +1228,7 @@ defineExpose({
   canRedo,
   deleteSelection,
   copySelection,
+  paste,
   exportGraph,
   importGraph,
 })
