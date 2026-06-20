@@ -1002,6 +1002,32 @@ function handleOverviewNavigate(worldPoint) {
   applyViewport(centerViewportOn(worldPoint, currentViewport(), cssWidth, cssHeight))
 }
 
+function undo() {
+  const result = graphOperations().undo()
+  if (result.applied) {
+    updateLayout()
+    emitChange(result)
+  }
+  return result
+}
+
+function redo() {
+  const result = graphOperations().redo()
+  if (result.applied) {
+    updateLayout()
+    emitChange(result)
+  }
+  return result
+}
+
+function canUndo() {
+  return graphOperations().canUndo()
+}
+
+function canRedo() {
+  return graphOperations().canRedo()
+}
+
 defineExpose({
   fitToScreen,
   centerOnNode,
@@ -1014,6 +1040,10 @@ defineExpose({
   search,
   searchNext,
   searchPrevious,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
 })
 
 function syncCanvasSize() {

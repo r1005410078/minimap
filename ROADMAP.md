@@ -14,9 +14,9 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第五阶段切片 1 —— 编辑操作底座
-- **当前阶段 Spec**：[第五阶段切片 1：编辑操作底座设计](docs/superpowers/specs/2026-06-20-phase-5-edit-operation-base.md)
-- **当前阶段计划**：[Phase 5 Edit Operation Base Implementation Plan](docs/superpowers/plans/2026-06-20-phase-5-edit-operation-base.md)
+- **当前阶段**：第五阶段切片 2 —— 删除、复制、导入导出
+- **当前阶段 Spec**：待创建；基于切片 1 的 operation/history 合同继续扩展删除、复制、导入导出
+- **当前阶段计划**：待创建；spec 确认后写第五阶段切片 2 implementation plan
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -41,14 +41,14 @@
   - [x] 切片 2：搜索节点（`search.js` + `Minimap.vue` 内建搜索框，复用切片 1 的 `centerOnNode`/`select` 跳转和高亮；[plan](docs/superpowers/plans/2026-06-20-phase-4-search-nodes.md)，`npm test` 233 全过，`npm run build` 通过）
   - [x] 切片 3：Overview 小地图导航（独立子组件 `Overview.vue`，命令式渲染 + `navigate` 事件联动主视口；[plan](docs/superpowers/plans/2026-06-20-phase-4-overview-navigation.md)，`npm test` 253 全过，`npm run build` 通过）
 - **第五阶段切片**（先建立可撤销/可拦截的编辑底座，再接入具体编辑交互，避免跨父级拖拽先做导致返工）：
-  - [ ] 切片 1：编辑操作底座（新增 `graph-operations`/history 层，统一节点拖入和分组内换位的 mutation 入口；支持 `readonly`、before hooks、`undo`/`redo`、`canUndo`/`canRedo`、`change` payload 规范）
+  - [x] 切片 1：编辑操作底座（新增 `graph-operations`/history 层，统一节点拖入和分组内换位的 mutation 入口；支持 `readonly`、before hooks、`undo`/`redo`、`canUndo`/`canRedo`、`change` payload 规范；[spec](docs/superpowers/specs/2026-06-20-phase-5-edit-operation-base.md)，[plan](docs/superpowers/plans/2026-06-20-phase-5-edit-operation-base.md)，`npm test` 与 `npm run build` 通过）
   - [ ] 切片 2：删除、复制、导入导出（基于切片 1 的 operation 机制实现 `deleteSelection`/`copySelection`/`exportGraph`/`importGraph`，补齐键盘 `Delete`、复制快捷键和 graph `version` 校验）
   - [ ] 切片 3：节点跨父级拖拽移动与排序（普通节点、分组框内部节点都可拖到其他父节点下面或指定顺序位置；结果写回 `parentId` 和双方 `children`，复用 before hooks、readonly、undo/redo）
   - [ ] 切片 4：组件状态与可访问性（`loading`/空图/`error` 状态，`error` 事件，`options.keyboard` 开关，aria 状态区域展示选中数量、选中 label、搜索结果和错误信息）
   - [ ] 切片 5：性能状态与生命周期收尾（`performance` 事件或调试状态展示总节点数、可见节点数、缩放比例、帧耗时；验证销毁后没有残留事件监听、ResizeObserver 或动画循环）
 - **视觉整理切片**：
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
-- **下一步**：用户 review 第五阶段切片 1 spec；确认后创建 implementation plan。
+- **下一步**：创建第五阶段切片 2「删除、复制、导入导出」spec 和 plan。
 
 ## 目标
 

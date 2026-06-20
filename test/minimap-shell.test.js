@@ -420,3 +420,54 @@ test('renderer props default to null and do not affect default drawing', () => {
   assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'))
   wrapper.destroy()
 })
+
+test('undo and redo exposed methods restore a dropped node', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+  const beforeSize = graph.nodes.size
+
+  const canvasEl = wrapper.find('canvas').element
+  const evt = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(evt, 'dataTransfer', {
+    value: { getData: () => JSON.stringify({ id: 'undoable', label: 'Undoable' }) },
+  })
+  Object.defineProperty(evt, 'clientX', { value: 0, configurable: true })
+  Object.defineProperty(evt, 'clientY', { value: 0, configurable: true })
+  canvasEl.dispatchEvent(evt)
+
+  const insertedId = graph.nodes.get('energy-root').children.find((id) => id.startsWith('res-undoable-'))
+  assert.ok(insertedId)
+  assert.equal(wrapper.vm.canUndo(), true)
+  assert.equal(wrapper.vm.canRedo(), false)
+
+  const undo = wrapper.vm.undo()
+  assert.equal(undo.applied, true)
+  assert.equal(undo.type, 'undo')
+  assert.equal(graph.nodes.has(insertedId), false)
+  assert.equal(graph.nodes.size, beforeSize)
+  assert.equal(wrapper.vm.canUndo(), false)
+  assert.equal(wrapper.vm.canRedo(), true)
+
+  const redo = wrapper.vm.redo()
+  assert.equal(redo.applied, true)
+  assert.equal(redo.type, 'redo')
+  assert.equal(graph.nodes.has(insertedId), true)
+  assert.equal(wrapper.vm.canUndo(), true)
+  assert.equal(wrapper.vm.canRedo(), false)
+
+  const changes = wrapper.emitted('change').map((entry) => entry[0].type)
+  assert.deepEqual(changes, ['drop-node', 'undo', 'redo'])
+  wrapper.destroy()
+})
+
+test('undo and redo are empty no-ops when history stacks are empty', () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  assert.equal(wrapper.vm.canUndo(), false)
+  assert.equal(wrapper.vm.canRedo(), false)
+  assert.equal(wrapper.vm.undo().reason, 'empty')
+  assert.equal(wrapper.vm.redo().reason, 'empty')
+  assert.equal(wrapper.emitted('change'), undefined)
+  wrapper.destroy()
+})
