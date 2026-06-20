@@ -1316,6 +1316,7 @@ watch(() => props.options, () => updateLayout())
         <span class="minimap-toolbar-separator"></span>
         <button class="minimap-toolbar-button" type="button" aria-label="选择">□</button>
         <button class="minimap-toolbar-button" type="button" aria-label="复制" @click="copySelection">⌘</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="粘贴" @click="paste">⎘</button>
         <button class="minimap-toolbar-button" type="button" aria-label="删除" @click="deleteSelection">⌫</button>
         <button class="minimap-toolbar-button" type="button" aria-label="框选">▣</button>
         <span class="minimap-toolbar-separator"></span>

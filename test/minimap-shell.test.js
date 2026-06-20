@@ -702,24 +702,29 @@ function toolbarButton(wrapper, label) {
   return wrapper.find(`.minimap-toolbar-button[aria-label="${label}"]`)
 }
 
-test('toolbar undo redo delete and copy buttons call real edit commands', async () => {
+test('toolbar undo redo delete copy and paste buttons call real edit commands', async () => {
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
 
-  wrapper.vm.select(['grid-tie'])
-  await toolbarButton(wrapper, '删除').trigger('click')
-  assert.equal(graph.nodes.has('grid-tie'), false)
-
-  await toolbarButton(wrapper, '撤销').trigger('click')
-  assert.equal(graph.nodes.has('grid-tie'), true)
-
-  await toolbarButton(wrapper, '重做').trigger('click')
-  assert.equal(graph.nodes.has('grid-tie'), false)
-
-  await toolbarButton(wrapper, '撤销').trigger('click')
-  wrapper.vm.select(['grid-tie'])
+  wrapper.vm.select(['feeder-1'])
   await toolbarButton(wrapper, '复制').trigger('click')
   assert.equal(wrapper.emitted('copy').length, 1)
+
+  wrapper.vm.select(['cluster-25'])
+  await toolbarButton(wrapper, '粘贴').trigger('click')
+  assert.equal(wrapper.emitted('paste').length, 1)
+  const pastedId = wrapper.emitted('paste')[0][0].pastedIds[0]
+  assert.equal(graph.nodes.get('cluster-25').children.includes(pastedId), true)
+
+  wrapper.vm.select([pastedId])
+  await toolbarButton(wrapper, '删除').trigger('click')
+  assert.equal(graph.nodes.has(pastedId), false)
+
+  await toolbarButton(wrapper, '撤销').trigger('click')
+  assert.equal(graph.nodes.has(pastedId), true)
+
+  await toolbarButton(wrapper, '重做').trigger('click')
+  assert.equal(graph.nodes.has(pastedId), false)
 
   wrapper.destroy()
 })
