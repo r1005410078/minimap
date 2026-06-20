@@ -45,6 +45,18 @@ test('search and overview options still hide their panels in the polished shell'
   wrapper.destroy()
 })
 
+test('active canvas border is opt-in and disabled by default', () => {
+  const defaultWrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  assert.equal(defaultWrapper.find('canvas').classes().includes('is-active-border-enabled'), false)
+  defaultWrapper.destroy()
+
+  const enabledWrapper = mount(Minimap, {
+    propsData: { graph: createDemoGraph(), options: { enableActiveBorder: true } },
+  })
+  assert.equal(enabledWrapper.find('canvas').classes().includes('is-active-border-enabled'), true)
+  enabledWrapper.destroy()
+})
+
 function dispatchDrop(wrapper, payload, point) {
   const canvasEl = wrapper.find('canvas').element
   const evt = new Event('drop', { bubbles: true, cancelable: true })

@@ -1061,7 +1061,11 @@ watch(() => props.options, () => updateLayout())
         <button class="minimap-toolbar-button is-accent" type="button" aria-label="列表">▦</button>
         <button class="minimap-toolbar-button" type="button" aria-label="信息">ⓘ</button>
       </div>
-      <canvas ref="canvasRef" tabindex="0"></canvas>
+      <canvas
+        ref="canvasRef"
+        :class="{ 'is-active-border-enabled': options?.enableActiveBorder === true }"
+        tabindex="0"
+      ></canvas>
       <div v-if="options?.enableSearch !== false" class="minimap-search">
         <input
           :value="searchKeyword"
@@ -1125,6 +1129,11 @@ watch(() => props.options, () => updateLayout())
 }
 .minimap-canvas-container canvas {
   display: block;
+  outline: none;
+}
+.minimap-canvas-container canvas.is-active-border-enabled:focus {
+  outline: 1px solid #3d9cff;
+  outline-offset: -1px;
 }
 .minimap-toolbar {
   position: absolute;
