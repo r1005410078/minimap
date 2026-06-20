@@ -329,7 +329,7 @@ function updateDragTarget(worldPoint) {
             worldPoint,
           ),
         }
-      : resolveDropTarget(props.graph, layout, worldPoint, dragState.nodeId)
+      : resolveDropTarget(props.graph, layout, worldPoint, dragState.nodeId, props.layoutDirection)
 
   if (!target.valid) {
     clearDragShiftAnimation()
@@ -352,7 +352,7 @@ function updateDragTarget(worldPoint) {
     clearDragShiftAnimation()
     dragState.targetParentId = target.parentId
     dragState.targetGroupId = null
-    dragState.insertIndex = 0
+    dragState.insertIndex = target.insertIndex
   }
 
   dragState.ghostWorldPoint = worldPoint
@@ -876,7 +876,9 @@ function handlePointerUp() {
       const targetGroup = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
       const index = targetGroup
         ? groupInsertIndexToParentIndex(parent, targetGroup, dragState.nodeId, dragState.insertIndex)
-        : parent.children.length
+        : dragState.targetParentId === dragState.fromParentId
+          ? dragState.insertIndex ?? parent.children.length
+          : parent.children.length
 
       if (dragState.targetParentId === dragState.fromParentId) {
         const operation = {

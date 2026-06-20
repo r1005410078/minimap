@@ -54,29 +54,100 @@ function firstItemCenter(group) {
   }
 }
 
-test('dragging a plain node onto another plain node makes it the new parent', () => {
+function nodePoint(layout, nodeId, offset = {}) {
+  const rect = layout.nodes.get(nodeId)
+  return {
+    x: rect.x + (offset.x ?? rect.width / 2),
+    y: rect.y + (offset.y ?? rect.height / 2),
+  }
+}
+
+test('dragging a plain node onto a non-sibling plain node makes it the new parent', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const wrapper = mount(Minimap, { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
-  const to = nodeCenter(layout, 'feeder-2')
+  const to = nodeCenter(layout, 'cluster-25')
 
   dispatchPointerDown(wrapper, from)
   dispatchPointerMove(wrapper, to)
   dispatchPointerUp(wrapper, to)
 
-  assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2')
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'cluster-25')
   assert.equal(graph.nodes.get('grid-tie').children.includes('feeder-1'), false)
-  assert.equal(graph.nodes.get('feeder-2').children.includes('feeder-1'), true)
+  assert.equal(graph.nodes.get('cluster-25').children.includes('feeder-1'), true)
   assert.equal(wrapper.emitted('node-move').length, 1)
   assert.equal(wrapper.emitted('node-move')[0][0].nodeId, 'feeder-1')
   assert.equal(wrapper.emitted('node-move')[0][0].fromParentId, 'grid-tie')
-  assert.equal(wrapper.emitted('node-move')[0][0].toParentId, 'feeder-2')
+  assert.equal(wrapper.emitted('node-move')[0][0].toParentId, 'cluster-25')
   assert.equal(wrapper.emitted('change').at(-1)[0].type, 'move-node')
 
   wrapper.vm.undo()
   assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
+  wrapper.destroy()
+})
+
+test('dragging a sibling onto the upper half of another sibling inserts before it', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-3')
+  const to = nodePoint(layout, 'feeder-2', { y: 2 })
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-3').parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-1', 'feeder-3', 'feeder-2'])
+  assert.equal(wrapper.emitted('group-reorder').length, 1)
+  assert.equal(wrapper.emitted('node-move'), undefined)
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'reorder-group-child')
+  wrapper.destroy()
+})
+
+test('dragging a sibling onto the lower half of another sibling inserts after it', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const feeder2 = layout.nodes.get('feeder-2')
+  const to = nodePoint(layout, 'feeder-2', { y: feeder2.height - 2 })
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-2', 'feeder-1', 'feeder-3'])
+  assert.equal(wrapper.emitted('group-reorder').length, 1)
+  assert.equal(wrapper.emitted('node-move'), undefined)
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'reorder-group-child')
+  wrapper.destroy()
+})
+
+test('vertical layout sibling reorder uses left and right halves of the target node', () => {
+  const graph = createDemoGraph()
+  const verticalOpts = { ...LAYOUT_OPTS, direction: 'vertical' }
+  const layout = computeLayout(graph, verticalOpts)
+  const wrapper = mount(Minimap, { propsData: { graph, layoutDirection: 'vertical' } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const feeder2 = layout.nodes.get('feeder-2')
+  const to = nodePoint(layout, 'feeder-2', { x: feeder2.width - 2 })
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-2', 'feeder-1', 'feeder-3'])
+  assert.equal(wrapper.emitted('group-reorder').length, 1)
+  assert.equal(wrapper.emitted('node-move'), undefined)
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'reorder-group-child')
   wrapper.destroy()
 })
 
@@ -224,24 +295,24 @@ test('plain node drop target is recognized and can be dropped on', () => {
   const wrapper = mount(Minimap, { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
-  const to = nodeCenter(layout, 'feeder-2')
+  const to = nodeCenter(layout, 'cluster-25')
 
   // Start drag on feeder-1
   dispatchPointerDown(wrapper, from)
-  // Hover over feeder-2 WITHOUT releasing yet - this should highlight feeder-2 as drop target
+  // Hover over a non-sibling plain node WITHOUT releasing yet - this should highlight it as drop target
   dispatchPointerMove(wrapper, to)
 
-  // Verify that feeder-2 is highlighted mid-drag (before pointerup)
+  // Verify that cluster-25 is highlighted mid-drag (before pointerup)
   const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
-  assert.ok(highlightedMidDrag.includes('Feeder 2'),
-    `feeder-2 should be highlighted mid-drag; got: ${highlightedMidDrag}`)
+  assert.ok(highlightedMidDrag.includes('Cluster 25'),
+    `cluster-25 should be highlighted mid-drag; got: ${highlightedMidDrag}`)
 
   // Complete the drag by releasing
   dispatchPointerUp(wrapper, to)
 
-  // Verify the drop succeeded - feeder-1 should now be a child of feeder-2
-  assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2',
-    'feeder-1 should have been moved to be a child of feeder-2')
+  // Verify the drop succeeded - feeder-1 should now be a child of cluster-25
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'cluster-25',
+    'feeder-1 should have been moved to be a child of cluster-25')
 
   wrapper.destroy()
 })

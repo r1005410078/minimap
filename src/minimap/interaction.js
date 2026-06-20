@@ -161,10 +161,31 @@ function isNodeOrDescendant(graph, nodeId, candidateId) {
   return false
 }
 
+function siblingInsertIndexAt(graph, layout, point, draggedNodeId, targetNodeId, direction = 'horizontal') {
+  const dragged = graph.nodes.get(draggedNodeId)
+  const target = graph.nodes.get(targetNodeId)
+  if (!dragged || !target || dragged.parentId !== target.parentId) return null
+  const parent = dragged.parentId ? graph.nodes.get(dragged.parentId) : null
+  const targetRect = layout.nodes.get(targetNodeId)
+  if (!parent || !targetRect || !parent.children.includes(draggedNodeId) || !parent.children.includes(targetNodeId)) {
+    return null
+  }
+  const restChildren = parent.children.filter((id) => id !== draggedNodeId)
+  const targetIndex = restChildren.indexOf(targetNodeId)
+  if (targetIndex === -1) return null
+  const midpoint =
+    direction === 'vertical'
+      ? targetRect.x + targetRect.width / 2
+      : targetRect.y + targetRect.height / 2
+  const pointCross = direction === 'vertical' ? point.x : point.y
+  return pointCross < midpoint ? targetIndex : targetIndex + 1
+}
+
 // 拖拽悬停目标解析：命中分组框 item 时返回真实父节点 + 该分组 + 组内插入下标；
-// 命中普通节点时该节点本身就是新的目标父节点，不计算插入下标（追加到末尾）；
+// 命中同父兄弟普通节点时返回共同父节点 + 兄弟插入下标；
+// 命中非兄弟普通节点时该节点本身就是新的目标父节点，不计算插入下标（追加到末尾）；
 // 命中分组框 header、命中空白、或目标是被拖节点自己/其后代时，返回 invalid。
-export function resolveDropTarget(graph, layout, point, draggedNodeId) {
+export function resolveDropTarget(graph, layout, point, draggedNodeId, direction = 'horizontal') {
   const hit = hitTest(layout, point)
   if (!hit) return { valid: false }
 
@@ -179,6 +200,15 @@ export function resolveDropTarget(graph, layout, point, draggedNodeId) {
   }
 
   if (hit.type === 'node') {
+    const siblingIndex = siblingInsertIndexAt(graph, layout, point, draggedNodeId, hit.id, direction)
+    if (siblingIndex !== null) {
+      return {
+        valid: true,
+        parentId: graph.nodes.get(draggedNodeId).parentId,
+        group: null,
+        insertIndex: siblingIndex,
+      }
+    }
     const parentId = hit.id
     if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
     return { valid: true, parentId, group: null, insertIndex: null }

@@ -263,18 +263,38 @@ test('groupInsertIndexToParentIndex offsets by the segment start when the group 
   assert.equal(index, 9)
 })
 
-test('resolveDropTarget resolves a plain node hit as the new parent', () => {
+test('resolveDropTarget resolves a non-sibling plain node hit as the new parent', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, VIEWPORT)
-  const targetRect = layout.nodes.get('feeder-2')
+  const targetRect = layout.nodes.get('cluster-25')
   const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 }
 
   const target = resolveDropTarget(graph, layout, point, 'feeder-1')
 
   assert.equal(target.valid, true)
-  assert.equal(target.parentId, 'feeder-2')
+  assert.equal(target.parentId, 'cluster-25')
   assert.equal(target.group, null)
   assert.equal(target.insertIndex, null)
+})
+
+test('resolveDropTarget resolves a sibling plain node hit as a same-parent reorder target', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('feeder-2')
+  const beforePoint = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + 2 }
+  const afterPoint = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height - 2 }
+
+  const beforeTarget = resolveDropTarget(graph, layout, beforePoint, 'feeder-3')
+  const afterTarget = resolveDropTarget(graph, layout, afterPoint, 'feeder-1')
+
+  assert.equal(beforeTarget.valid, true)
+  assert.equal(beforeTarget.parentId, 'grid-tie')
+  assert.equal(beforeTarget.group, null)
+  assert.equal(beforeTarget.insertIndex, 1)
+  assert.equal(afterTarget.valid, true)
+  assert.equal(afterTarget.parentId, 'grid-tie')
+  assert.equal(afterTarget.group, null)
+  assert.equal(afterTarget.insertIndex, 1)
 })
 
 test('resolveDropTarget resolves a group item hit to the group real parent and an insert index', () => {
