@@ -75,6 +75,15 @@ function linePoints(segmentCalls) {
     .map((call) => ({ x: call.args[0], y: call.args[1], method: call.method }))
 }
 
+function fontBeforeText(ctx, text) {
+  const textIndex = ctx.calls.findIndex((call) => call.method === 'fillText' && call.args[0] === text)
+  assert.notEqual(textIndex, -1)
+  return ctx.calls
+    .slice(0, textIndex)
+    .filter((call) => call.method === 'set:font')
+    .at(-1)?.args[0]
+}
+
 function arrowFillSegment(ctx, arrowIndex) {
   const fills = ctx.methodsOf('fill')
   const fillIndex = ctx.calls.findIndex((call, index) => call === fills[arrowIndex])
@@ -172,6 +181,28 @@ test('default renderer uses dotted grid and rounded card primitives', () => {
 
   assert.ok(ctx.methodsOf('roundRect').length > 0)
   assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Storage Heap 1'))
+})
+
+test('default renderer scales node and group text with the viewport', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({
+    viewport: { x: 100, y: 100, scale: 2 },
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+  })
+
+  renderScene(ctx, scene)
+
+  assert.equal(fontBeforeText(ctx, 'Energy Root'), '26px sans-serif')
+  assert.equal(fontBeforeText(ctx, 'Storage Heap 1'), '26px sans-serif')
+
+  const rootRect = worldRectToScreen(scene.layout.nodes.get('energy-root'), scene.viewport)
+  const rootLabel = ctx.methodsOf('fillText').find((call) => call.args[0] === 'Energy Root')
+  assert.deepEqual(rootLabel.args.slice(1), [rootRect.x + 20, rootRect.y + rootRect.height / 2])
+
+  const group = scene.layout.groups.find((item) => item.parentId === 'heap-1')
+  const groupRect = worldRectToScreen(group, scene.viewport)
+  const groupTitle = ctx.methodsOf('fillText').find((call) => call.args[0] === 'Storage Heap 1')
+  assert.deepEqual(groupTitle.args.slice(1), [groupRect.x + 52, groupRect.y + 36])
 })
 
 test('default edges draw as three-segment orthogonal polylines', () => {

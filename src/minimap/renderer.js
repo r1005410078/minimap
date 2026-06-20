@@ -60,6 +60,13 @@ function roundedRect(ctx, rect, radius) {
   ctx.quadraticCurveTo(rect.x, rect.y, rect.x + r, rect.y)
 }
 
+function scaledFont(font, scale) {
+  return font.replace(/(\d*\.?\d+)px/, (_, size) => {
+    const value = Number(size) * scale
+    return `${Number(value.toFixed(3))}px`
+  })
+}
+
 // childId -> 它所属的分组（一个父节点下的每个分组各自的 children 互不重叠）。
 function groupByChildId(layout) {
   return new Map(layout.groups.flatMap((group) => group.children.map((id) => [id, group])))
@@ -319,13 +326,14 @@ function drawGroup(ctx, graph, group, rect, state, theme, scrollbarHovered = fal
 
     const parentNode = graph.nodes.get(group.parentId)
     const title = parentNode?.label ?? group.parentId
-    const headerTextY = rect.y + 18
-    const chevronX = rect.x + 14
-    const titleX = chevronX + 12
-    const countX = rect.x + rect.width - 16
+    const scale = rect.height / group.height
+    const headerTextY = rect.y + 18 * scale
+    const chevronX = rect.x + 14 * scale
+    const titleX = chevronX + 12 * scale
+    const countX = rect.x + rect.width - 16 * scale
 
     ctx.fillStyle = theme.group.header
-    ctx.font = theme.group.font
+    ctx.font = scaledFont(theme.group.font, scale)
     ctx.textBaseline = 'middle'
     ctx.textAlign = 'left'
     ctx.fillText(title, titleX, headerTextY)
@@ -363,7 +371,7 @@ function drawGroupScrollbar(ctx, group, rect, theme, hovered) {
   ctx.fill()
 }
 
-function drawNode(ctx, node, rect, state, theme) {
+function drawNode(ctx, node, rect, state, theme, scale = 1) {
   withDimmedAlpha(ctx, state, () => {
     ctx.fillStyle = theme.node.fill
     ctx.beginPath()
@@ -377,14 +385,14 @@ function drawNode(ctx, node, rect, state, theme) {
     ctx.lineWidth = 1
     ctx.stroke()
     ctx.fillStyle = theme.node.text
-    ctx.font = theme.node.font
+    ctx.font = scaledFont(theme.node.font, scale)
     ctx.textBaseline = 'middle'
     ctx.textAlign = 'left'
     ctx.save()
     ctx.beginPath()
     roundedRect(ctx, rect, theme.node.radius ?? 6)
     ctx.clip()
-    ctx.fillText(node.label ?? node.id, rect.x + 10, rect.y + rect.height / 2)
+    ctx.fillText(node.label ?? node.id, rect.x + 10 * scale, rect.y + rect.height / 2)
     ctx.restore()
   })
 }
@@ -440,7 +448,7 @@ function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, 
     }
     const itemState = makeState(child.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
-    else drawNode(ctx, node, childRect, itemState, theme)
+    else drawNode(ctx, node, childRect, itemState, theme, viewport.scale)
   }
   ctx.restore()
 }
@@ -452,7 +460,7 @@ function drawNodeDragGhost(ctx, graph, nodeDrag, theme, renderers, viewport, sel
   const previousAlpha = ctx.globalAlpha ?? 1
   ctx.globalAlpha = 0.85
   if (renderers.node) renderers.node(ctx, { node, rect: nodeDrag.ghostRect, state: itemState, theme, viewport })
-  else drawNode(ctx, node, nodeDrag.ghostRect, itemState, theme)
+  else drawNode(ctx, node, nodeDrag.ghostRect, itemState, theme, viewport.scale)
   ctx.globalAlpha = previousAlpha
 }
 
@@ -541,7 +549,7 @@ export function renderScene(ctx, scene) {
     const node = graph.nodes.get(item.id)
     const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })
-    else drawNode(ctx, node, screen, itemState, theme)
+    else drawNode(ctx, node, screen, itemState, theme, viewport.scale)
     drawn++
   }
 
