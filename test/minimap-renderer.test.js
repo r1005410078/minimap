@@ -162,6 +162,19 @@ test('renderScene draws in order grid -> edges -> groups -> nodes', () => {
   assert.ok(firstGroup < firstNode)
 })
 
+test('default renderer uses dotted grid and rounded card primitives', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({
+    theme: { ...defaultTheme, grid: { ...defaultTheme.grid, size: 1 } },
+  })
+
+  renderScene(ctx, scene)
+
+  assert.ok(ctx.methodsOf('arc').length > 0)
+  assert.ok(ctx.methodsOf('roundRect').length > 0)
+  assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Storage Heap 1'))
+})
+
 test('default edges draw as three-segment orthogonal polylines', () => {
   const ctx = createMockCtx()
   const scene = demoScene({
@@ -573,8 +586,10 @@ test('drawGroup shows an expand/collapse chevron with label and count in the hea
   renderScene(ctx, scene)
 
   const headerTexts = ctx.methodsOf('fillText').map((c) => c.args[0])
-  assert.ok(headerTexts.includes('▸ heap-1 · 24'))
-  assert.ok(headerTexts.includes('▸ cluster-25 · 10'))
+  assert.ok(headerTexts.includes('Storage Heap 1'))
+  assert.ok(headerTexts.includes('Cluster 25'))
+  assert.ok(headerTexts.includes('24'))
+  assert.ok(headerTexts.includes('10'))
 })
 
 test('drawGroup draws a scrollbar track and thumb only for overflowing groups', () => {
@@ -664,8 +679,8 @@ test('drawGroupChildren in drag mode uses animated child rects and drop slot opa
   const labelCall = ctx.methodsOf('fillText').find((call) => call.args[0] === movedLabel)
   const screenRect = worldRectToScreen(overrideRect, scene.viewport)
   assert.deepEqual(labelCall.args.slice(1), [
-    screenRect.x + 6,
-    screenRect.y + screenRect.height / 2 + 4,
+    screenRect.x + 10,
+    screenRect.y + screenRect.height / 2,
   ])
   assert.ok(ctx.methodsOf('set:globalAlpha').some((call) => call.args[0] === 0.5))
 })
@@ -690,7 +705,7 @@ test('drawGroupChildren in drag mode draws a drop slot and a single ghost for th
     },
   })
 
-  assert.equal(defaultTheme.group.dropSlot?.fill, '#24344a')
+  assert.equal(defaultTheme.group.dropSlot?.fill, '#233044')
   assert.ok(ctx.methodsOf('set:fillStyle').some((call) => call.args[0] === defaultTheme.group.dropSlot.fill))
   assert.ok(ctx.methodsOf('set:globalAlpha').some((call) => call.args[0] === 0.85))
 
@@ -698,8 +713,8 @@ test('drawGroupChildren in drag mode draws a drop slot and a single ghost for th
   const draggedLabelCalls = ctx.methodsOf('fillText').filter((call) => call.args[0] === draggedNode.label)
   assert.equal(draggedLabelCalls.length, 1)
   assert.deepEqual(draggedLabelCalls[0].args.slice(1), [
-    ghostRect.x + 6,
-    ghostRect.y + ghostRect.height / 2 + 4,
+    ghostRect.x + 10,
+    ghostRect.y + ghostRect.height / 2,
   ])
 })
 

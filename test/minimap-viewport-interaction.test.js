@@ -23,7 +23,9 @@ function renderedRectForLabel(ctx, label) {
   const calls = callsSinceLastClear(ctx)
   const labelIndex = calls.findIndex((call) => call.method === 'fillText' && call.args[0] === label)
   assert.notEqual(labelIndex, -1)
-  const rectCall = calls.slice(0, labelIndex).findLast((call) => call.method === 'strokeRect')
+  const rectCall = calls
+    .slice(0, labelIndex)
+    .findLast((call) => call.method === 'roundRect' || call.method === 'strokeRect')
   assert.ok(rectCall)
   const [x, y, width, height] = rectCall.args
   return { x, y, width, height }

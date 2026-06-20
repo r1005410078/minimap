@@ -6,6 +6,7 @@ import { createDemoGraph } from '../src/minimap/graph.js'
 import { computeLayout, keepAnchorStable } from '../src/minimap/layout.js'
 import { easeOutCubic } from '../src/minimap/layout-transition.js'
 import { resolveEdges } from '../src/minimap/renderer.js'
+import { defaultTheme } from '../src/minimap/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -60,11 +61,21 @@ function callsSinceLastClear(ctx) {
 
 function renderedRectForLabel(ctx, label) {
   const calls = callsSinceLastClear(ctx)
-  const labelIndex = calls.findIndex((call) => call.method === 'fillText' && call.args[0] === label)
+  const labelIndex = calls.findLastIndex((call, index) => {
+    if (call.method !== 'fillText' || call.args[0] !== label) return false
+    const priorCalls = calls.slice(Math.max(0, index - 6), index)
+    return priorCalls.some(
+      (priorCall) => priorCall.method === 'set:fillStyle' && priorCall.args[0] === defaultTheme.node.text,
+    )
+  })
   assert.notEqual(labelIndex, -1)
   const rectCall = calls
     .slice(0, labelIndex)
-    .findLast((call) => call.method === 'strokeRect')
+    .findLast((call) => {
+      if (call.method !== 'roundRect' && call.method !== 'strokeRect') return false
+      const [, , width, height] = call.args
+      return width > 20 && height > 20
+    })
   assert.ok(rectCall)
   const [x, y, width, height] = rectCall.args
   return { x, y, width, height }
@@ -75,6 +86,24 @@ function centerOf(rect) {
     x: rect.x + rect.width / 2,
     y: rect.y + rect.height / 2,
   }
+}
+
+function flushAnimationFrames(limit = 32) {
+  let ran = false
+  for (let i = 0; i < limit; i++) {
+    const next = frames.runNext(1000 + i * 200)
+    if (!next) return ran
+    ran = true
+  }
+  return ran
+}
+
+function runFrameFrom(index, time) {
+  const frame = frames.scheduled.slice(index).find((item) => !item.cancelled && !item.ran)
+  if (!frame) return false
+  frame.ran = true
+  frame.callback(time)
+  return true
 }
 
 function interpolateRect(from, to, progress) {
@@ -132,6 +161,7 @@ test('a ResizeObserver callback re-syncs canvas size and re-renders', () => {
 })
 
 test('changing layoutDirection animates through requestAnimationFrame', async () => {
+  flushAnimationFrames()
   const graph = createDemoGraph()
   const horizontalLayout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const verticalLayout = computeLayout(graph, { direction: 'vertical', viewportWidth: 800, viewportHeight: 600 })
@@ -147,13 +177,13 @@ test('changing layoutDirection animates through requestAnimationFrame', async ()
   })
   const ctx = contexts.at(-1)
   const callsBefore = ctx.calls.length
+  const baseline = frames.scheduled.length
 
   await wrapper.setProps({ layoutDirection: 'vertical' })
   await wrapper.vm.$nextTick()
 
-  assert.ok(frames.scheduled.length > 0)
-  assert.equal(frames.runNext(1000), true)
-  assert.equal(frames.runNext(1100), true)
+  assert.equal(runFrameFrom(baseline, 1000), true)
+  assert.equal(runFrameFrom(baseline, 1100), true)
   assert.ok(ctx.calls.length > callsBefore)
 
   const actual = renderedRectForLabel(ctx, 'Storage Heap 1')
@@ -190,16 +220,18 @@ test('replacing graph prop animates through requestAnimationFrame', async () => 
 })
 
 test('completed layout animation does not schedule another frame', async () => {
+  flushAnimationFrames()
   const wrapper = mount(Minimap, {
     propsData: { graph: createDemoGraph(), layoutDirection: 'horizontal' },
   })
+  const baseline = frames.scheduled.length
 
   await wrapper.setProps({ layoutDirection: 'vertical' })
   await wrapper.vm.$nextTick()
-  assert.equal(frames.runNext(1000), true)
+  assert.equal(runFrameFrom(baseline, 1000), true)
   const scheduledAfterFirstTick = frames.scheduled.length
 
-  assert.equal(frames.runNext(1200), true)
+  assert.equal(runFrameFrom(baseline, 1200), true)
   assert.equal(frames.scheduled.length, scheduledAfterFirstTick)
   wrapper.destroy()
 })
@@ -248,6 +280,7 @@ test('unmounting cancels an active layout animation frame', async () => {
 })
 
 test('selected anchor contributes a compensated viewport during layout animation', async () => {
+  flushAnimationFrames()
   const graph = createDemoGraph()
   const horizontalLayout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const verticalLayout = computeLayout(graph, { direction: 'vertical', viewportWidth: 800, viewportHeight: 600 })
@@ -266,21 +299,21 @@ test('selected anchor contributes a compensated viewport during layout animation
     },
   })
   const ctx = contexts.at(-1)
+  const baseline = frames.scheduled.length
 
   await wrapper.setProps({ layoutDirection: 'vertical' })
   await wrapper.vm.$nextTick()
-  frames.runNext(1000)
-  frames.runNext(1100)
+  runFrameFrom(baseline, 1000)
+  runFrameFrom(baseline, 1100)
 
   const latestCalls = callsSinceLastClear(ctx)
   const gridFill = latestCalls
     .filter((call) => call.method === 'fillRect')
     .find((call) => call.args[0] === 0 && call.args[1] === 0 && call.args[2] === 800 && call.args[3] === 600)
-  const verticalGridLine = latestCalls.find((call) => call.method === 'moveTo' && call.args[0] < 0)
+  const gridDots = latestCalls.filter((call) => call.method === 'arc')
 
   assert.ok(gridFill)
-  assert.ok(verticalGridLine)
-  assert.notEqual(verticalGridLine.args[0], 0)
+  assert.ok(gridDots.length > 0)
 
   const actualCenter = centerOf(renderedRectForLabel(ctx, 'Storage Heap 1'))
   const expectedCenter = centerOf(

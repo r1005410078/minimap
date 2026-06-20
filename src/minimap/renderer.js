@@ -43,6 +43,23 @@ export function collectVisible(layout, viewport, width, height) {
 
 const centerOfBox = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 })
 
+function roundedRect(ctx, rect, radius) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(rect.x, rect.y, rect.width, rect.height, radius)
+    return
+  }
+  const r = Math.min(radius, rect.width / 2, rect.height / 2)
+  ctx.moveTo(rect.x + r, rect.y)
+  ctx.lineTo(rect.x + rect.width - r, rect.y)
+  ctx.quadraticCurveTo(rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + r)
+  ctx.lineTo(rect.x + rect.width, rect.y + rect.height - r)
+  ctx.quadraticCurveTo(rect.x + rect.width, rect.y + rect.height, rect.x + rect.width - r, rect.y + rect.height)
+  ctx.lineTo(rect.x + r, rect.y + rect.height)
+  ctx.quadraticCurveTo(rect.x, rect.y + rect.height, rect.x, rect.y + rect.height - r)
+  ctx.lineTo(rect.x, rect.y + r)
+  ctx.quadraticCurveTo(rect.x, rect.y, rect.x + r, rect.y)
+}
+
 // childId -> 它所属的分组（一个父节点下的每个分组各自的 children 互不重叠）。
 function groupByChildId(layout) {
   return new Map(layout.groups.flatMap((group) => group.children.map((id) => [id, group])))
@@ -133,8 +150,21 @@ function drawGrid(ctx, width, height, viewport, theme) {
   ctx.fillStyle = theme.background
   ctx.fillRect(0, 0, width, height)
   const size = theme.grid.size * viewport.scale
-  if (size < 2) return
-  ctx.strokeStyle = theme.grid.color
+  if (size < 4) return
+  const grid = { dot: true, dotRadius: 1.1, ...(theme.grid || {}) }
+  if (grid.dot !== false) {
+    ctx.fillStyle = grid.color
+    const radius = Math.max(0.6, (grid.dotRadius ?? 1) * viewport.scale)
+    for (let x = viewport.x % size; x <= width; x += size) {
+      for (let y = viewport.y % size; y <= height; y += size) {
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+    return
+  }
+  ctx.strokeStyle = grid.color
   ctx.lineWidth = 1
   ctx.beginPath()
   for (let x = viewport.x % size; x <= width; x += size) {
@@ -273,21 +303,43 @@ function inferDirectionFromLayout(graph, layout, edges) {
 const SCROLLBAR_WIDTH = 8
 const SCROLLBAR_RADIUS = SCROLLBAR_WIDTH / 2
 
-function drawGroup(ctx, group, rect, state, theme, scrollbarHovered = false) {
+function drawGroup(ctx, graph, group, rect, state, theme, scrollbarHovered = false) {
   withDimmedAlpha(ctx, state, () => {
     ctx.fillStyle = theme.group.fill
-    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.beginPath()
+    roundedRect(ctx, rect, theme.group.radius ?? 12)
+    ctx.fill()
     ctx.strokeStyle = state.selected
       ? theme.node.selectedStroke
       : state.highlighted
         ? theme.group.header
         : theme.group.stroke
     ctx.lineWidth = 1
-    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.stroke()
+
+    const parentNode = graph.nodes.get(group.parentId)
+    const title = parentNode?.label ?? group.parentId
+    const headerTextY = rect.y + 16
+    const titleX = rect.x + 22
+    const countX = rect.x + rect.width - 12
+
+    ctx.fillStyle = theme.accent || theme.group.header
+    ctx.beginPath()
+    ctx.arc(rect.x + 12, rect.y + 14, 3.5, 0, Math.PI * 2)
+    ctx.fill()
+
     ctx.fillStyle = theme.group.header
     ctx.font = theme.group.font
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+    ctx.fillText(title, titleX, headerTextY)
+    ctx.textAlign = 'right'
+    ctx.fillText(String(group.children.length), countX, headerTextY)
     const chevron = group.expanded ? '▾' : '▸'
-    ctx.fillText(`${chevron} ${group.parentId} · ${group.children.length}`, rect.x + 8, rect.y + 16)
+    ctx.fillStyle = theme.group.header
+    ctx.fillText(chevron, rect.x + 4, headerTextY)
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
     if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme, scrollbarHovered)
   })
 }
@@ -317,17 +369,26 @@ function drawGroupScrollbar(ctx, group, rect, theme, hovered) {
 function drawNode(ctx, node, rect, state, theme) {
   withDimmedAlpha(ctx, state, () => {
     ctx.fillStyle = theme.node.fill
-    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.beginPath()
+    roundedRect(ctx, rect, theme.node.radius ?? 6)
+    ctx.fill()
     ctx.strokeStyle = state.selected
       ? theme.node.selectedStroke
       : state.highlighted
         ? theme.group.header
         : theme.node.stroke
     ctx.lineWidth = 1
-    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.stroke()
     ctx.fillStyle = theme.node.text
     ctx.font = theme.node.font
-    ctx.fillText(node.label ?? node.id, rect.x + 6, rect.y + rect.height / 2 + 4)
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+    ctx.save()
+    ctx.beginPath()
+    roundedRect(ctx, rect, theme.node.radius ?? 6)
+    ctx.clip()
+    ctx.fillText(node.label ?? node.id, rect.x + 10, rect.y + rect.height / 2)
+    ctx.restore()
   })
 }
 
@@ -336,11 +397,13 @@ function drawDropSlot(ctx, rect, theme, opacity = 1) {
   const previousAlpha = ctx.globalAlpha ?? 1
   ctx.globalAlpha = previousAlpha * opacity
   ctx.fillStyle = dropSlot.fill
-  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.beginPath()
+  roundedRect(ctx, rect, theme.group.radius ?? 12)
+  ctx.fill()
   ctx.strokeStyle = dropSlot.stroke
   ctx.lineWidth = 1
   ctx.setLineDash([4, 4])
-  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.stroke()
   ctx.setLineDash([])
   ctx.globalAlpha = previousAlpha
 }
@@ -469,7 +532,7 @@ export function renderScene(ctx, scene) {
     const scrollbarHovered = state.groupScrollbarHoverId === group.id
     if (renderers.group) renderers.group(ctx, { group, rect: screen, state: itemState, theme, viewport })
     else {
-      drawGroup(ctx, group, screen, itemState, theme, scrollbarHovered)
+      drawGroup(ctx, graph, group, screen, itemState, theme, scrollbarHovered)
     }
     drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext)
     drawn++

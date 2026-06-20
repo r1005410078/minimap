@@ -4,6 +4,7 @@ import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph.js'
 import { computeLayout, GROUP } from '../src/minimap/layout.js'
+import { defaultTheme } from '../src/minimap/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -371,7 +372,7 @@ test('wheel at a scroll boundary does not offset content', () => {
 
   const labels = callsSinceLastClear(ctx).filter((c) => c.method === 'fillText')
   const first = labels.find((c) => c.args[0] === 'cluster-1')
-  assert.equal(first.args[2], group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2 + 4)
+  assert.equal(first.args[2], group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2)
   assert.equal(frames.scheduled.some((frame) => !frame.ran && !frame.cancelled), false)
   wrapper.destroy()
 })
@@ -391,7 +392,7 @@ test('pointercancel during scrollbar drag at a boundary does not leave content o
 
   const labelsAfterCancel = callsSinceLastClear(ctx).filter((c) => c.method === 'fillText')
   const firstAfterCancel = labelsAfterCancel.find((c) => c.args[0] === 'cluster-1')
-  assert.equal(firstAfterCancel.args[2], group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2 + 4)
+  assert.equal(firstAfterCancel.args[2], group.y + GROUP.header + GROUP.padding + GROUP.itemH / 2)
   wrapper.destroy()
 })
 
@@ -404,7 +405,11 @@ test('hovering over the scrollbar thumb redraws it with the hover color', () => 
 
   dispatchPointerMove(wrapper, scrollbarThumbCenter(group))
 
-  assert.ok(callsSinceLastClear(ctx).some((call) => call.method === 'set:fillStyle' && call.args[0] === '#7f95ad'))
+  assert.ok(
+    callsSinceLastClear(ctx).some(
+      (call) => call.method === 'set:fillStyle' && call.args[0] === defaultTheme.group.scrollbar.thumbHover,
+    ),
+  )
   wrapper.destroy()
 })
 
@@ -476,7 +481,7 @@ test('options.groupThreshold is passed through to the layout engine', () => {
   const ctx = contexts.at(-1)
 
   const labels = ctx.methodsOf('fillText').map((c) => c.args[0])
-  const headerLabel = labels.find((l) => typeof l === 'string' && l.includes('grid-tie'))
+  const headerLabel = labels.find((l) => typeof l === 'string' && l.includes('Grid Tie'))
   assert.ok(headerLabel)
   wrapper.destroy()
 })
