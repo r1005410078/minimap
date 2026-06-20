@@ -14,9 +14,12 @@ import {
 const LAYOUT_OPTS = { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 }
 
 test('buildVirtualOrder inserts the dragged child at the target index', () => {
-  const group = { children: ['a', 'b', 'c', 'd'] }
-  assert.deepEqual(buildVirtualOrder(group, 'b', 0), ['b', 'a', 'c', 'd'])
-  assert.deepEqual(buildVirtualOrder(group, 'b', 2), ['a', 'c', 'b', 'd'])
+  assert.deepEqual(buildVirtualOrder(['a', 'b', 'c', 'd'], 'b', 0), ['b', 'a', 'c', 'd'])
+  assert.deepEqual(buildVirtualOrder(['a', 'b', 'c', 'd'], 'b', 2), ['a', 'c', 'b', 'd'])
+})
+
+test('buildVirtualOrder inserts a foreign id that was not already in the array', () => {
+  assert.deepEqual(buildVirtualOrder(['a', 'b', 'c'], 'z', 1), ['a', 'z', 'b', 'c'])
 })
 
 test('childWorldRectsById shifts visible children when the virtual order changes', () => {
@@ -24,7 +27,7 @@ test('childWorldRectsById shifts visible children when the virtual order changes
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((item) => item.parentId === 'heap-1')
   const original = childWorldRectsById(group, group.children)
-  const reordered = childWorldRectsById(group, buildVirtualOrder(group, 'cluster-1', 2))
+  const reordered = childWorldRectsById(group, buildVirtualOrder(group.children, 'cluster-1', 2))
 
   assert.notEqual(original['cluster-1'].y, reordered['cluster-1'].y)
   assert.notEqual(original['cluster-2'].x, reordered['cluster-2'].x)
@@ -51,4 +54,17 @@ test('dragShiftEasedProgress eases toward 1 over time', () => {
   assert.equal(dragShiftEasedProgress(0, 150, 0), 0)
   assert.ok(dragShiftEasedProgress(0, 150, 75) > 0.4)
   assert.equal(dragShiftEasedProgress(0, 150, 150), 1)
+})
+
+test('childWorldRectsById computes a rect for a virtually inserted child beyond the original grid capacity', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((item) => item.parentId === 'heap-1')
+  const order = [...group.children, 'feeder-1']
+
+  const rects = childWorldRectsById(group, order)
+
+  assert.ok(rects['feeder-1'])
+  assert.equal(typeof rects['feeder-1'].x, 'number')
+  assert.equal(typeof rects['feeder-1'].y, 'number')
 })

@@ -1,18 +1,27 @@
 // 组内拖拽换位时的子节点矩形插值；纯函数，不依赖 Vue / Canvas。
 import { easeOutCubic } from './layout-transition.js'
-import { visibleGroupChildren } from './layout.js'
+import { GROUP } from './layout.js'
 
-export function buildVirtualOrder(group, childId, insertIndex) {
-  const order = group.children.filter((id) => id !== childId)
+export function buildVirtualOrder(children, childId, insertIndex) {
+  const order = children.filter((id) => id !== childId)
   order.splice(insertIndex, 0, childId)
   return order
 }
 
 export function childWorldRectsById(group, order) {
-  const virtualGroup = { ...group, children: order }
+  const columns = Math.max(1, group.columns)
   const rects = {}
-  for (const child of visibleGroupChildren(virtualGroup)) {
-    rects[child.id] = { ...child.rect }
+  const rowHeight = GROUP.itemH + GROUP.itemGap
+  for (let i = 0; i < order.length; i++) {
+    const childId = order[i]
+    const row = Math.floor(i / columns)
+    const col = i % columns
+    rects[childId] = {
+      x: group.x + GROUP.padding + col * (GROUP.itemW + GROUP.itemGap),
+      y: group.y + GROUP.header + GROUP.padding + row * rowHeight - group.scrollTop,
+      width: GROUP.itemW,
+      height: GROUP.itemH,
+    }
   }
   return rects
 }
