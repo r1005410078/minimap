@@ -20,6 +20,13 @@ function dispatchPointerDown(wrapper, point) {
   )
 }
 
+function dispatchPointerUp(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(
+    new PointerEvent('pointerup', { clientX: point.x, clientY: point.y, bubbles: true }),
+  )
+}
+
 function dispatchDrop(wrapper, payload, point) {
   const canvasEl = wrapper.find('canvas').element
   const evt = new Event('drop', { bubbles: true, cancelable: true })
@@ -59,10 +66,12 @@ test('dropping with a selection adds a child under the selected node, at the dro
   const wrapper = mount(Minimap, { propsData: { graph } })
 
   const gridTieRect = layout.nodes.get('grid-tie')
-  dispatchPointerDown(wrapper, {
+  const gridTiePoint = {
     x: gridTieRect.x + gridTieRect.width / 2,
     y: gridTieRect.y + gridTieRect.height / 2,
-  })
+  }
+  dispatchPointerDown(wrapper, gridTiePoint)
+  dispatchPointerUp(wrapper, gridTiePoint)
 
   const feeder1 = layout.nodes.get('feeder-1')
   const feeder2 = layout.nodes.get('feeder-2')

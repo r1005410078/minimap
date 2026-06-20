@@ -103,7 +103,9 @@ test('clicking a node selects it (uncontrolled) and highlights it on the next re
   const rect = layout.nodes.get('grid-tie')
   const wrapper = mount(Minimap, { propsData: { graph } })
 
-  dispatchPointerDown(wrapper, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
+  const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  dispatchPointerDown(wrapper, point)
+  dispatchPointerUp(wrapper, point)
 
   assert.deepEqual(wrapper.emitted('select')[0][0], ['grid-tie'])
   assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Grid Tie'])
@@ -131,9 +133,14 @@ test('modifier clicking adds and toggles multiple selections', () => {
   const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
   const wrapper = mount(Minimap, { propsData: { graph } })
 
-  dispatchPointerDown(wrapper, { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 })
-  dispatchPointerDown(wrapper, { x: heapGroup.x + heapGroup.width / 2, y: heapGroup.y + heapGroup.height / 2 }, { shiftKey: true })
-  dispatchPointerDown(wrapper, { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }, { ctrlKey: true })
+  const gridPoint = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }
+  const groupPoint = { x: heapGroup.x + heapGroup.width / 2, y: heapGroup.y + heapGroup.height / 2 }
+
+  dispatchPointerDown(wrapper, gridPoint)
+  dispatchPointerUp(wrapper, gridPoint)
+  dispatchPointerDown(wrapper, groupPoint, { shiftKey: true })
+  dispatchPointerDown(wrapper, gridPoint, { ctrlKey: true })
+  dispatchPointerUp(wrapper, gridPoint, { ctrlKey: true })
 
   assert.deepEqual(wrapper.emitted('select')[0][0], ['grid-tie'])
   assert.deepEqual(wrapper.emitted('select')[1][0], ['grid-tie', heapGroup.id])
@@ -147,7 +154,9 @@ test('Escape clears the current selection', () => {
   const grid = layout.nodes.get('grid-tie')
   const wrapper = mount(Minimap, { propsData: { graph } })
 
-  dispatchPointerDown(wrapper, { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 })
+  const point = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }
+  dispatchPointerDown(wrapper, point)
+  dispatchPointerUp(wrapper, point)
   dispatchKeyDown(wrapper, 'Escape')
 
   assert.deepEqual(wrapper.emitted('select').at(-1)[0], [])
@@ -205,7 +214,9 @@ test('selectedIds prop puts the component in controlled mode', async () => {
   assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Grid Tie'])
 
   const rootRect = layout.nodes.get('energy-root')
-  dispatchPointerDown(wrapper, { x: rootRect.x + rootRect.width / 2, y: rootRect.y + rootRect.height / 2 })
+  const point = { x: rootRect.x + rootRect.width / 2, y: rootRect.y + rootRect.height / 2 }
+  dispatchPointerDown(wrapper, point)
+  dispatchPointerUp(wrapper, point)
 
   assert.deepEqual(wrapper.emitted('select')[0][0], ['energy-root'])
   // 受控模式：prop 还没变，下一次渲染应该还是原来的选中状态

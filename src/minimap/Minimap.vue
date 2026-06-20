@@ -40,6 +40,7 @@ import {
   exceedsDragThreshold,
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
+  resolveDropTarget,
 } from './interaction.js'
 import { createGraphOperationManager, captureSubtreeSnapshot } from './graph-operations.js'
 import { deserializeGraph, serializeGraph } from './graph-serialization.js'
@@ -83,6 +84,7 @@ const props = defineProps({
   beforeDelete: { type: Function, default: null },
   beforeCopy: { type: Function, default: null },
   beforeImport: { type: Function, default: null },
+  beforeNodeMove: { type: Function, default: null },
   beforePaste: { type: Function, default: null },
 })
 
@@ -99,6 +101,7 @@ const emit = defineEmits([
   'import',
   'export',
   'paste',
+  'node-move',
 ])
 
 const containerRef = ref(null)
@@ -221,10 +224,19 @@ function shouldAutoScroll(group) {
 
 function dragRenderContext() {
   if (!dragState || !dragState.dragging || !layout) return null
-  const group = layout.groups.find((g) => g.id === dragState.groupId)
-  if (!group) return null
-  const order = buildVirtualOrder(group, dragState.childId, dragState.insertIndex)
   const timestamp = now()
+  const group = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
+  if (!group) {
+    return {
+      groupId: null,
+      order: null,
+      draggingChildId: dragState.nodeId,
+      ghostRect: dragState.ghostScreenRect,
+      childRectsById: null,
+      dropSlotOpacity: 1,
+    }
+  }
+  const order = buildVirtualOrder(group.children, dragState.nodeId, dragState.insertIndex)
   const autoScrolling = shouldAutoScroll(group)
   const childRectsById =
     !autoScrolling &&
@@ -246,7 +258,7 @@ function dragRenderContext() {
   return {
     groupId: group.id,
     order,
-    draggingChildId: dragState.childId,
+    draggingChildId: dragState.nodeId,
     ghostRect: dragState.ghostScreenRect,
     childRectsById,
     dropSlotOpacity,
@@ -285,18 +297,71 @@ function ensureDragShiftLoop() {
   dragState.shiftRafId = requestAnimationFrame(tick)
 }
 
-function beginDragVisuals(group) {
-  const toOrder = buildVirtualOrder(group, dragState.childId, dragState.insertIndex)
-  dragState.shiftFromById = childWorldRectsById(group, group.children)
-  dragState.shiftToById = childWorldRectsById(group, toOrder)
-  dragState.shiftStartedAt = now()
-  dragState.slotFadeStartedAt = now()
+// hitTest 对分组框 item 区的判定基于 visibleGroupChildren（受当前 scrollTop 窗口裁剪），
+// 自动滚动连续推进时，固定的 ghostWorldPoint 会在内容下面"溜走"，落到窗口外的空白行——
+// hitTest 因此把 zone 误判成 body，resolveDropTarget 跟着判定为 invalid，自动滚动循环
+// 在还没真正滚到底之前就被掐断。只要指针仍在同一个分组框的题身体范围内（表头之外），
+// 就继续认定该分组为目标，直接用不受窗口裁剪的 groupGridIndexAt 重算插入位置，
+// 不依赖 hitTest 的可见窗口判断。
+function withinGroupBody(group, point) {
+  return (
+    point.x >= group.x &&
+    point.x <= group.x + group.width &&
+    point.y >= group.y + GROUP.header &&
+    point.y <= group.y + group.height
+  )
 }
 
-function scheduleDragShift(group, insertIndex) {
+function updateDragTarget(worldPoint) {
+  const previousGroupId = dragState.targetGroupId
+  const previousIndex = dragState.insertIndex
+
+  const activeGroup = previousGroupId ? layout.groups.find((g) => g.id === previousGroupId) : null
+  const target =
+    activeGroup && withinGroupBody(activeGroup, worldPoint)
+      ? {
+          valid: true,
+          parentId: activeGroup.parentId,
+          group: activeGroup,
+          insertIndex: groupGridIndexAt(
+            { ...activeGroup, children: activeGroup.children.filter((id) => id !== dragState.nodeId) },
+            worldPoint,
+          ),
+        }
+      : resolveDropTarget(props.graph, layout, worldPoint, dragState.nodeId)
+
+  if (!target.valid) {
+    clearDragShiftAnimation()
+    dragState.targetParentId = null
+    dragState.targetGroupId = null
+    dragState.insertIndex = 0
+  } else if (target.group) {
+    const autoScrolling = shouldAutoScroll(target.group)
+    const groupChanged = previousGroupId !== target.group.id
+    const indexChanged = previousIndex !== target.insertIndex
+    if (!autoScrolling && (groupChanged || indexChanged)) {
+      scheduleDragShift(target.group, target.insertIndex, { reset: groupChanged })
+    } else if (autoScrolling) {
+      clearDragShiftAnimation()
+    }
+    dragState.targetParentId = target.parentId
+    dragState.targetGroupId = target.group.id
+    dragState.insertIndex = target.insertIndex
+  } else {
+    clearDragShiftAnimation()
+    dragState.targetParentId = target.parentId
+    dragState.targetGroupId = null
+    dragState.insertIndex = 0
+  }
+
+  dragState.ghostWorldPoint = worldPoint
+  dragState.ghostScreenRect = ghostRectForPoint(worldPoint)
+}
+
+function scheduleDragShift(group, insertIndex, { reset = false } = {}) {
   const timestamp = now()
   const fromById =
-    dragState.shiftFromById && dragState.shiftToById && dragState.shiftStartedAt != null
+    !reset && dragState.shiftFromById && dragState.shiftToById && dragState.shiftStartedAt != null
       ? currentShiftRects(
           dragState.shiftFromById,
           dragState.shiftToById,
@@ -305,7 +370,7 @@ function scheduleDragShift(group, insertIndex) {
           timestamp,
         )
       : childWorldRectsById(group, group.children)
-  const toOrder = buildVirtualOrder(group, dragState.childId, insertIndex)
+  const toOrder = buildVirtualOrder(group.children, dragState.nodeId, insertIndex)
   dragState.shiftFromById = fromById
   dragState.shiftToById = childWorldRectsById(group, toOrder)
   dragState.shiftStartedAt = timestamp
@@ -519,34 +584,16 @@ function cancelAutoScrollLoop() {
   }
 }
 
-function updateDragInsertion(group, worldPoint, { animateShift = true } = {}) {
-  const restGroup = { ...group, children: group.children.filter((id) => id !== dragState.childId) }
-  const nextIndex = groupGridIndexAt(restGroup, worldPoint)
-  const autoScrolling = shouldAutoScroll(group)
-  const canAnimateShift = animateShift && !autoScrolling
-
-  if (nextIndex !== dragState.insertIndex) {
-    if (canAnimateShift) scheduleDragShift(group, nextIndex)
-    else clearDragShiftAnimation()
-    dragState.insertIndex = nextIndex
-  } else if (autoScrolling) {
-    clearDragShiftAnimation()
-  }
-
-  dragState.ghostWorldPoint = worldPoint
-  dragState.ghostScreenRect = ghostRectForPoint(worldPoint)
-}
-
 function startAutoScrollLoop() {
   const tick = (time) => {
     if (!dragState || !dragState.dragging) return
-    const group = layout.groups.find((g) => g.id === dragState.groupId)
+    const group = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
     if (group && dragState.ghostWorldPoint) {
       const delta = groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y)
       if (delta !== 0) {
         group.scrollTop = clampGroupScroll(group, group.scrollTop + delta)
         clearDragShiftAnimation()
-        updateDragInsertion(group, dragState.ghostWorldPoint, { animateShift: false })
+        updateDragTarget(dragState.ghostWorldPoint)
       }
     }
     renderCurrent()
@@ -560,7 +607,7 @@ function startAutoScrollLoop() {
 
 function ensureAutoScrollLoop() {
   if (!dragState?.dragging || dragState.scrollRafId != null) return
-  const group = layout?.groups.find((g) => g.id === dragState.groupId)
+  const group = dragState.targetGroupId ? layout?.groups.find((g) => g.id === dragState.targetGroupId) : null
   if (!shouldAutoScroll(group) && !dragShiftActive()) return
   startAutoScrollLoop()
 }
@@ -634,17 +681,23 @@ function handlePointerDown(event) {
     return
   }
 
-  if (hit?.type === 'group' && hit.zone === 'item') {
+  if ((hit?.type === 'group' && hit.zone === 'item') || hit?.type === 'node') {
+    const nodeId = hit.type === 'group' ? hit.childId : hit.id
+    const node = props.graph.nodes.get(nodeId)
+    if (!node) return
     canvasRef.value.setPointerCapture?.(event.pointerId)
     dragState = {
-      groupId: hit.id,
-      childId: hit.childId,
+      nodeId,
+      fromParentId: node.parentId,
       additive: isAdditiveSelection(event),
       startScreen: { x: event.clientX, y: event.clientY },
       dragging: false,
+      targetParentId: null,
+      targetGroupId: null,
       insertIndex: 0,
       ghostWorldPoint: null,
       ghostScreenRect: null,
+      lastScreenPoint: null,
       scrollRafId: null,
       shiftFromById: null,
       shiftToById: null,
@@ -727,20 +780,17 @@ function handlePointerMove(event) {
     return
   }
   const screenPoint = { x: event.clientX, y: event.clientY }
-  const group = layout.groups.find((g) => g.id === dragState.groupId)
-  if (!group) return
   const worldPoint = pointFromEvent(event)
+  dragState.lastScreenPoint = screenPoint
 
   if (!dragState.dragging) {
     if (!exceedsDragThreshold(dragState.startScreen, screenPoint)) return
     dragState.dragging = true
-    updateDragInsertion(group, worldPoint)
-    beginDragVisuals(group)
+    dragState.slotFadeStartedAt = now()
     ensureAutoScrollLoop()
-  } else {
-    updateDragInsertion(group, worldPoint)
   }
 
+  updateDragTarget(worldPoint)
   renderCurrent()
   ensureAutoScrollLoop()
   if (dragShiftActive()) ensureDragShiftLoop()
@@ -775,33 +825,66 @@ function handlePointerUp() {
   if (dragState.dragging) {
     cancelAutoScrollLoop()
     cancelDragShiftLoop()
-    const group = layout.groups.find((g) => g.id === dragState.groupId)
-    if (group) {
-      const parent = props.graph.nodes.get(group.parentId)
-      const index = groupInsertIndexToParentIndex(parent, group, dragState.childId, dragState.insertIndex)
-      const operation = {
-        type: 'reorder-group-child',
-        payload: { groupId: group.id, parentId: group.parentId, childId: dragState.childId, index },
-      }
-      const result = graphOperations().apply(operation, {
-        readonly: props.readonly,
-        before: props.beforeGroupReorder,
-      })
-      if (result.applied) {
-        updateGroupState(group.id, { scrollTop: group.scrollTop })
-        updateLayout()
-        emit('group-reorder', {
-          groupId: group.id,
-          childId: dragState.childId,
-          index: result.operation.payload.index,
+    if (dragState.targetParentId) {
+      const parent = props.graph.nodes.get(dragState.targetParentId)
+      const targetGroup = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
+      const index = targetGroup
+        ? groupInsertIndexToParentIndex(parent, targetGroup, dragState.nodeId, dragState.insertIndex)
+        : parent.children.length
+
+      if (dragState.targetParentId === dragState.fromParentId) {
+        const operation = {
+          type: 'reorder-group-child',
+          payload: {
+            groupId: dragState.targetGroupId,
+            parentId: dragState.targetParentId,
+            childId: dragState.nodeId,
+            index,
+          },
+        }
+        const result = graphOperations().apply(operation, {
+          readonly: props.readonly,
+          before: props.beforeGroupReorder,
         })
-        emitChange(result)
+        if (result.applied) {
+          if (targetGroup) updateGroupState(targetGroup.id, { scrollTop: targetGroup.scrollTop })
+          updateLayout()
+          emit('group-reorder', {
+            groupId: dragState.targetGroupId,
+            childId: dragState.nodeId,
+            index: result.operation.payload.index,
+          })
+          emitChange(result)
+        } else {
+          renderCurrent()
+        }
       } else {
-        renderCurrent()
+        const operation = {
+          type: 'move-node',
+          payload: { nodeId: dragState.nodeId, toParentId: dragState.targetParentId, index },
+        }
+        const result = graphOperations().apply(operation, {
+          readonly: props.readonly,
+          before: props.beforeNodeMove,
+        })
+        if (result.applied) {
+          updateLayout()
+          emit('node-move', {
+            nodeId: dragState.nodeId,
+            fromParentId: dragState.fromParentId,
+            toParentId: dragState.targetParentId,
+            index: result.operation.payload.index,
+          })
+          emitChange(result)
+        } else {
+          renderCurrent()
+        }
       }
+    } else {
+      renderCurrent()
     }
   } else {
-    setSelected(applySelectionClick(currentSelectedIds(), dragState.childId, { additive: dragState.additive }))
+    setSelected(applySelectionClick(currentSelectedIds(), dragState.nodeId, { additive: dragState.additive }))
   }
 
   dragState = null
