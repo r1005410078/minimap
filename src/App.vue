@@ -20,19 +20,16 @@ const resources = [
   {
     category: '光伏设备',
     expanded: false,
-    count: 5,
     items: [],
   },
   {
     category: '配电设备',
     expanded: false,
-    count: 4,
     items: [],
   },
   {
     category: '监控设备',
     expanded: false,
-    count: 4,
     items: [],
   },
 ]

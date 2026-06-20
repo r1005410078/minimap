@@ -20,9 +20,9 @@ const resources = [
       { id: 'metering', label: '电能计量' },
     ],
   },
-  { category: '光伏设备', expanded: false, count: 5, items: [] },
-  { category: '配电设备', expanded: false, count: 4, items: [] },
-  { category: '监控设备', expanded: false, count: 4, items: [] },
+  { category: '光伏设备', expanded: false, items: [] },
+  { category: '配电设备', expanded: false, items: [] },
+  { category: '监控设备', expanded: false, items: [] },
 ]
 
 test('renders the reference resource tree categories, counts, and draggable items', () => {
@@ -35,7 +35,7 @@ test('renders the reference resource tree categories, counts, and draggable item
   assert.deepEqual(labels, ['储能设备', '光伏设备', '配电设备', '监控设备'])
 
   const counts = wrapper.findAll('.resource-category-count').wrappers.map((w) => w.text())
-  assert.deepEqual(counts, ['6', '5', '4', '4'])
+  assert.deepEqual(counts, ['6', '0', '0', '0'])
 
   const item = wrapper.find('[data-resource-id="bms-cluster"]')
   assert.equal(item.text().includes('BMS 簇'), true)

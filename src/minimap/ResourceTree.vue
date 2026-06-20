@@ -49,7 +49,7 @@ function onDragStart(item, event) {
       >
         <span class="resource-category-caret">{{ isExpanded(category) ? '⌄' : '›' }}</span>
         <span class="resource-category-label">{{ category.category }}</span>
-        <span class="resource-category-count">{{ category.count ?? category.items.length }}</span>
+        <span class="resource-category-count">{{ category.items.length }}</span>
       </div>
       <div v-show="isExpanded(category)" class="resource-items">
         <div
