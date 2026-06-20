@@ -24,6 +24,7 @@ export async function load(url, context, nextLoad) {
 ${scriptResult.content.replace('export default', 'const __default__ =')}
 ${templateResult.code.replace('export function render', 'function render')}
 __default__.render = render
+if (typeof staticRenderFns !== 'undefined') __default__.staticRenderFns = staticRenderFns
 export default __default__
 `
   return { format: 'module', source: code, shortCircuit: true }
