@@ -4,10 +4,11 @@ import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph.js'
 import { computeLayout, GROUP } from '../src/minimap/layout.js'
+import { defaultTheme } from '../src/minimap/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)
-stubCanvasContext()
+const contexts = stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
@@ -174,5 +175,43 @@ test('clicking a plain node without moving still selects it', () => {
 
   assert.deepEqual(wrapper.emitted('select').at(-1)[0], ['feeder-1'])
   assert.equal(wrapper.emitted('node-move'), undefined)
+  wrapper.destroy()
+})
+
+// Helper to check if a node is rendered with highlighted stroke style
+function highlightedLabels(ctx, theme) {
+  const lastClear = ctx.calls.map((c) => c.method).lastIndexOf('clearRect')
+  const calls = ctx.calls.slice(lastClear + 1)
+  const labels = []
+  calls.forEach((call, i) => {
+    if (call.method !== 'fillText') return
+    for (let j = i - 1; j >= 0; j--) {
+      if (calls[j].method === 'set:strokeStyle') {
+        if (calls[j].args[0] === theme.group.header) labels.push(call.args[0])
+        break
+      }
+    }
+  })
+  return labels
+}
+
+test('plain node drop target is recognized and can be dropped on', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodeCenter(layout, 'feeder-2')
+
+  // Drag feeder-1 to feeder-2 and release
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  // Verify the drop succeeded - feeder-1 should now be a child of feeder-2
+  // This validates that the drag target resolution worked correctly for plain nodes
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2',
+    'feeder-1 should have been moved to be a child of feeder-2')
+
   wrapper.destroy()
 })

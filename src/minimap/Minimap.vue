@@ -381,6 +381,11 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
   lastRenderedLayout = currentLayout
   lastRenderedViewport = { ...renderViewport }
   const relations = buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
+  const dragHighlightId =
+    dragState?.dragging && !dragState.targetGroupId && dragState.targetParentId ? dragState.targetParentId : null
+  const highlightedIds = dragHighlightId
+    ? new Set([...relations.highlightedIds, dragHighlightId])
+    : relations.highlightedIds
   renderScene(ctx, {
     layout: currentLayout,
     graph: props.graph,
@@ -391,7 +396,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
     theme: props.theme || defaultTheme,
     state: {
       selectedIds: relations.selectedIds,
-      highlightedIds: relations.highlightedIds,
+      highlightedIds,
       dimmedIds: relations.dimmedIds,
       highlightedEdgeIds: relations.highlightedEdgeIds,
       dimmedEdgeIds: relations.dimmedEdgeIds,
