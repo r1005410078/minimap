@@ -3,7 +3,7 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 
-import { GROUP, NODE, visibleGroupChildren } from './layout.js'
+import { GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from './layout.js'
 
 function containsPoint(rect, point) {
   return (
@@ -262,6 +262,25 @@ function siblingEdgePreviewRect(layout, targetNodeId, mode, direction) {
   return { x: targetRect.x, y, width: NODE.width, height: NODE.height }
 }
 
+// 嵌套模式下，把被拖节点追加成目标节点的最后一个子节点会出现在哪——优先贴在
+// 目标现有最后一个仍是平铺节点（未被分组框消费）的子节点后面，跟 siblingEdgePreviewRect
+// 的 'after' 逻辑完全一样，只是锚点换成目标的子节点而不是被拖节点的兄弟。目标没有平铺
+// 子节点时（没有子节点，或所有子节点都被分组框消费），退回固定偏移：主轴上跟目标保持
+// 一层深度（LEVEL_GAP），交叉轴上跟目标自身对齐——这种情况下预览框可能跟目标已有的
+// 分组框轻微重叠，是简化设计下的预期效果，不是 bug。
+function attachPreviewRect(graph, layout, draggedNodeId, targetParentId, direction) {
+  const target = graph.nodes.get(targetParentId)
+  const restChildren = target.children.filter((id) => id !== draggedNodeId)
+  const plainRestChildren = restChildren.filter((id) => layout.nodes.has(id))
+  const lastChildId = plainRestChildren[plainRestChildren.length - 1]
+  if (lastChildId) return siblingEdgePreviewRect(layout, lastChildId, 'after', direction)
+
+  const targetRect = layout.nodes.get(targetParentId)
+  return direction === 'vertical'
+    ? { x: targetRect.x, y: targetRect.y + targetRect.height + LEVEL_GAP, width: NODE.width, height: NODE.height }
+    : { x: targetRect.x + targetRect.width + LEVEL_GAP, y: targetRect.y, width: NODE.width, height: NODE.height }
+}
+
 // 拖拽悬停目标解析：先看是否命中两个相邻兄弟之间的物理空隙（插入排序，最容易瞄准）；
 // 否则命中分组框 item 时返回真实父节点 + 该分组 + 组内插入下标；
 // 命中同父兄弟普通节点的边缘窄带时返回共同父节点 + 兄弟插入下标（插入排序）；
@@ -308,7 +327,13 @@ export function resolveDropTarget(graph, layout, point, draggedNodeId, direction
     }
     const parentId = hit.id
     if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
-    return { valid: true, parentId, group: null, insertIndex: null, previewRect: null }
+    return {
+      valid: true,
+      parentId,
+      group: null,
+      insertIndex: null,
+      previewRect: attachPreviewRect(graph, layout, draggedNodeId, parentId, direction),
+    }
   }
 
   return { valid: false }
