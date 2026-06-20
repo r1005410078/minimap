@@ -1,120 +1,122 @@
-# Visual Polish Design
+# 视觉优化设计
 
-## Context
+## 背景
 
-Phase 4 is complete and Phase 5 has been split into editing/state slices. Before starting Phase 5, the component needs a visual pass to better match the provided dark workstation reference:
+第四阶段已经完成，第五阶段也已经拆成编辑和状态能力切片。在开始第五阶段前，组件需要先做一轮视觉优化，让整体更接近用户提供的暗色工作台效果图：
 
-- left resource tree with a dense operational feel;
-- top toolbar shell;
-- dark dotted canvas;
-- rounded node and group cards;
-- floating overview in the lower right.
+- 左侧资源树更像高密度操作面板；
+- 顶部工具栏外壳；
+- 暗色点阵画布；
+- 圆角节点和分组卡片；
+- 右下角悬浮 overview 小地图。
 
-This is a visual polish slice only. It must not introduce Phase 5 editing behavior such as undo/redo, deletion, copy, cross-parent drag, readonly mode, or before hooks.
+这是一个纯视觉优化切片。它不能引入第五阶段的编辑行为，例如撤销/重做、删除、复制、跨父级拖拽、只读模式或 before hooks。
 
-## Selected Direction
+## 已选方向
 
-Use option B from the visual companion: **visual polish plus toolbar shell**.
+使用视觉辅助页中的 B 方案：**视觉优化 + 工具栏骨架**。
 
-The toolbar exists as layout and visual structure, with button affordances and disabled states where needed. It does not perform new editing mutations. Existing interactions, including pan/zoom, selection, marquee selection, search, resource drop, group scrolling, group reorder, and overview navigation, must keep their current semantics.
+工具栏在本切片中只作为布局和视觉结构存在，可以提供按钮观感和必要的禁用态，但不执行新的编辑 mutation。现有交互，包括平移/缩放、选择、框选、搜索、资源拖入、分组滚动、分组内换位和 overview 导航，都必须保持当前语义不变。
 
-## Scope
+## 范围
 
-### In Scope
+### 范围内
 
-- Refresh `defaultTheme` to a darker, higher-polish visual language:
-  - dotted-grid background instead of heavy square-grid emphasis;
-  - brighter but restrained text;
-  - green accent for status indicators;
-  - softer node/group borders;
-  - rounded nodes, rounded groups, and subtle shadows in the default renderer.
-- Update `renderer.js` default drawing:
-  - draw dotted grid;
-  - draw rounded node cards;
-  - draw group containers with rounded borders, header status dot, label, and child count;
-  - draw group children as card-like items consistent with standalone nodes;
-  - keep selection/highlight/dim behavior readable.
-- Update `Minimap.vue` shell:
-  - add a top toolbar overlay above the canvas area;
-  - move/reshape built-in search to fit the workbench surface;
-  - keep overview floating in the lower right with a framed panel style;
-  - ensure the canvas remains focusable and receives pointer/keyboard events as before.
-- Update `ResourceTree.vue`:
-  - add resource tree title and a disabled-looking "拖至画布" affordance;
-  - make categories and resources closer to the reference;
-  - keep resource drag data format unchanged.
-- Keep the component dependency-free. Use text/icon glyphs or CSS shapes, not a new icon package.
-- Add focused tests for:
-  - toolbar shell renders;
-  - resource items remain draggable and emit the same drag payload;
-  - search and overview switches still hide/show their UI;
-  - renderer still calls expected canvas APIs without throwing.
+- 刷新 `defaultTheme`，形成更暗、更精致的视觉语言：
+  - 使用点阵背景，弱化厚重的方格网格；
+  - 使用更亮但克制的文本颜色；
+  - 使用绿色作为状态指示强调色；
+  - 使用更柔和的节点/分组边框；
+  - 默认渲染器里的节点和分组改为圆角，并增加轻微阴影感。
+- 更新 `renderer.js` 默认绘制：
+  - 绘制点阵网格；
+  - 绘制圆角节点卡片；
+  - 绘制圆角分组容器，包含标题状态点、label 和子节点数量；
+  - 分组内部子节点绘制为与普通节点一致的卡片式样；
+  - 保持选中、高亮、降权状态依然清晰可读。
+- 更新 `Minimap.vue` 外壳：
+  - 在画布区域上方增加顶部工具栏 overlay；
+  - 移动或重塑内建搜索框，使其适配工作台表面；
+  - 让 overview 保持在右下角悬浮，并拥有面板式外框；
+  - 确保 canvas 仍然可以聚焦，并继续接收 pointer/keyboard 事件。
+- 更新 `ResourceTree.vue`：
+  - 增加资源树标题行和一个禁用观感的「拖至画布」提示；
+  - 让分类和资源项更接近效果图；
+  - 示例/演示用资源树 mock 数据要和效果图一致：默认展开「储能设备」，包含「站点」「子系统」「BMS 堆」「BMS 簇」「PCS 设备」「电能计量」6 个条目；下方显示折叠分类「光伏设备」数量 5、「配电设备」数量 4、「监控设备」数量 4；
+  - 保持资源拖拽数据格式不变。
+- 保持组件无第三方依赖。使用文字/字符图标或 CSS 形状，不新增图标包。
+- 增加聚焦测试：
+  - 工具栏外壳能渲染；
+  - 资源项仍可拖拽，并写入相同的 drag payload；
+  - `enableSearch: false` 和 `enableOverview: false` 仍能隐藏对应 UI；
+  - 默认 renderer 使用刷新后的主题渲染时不抛错，并在 mock ctx 支持时调用圆角/卡片绘制相关 API。
 
-### Out of Scope
+### 范围外
 
-- Real toolbar commands for undo/redo/delete/copy/layout editing.
-- New graph mutation APIs.
-- Cross-parent node drag.
-- Readonly/edit mode.
-- Import/export.
-- Accessibility status area and keyboard option switches planned for Phase 5 slice 4.
-- Pixel-perfect matching of the reference screenshot.
+- 工具栏真实命令，例如撤销/重做/删除/复制/布局编辑。
+- 新的 graph mutation API。
+- 跨父级节点拖拽。
+- 只读/编辑模式。
+- 导入/导出。
+- 第五阶段切片 4 规划中的可访问性状态区和键盘开关。
+- 对效果图进行像素级还原。
 
-## Component Design
+## 组件设计
 
 ### `Minimap.vue`
 
-The top-level structure remains a flex layout:
+顶层结构继续保持 flex 布局：
 
-- left `ResourceTree`;
-- right canvas workbench area;
-- inside the workbench:
-  - toolbar overlay at the top;
-  - canvas fills the full remaining surface;
-  - search panel floats near the top-right or inside the toolbar-adjacent surface;
-  - overview panel floats at the bottom-right.
+- 左侧 `ResourceTree`；
+- 右侧 canvas 工作台区域；
+- 工作台内部：
+  - 顶部工具栏 overlay；
+  - canvas 填满剩余表面；
+  - 搜索面板悬浮在右上附近，或放在工具栏邻近的工作台表面；
+  - overview 面板悬浮在右下角。
 
-The toolbar is intentionally presentational in this slice. Buttons can show disabled visual states for future-only actions. Existing operations that already exist, such as fit/center/search/overview navigation, should keep their current public methods and UI surfaces; wiring those operations into toolbar buttons is outside this slice unless it is needed for visual affordance only and does not change behavior.
+工具栏在本切片中明确是展示型结构。按钮可以为未来能力展示禁用态。已有能力，例如 fit/center/search/overview navigation，应继续保留当前公开方法和 UI 入口；除非只是为了视觉暗示且不改变行为，否则不在本切片中把这些能力接入工具栏按钮。
 
 ### `ResourceTree.vue`
 
-The resource tree gets a title row and a drag hint. Resource categories remain data-driven from the existing `resources` prop. Each item remains the draggable leaf node, using the same `application/json` data transfer payload.
+资源树增加标题行和拖拽提示。资源分类继续由现有 `resources` prop 驱动。示例应用里的 mock 数据需要改成效果图里的资源分类和条目，让默认视觉验收直接看到同款资源树。每个资源项仍然是可拖拽叶子节点，并继续使用相同的 `application/json` data transfer payload。
 
-### `renderer.js` and `theme.js`
+### `renderer.js` 和 `theme.js`
 
-Renderer changes are visual-only. The public `theme` override shape should remain compatible. Existing custom renderers still take precedence over default node/group/edge drawing.
+渲染器改动只做视觉层变化。公开的 `theme` override 形状应保持兼容。已有自定义渲染器仍然优先于默认节点/分组/连线绘制。
 
-The renderer can add small helper functions for rounded rectangles, clipped text, and status dots, but should keep drawing behavior local to `renderer.js`.
+渲染器可以增加少量 helper 函数，用于圆角矩形、文本裁剪和状态点绘制，但这些绘制行为应保留在 `renderer.js` 内部。
 
-## Data Flow
+## 数据流
 
-No new graph fields or events are introduced.
+本切片不引入新的 graph 字段或事件。
 
-Existing props and events keep their current behavior:
+现有 props 和 events 保持当前行为：
 
-- `graph`, `resources`, `layoutDirection`, `selectedIds`, `groupStates`, `viewport`, `options`, `theme`;
-- `select`, `node-drop`, `change`, `group-state-change`, `group-reorder`, `viewport-change`, `search`.
+- `graph`、`resources`、`layoutDirection`、`selectedIds`、`groupStates`、`viewport`、`options`、`theme`；
+- `select`、`node-drop`、`change`、`group-state-change`、`group-reorder`、`viewport-change`、`search`。
 
-## Error Handling
+## 错误处理
 
-This slice does not introduce new error states. Existing rendering should still be defensive around missing nodes inside groups, as it is today.
+本切片不引入新的错误状态。现有渲染逻辑仍应像当前一样，对分组内部缺失节点保持防御式处理。
 
-## Testing
+## 测试
 
-Use existing Node/Vue test infrastructure.
+使用现有 Node/Vue 测试基础设施。
 
-Required checks:
+必须覆盖：
 
-- Component shell test: toolbar exists, canvas still exists, resource tree still exists.
-- Options test: `enableSearch: false` and `enableOverview: false` still remove those panels.
-- Resource tree test: drag payload remains unchanged.
-- Renderer test: default render path succeeds with the refreshed theme and draws rounded/card primitives where the mock context supports them.
-- Full suite and build should pass after implementation.
+- 组件外壳测试：toolbar 存在，canvas 仍存在，资源树仍存在。
+- 选项测试：`enableSearch: false` 和 `enableOverview: false` 仍会移除对应面板。
+- 资源树测试：drag payload 保持不变。
+- 渲染器测试：默认渲染路径使用刷新后的主题时能成功执行，并在 mock ctx 支持时绘制圆角/卡片式图元。
+- 实现完成后，完整测试套件和 build 都应通过。
 
-## Acceptance Criteria
+## 验收标准
 
-- The app visually reads as a dark workstation matching the provided reference direction.
-- Left resource tree, top toolbar shell, canvas, search, and overview have a coherent shared visual language.
-- Existing interactions are not intentionally changed.
-- No Phase 5 editing/state behavior is introduced.
-- Tests and build pass.
+- 应用整体视觉读起来像效果图方向的暗色工作台。
+- 左侧资源树、顶部工具栏骨架、canvas、搜索框和 overview 具备统一的视觉语言。
+- 示例资源树 mock 数据与效果图一致：储能设备展开并显示 6 个条目，光伏设备/配电设备/监控设备以折叠分类和数量展示。
+- 现有交互不发生有意改变。
+- 不引入第五阶段编辑/状态行为。
+- 测试和 build 通过。
