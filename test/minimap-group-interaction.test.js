@@ -181,6 +181,68 @@ test('dragging an item past the threshold reorders the group children in the gra
   assert.equal(new Set(heap.children).size, 24)
   assert.equal(wrapper.emitted('group-reorder').length, 1)
   assert.equal(wrapper.emitted('change').length, 1)
+  const change = wrapper.emitted('change')[0][0]
+  assert.equal(change.type, 'reorder-group-child')
+  assert.equal(change.operation.type, 'reorder-group-child')
+  assert.equal(change.operation.payload.parentId, 'heap-1')
+  assert.equal(change.operation.payload.childId, 'cluster-1')
+  assert.equal(change.nextGraph, graph)
+  wrapper.destroy()
+})
+
+test('readonly prevents dragging a group item from reordering graph children', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph, readonly: true } })
+  const heap = graph.nodes.get('heap-1')
+  const before = heap.children.slice()
+
+  const firstItemPoint = firstItemCenter(group)
+  const targetPoint = { x: firstItemPoint.x, y: firstItemPoint.y + 2 * (GROUP.itemH + GROUP.itemGap) }
+
+  dispatchPointerDown(wrapper, firstItemPoint)
+  dispatchPointerMove(wrapper, targetPoint)
+  dispatchPointerUp(wrapper, targetPoint)
+  finishPendingAnimation()
+
+  assert.deepEqual(heap.children, before)
+  assert.equal(wrapper.emitted('group-reorder'), undefined)
+  assert.equal(wrapper.emitted('change'), undefined)
+  wrapper.destroy()
+})
+
+test('beforeGroupReorder can block group item reordering', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const group = layout.groups.find((g) => g.parentId === 'heap-1')
+  const calls = []
+  const wrapper = mount(Minimap, {
+    propsData: {
+      graph,
+      beforeGroupReorder(payload) {
+        calls.push(payload)
+        return false
+      },
+    },
+  })
+  const heap = graph.nodes.get('heap-1')
+  const before = heap.children.slice()
+
+  const firstItemPoint = firstItemCenter(group)
+  const targetPoint = { x: firstItemPoint.x, y: firstItemPoint.y + 2 * (GROUP.itemH + GROUP.itemGap) }
+
+  dispatchPointerDown(wrapper, firstItemPoint)
+  dispatchPointerMove(wrapper, targetPoint)
+  dispatchPointerUp(wrapper, targetPoint)
+  finishPendingAnimation()
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].parentId, 'heap-1')
+  assert.equal(calls[0].childId, 'cluster-1')
+  assert.deepEqual(heap.children, before)
+  assert.equal(wrapper.emitted('group-reorder'), undefined)
+  assert.equal(wrapper.emitted('change'), undefined)
   wrapper.destroy()
 })
 

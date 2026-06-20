@@ -768,11 +768,26 @@ function handlePointerUp() {
     if (group) {
       const parent = props.graph.nodes.get(group.parentId)
       const index = groupInsertIndexToParentIndex(parent, group, dragState.childId, dragState.insertIndex)
-      reorderGroupChild(props.graph, group.parentId, dragState.childId, index)
-      updateGroupState(group.id, { scrollTop: group.scrollTop })
-      updateLayout()
-      emit('group-reorder', { groupId: group.id, childId: dragState.childId, index })
-      emit('change', props.graph)
+      const operation = {
+        type: 'reorder-group-child',
+        payload: { groupId: group.id, parentId: group.parentId, childId: dragState.childId, index },
+      }
+      const result = graphOperations().apply(operation, {
+        readonly: props.readonly,
+        before: props.beforeGroupReorder,
+      })
+      if (result.applied) {
+        updateGroupState(group.id, { scrollTop: group.scrollTop })
+        updateLayout()
+        emit('group-reorder', {
+          groupId: group.id,
+          childId: dragState.childId,
+          index: result.operation.payload.index,
+        })
+        emitChange(result)
+      } else {
+        renderCurrent()
+      }
     }
   } else {
     setSelected(applySelectionClick(currentSelectedIds(), dragState.childId, { additive: dragState.additive }))
