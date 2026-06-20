@@ -121,7 +121,13 @@ function onDragStart(item, event) {
   min-height: 28px;
   padding: 0 4px;
   color: #87909c;
+  cursor: pointer;
   font-weight: 600;
+  user-select: none;
+}
+.resource-category-row:hover,
+.resource-category-row:focus {
+  color: #cdd4de;
 }
 .resource-category-caret {
   display: flex;
