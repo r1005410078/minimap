@@ -1043,6 +1043,24 @@ watch(() => props.options, () => updateLayout())
   <div class="minimap">
     <ResourceTree class="minimap-resources" :resources="resources" />
     <div ref="containerRef" class="minimap-canvas-container">
+      <div class="minimap-toolbar" aria-label="画布工具栏">
+        <button class="minimap-toolbar-button is-primary" type="button" aria-label="返回">◀</button>
+        <span class="minimap-toolbar-separator"></span>
+        <button class="minimap-toolbar-button" type="button" aria-label="撤销" disabled>↶</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="重做" disabled>↷</button>
+        <span class="minimap-toolbar-separator"></span>
+        <button class="minimap-toolbar-button" type="button" aria-label="选择">□</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="剪切" disabled>⌘</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="框选">▣</button>
+        <span class="minimap-toolbar-separator"></span>
+        <button class="minimap-toolbar-button" type="button" aria-label="定位">◎</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="缩小">⊖</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="放大">⊕</button>
+        <span class="minimap-toolbar-spacer"></span>
+        <button class="minimap-toolbar-button" type="button" aria-label="展开">↗</button>
+        <button class="minimap-toolbar-button is-accent" type="button" aria-label="列表">▦</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="信息">ⓘ</button>
+      </div>
       <canvas ref="canvasRef" tabindex="0"></canvas>
       <div v-if="options?.enableSearch !== false" class="minimap-search">
         <input
@@ -1068,12 +1086,17 @@ watch(() => props.options, () => updateLayout())
           ›
         </button>
       </div>
-      <Overview
-        v-if="options?.enableOverview !== false"
-        ref="overviewRef"
-        class="minimap-overview"
-        @navigate="handleOverviewNavigate"
-      />
+      <div v-if="options?.enableOverview !== false" class="minimap-overview-panel">
+        <div class="minimap-overview-header">
+          <span>MINIMAP</span>
+          <span>拖入放置</span>
+        </div>
+        <Overview
+          ref="overviewRef"
+          class="minimap-overview"
+          @navigate="handleOverviewNavigate"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -1083,68 +1106,135 @@ watch(() => props.options, () => updateLayout())
   display: flex;
   width: 100%;
   height: 100%;
+  gap: 10px;
+  padding: 8px;
+  background: #0b0f14;
 }
 .minimap-resources {
   flex: 0 0 220px;
   overflow-y: auto;
-  border-right: 1px solid #1b2530;
 }
 .minimap-canvas-container {
   flex: 1 1 auto;
   position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #252b34;
+  border-radius: 10px;
+  background: #0f1318;
 }
 .minimap-canvas-container canvas {
   display: block;
 }
-.minimap-search {
+.minimap-toolbar {
   position: absolute;
+  z-index: 3;
   top: 8px;
+  left: 8px;
   right: 8px;
   display: flex;
   align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #2a3038;
+  border-radius: 8px;
+  background: rgba(22, 26, 32, 0.96);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+}
+.minimap-toolbar-button {
+  width: 28px;
+  height: 28px;
+  color: #9aa3af;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font: 16px/1 system-ui, sans-serif;
+}
+.minimap-toolbar-button:hover:not(:disabled) {
+  color: #d8dee8;
+  background: #232930;
+}
+.minimap-toolbar-button:disabled {
+  opacity: 0.45;
+}
+.minimap-toolbar-button.is-primary {
+  color: #d8dee8;
+}
+.minimap-toolbar-button.is-accent {
+  color: #2bdd7f;
+}
+.minimap-toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: #2a3038;
+}
+.minimap-toolbar-spacer {
+  flex: 1;
+}
+.minimap-search {
+  position: absolute;
+  z-index: 4;
+  top: 68px;
+  right: 16px;
+  display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: #16202b;
-  border: 1px solid #1b2530;
-  border-radius: 4px;
+  padding: 6px 8px;
+  background: rgba(18, 23, 29, 0.94);
+  border: 1px solid #2a3038;
+  border-radius: 7px;
 }
 .minimap-search-input {
-  background: #0f1620;
-  border: 1px solid #2a3a4a;
-  color: #d8e3ec;
-  border-radius: 3px;
-  padding: 4px 6px;
+  width: 150px;
+  color: #d9e0ea;
+  background: #0f141a;
+  border: 1px solid #303741;
+  border-radius: 5px;
+  padding: 5px 7px;
   font-size: 12px;
-  width: 140px;
 }
 .minimap-search-count {
-  color: #9fb6cc;
-  font-size: 12px;
   min-width: 36px;
+  color: #87909c;
+  font-size: 12px;
   text-align: center;
 }
 .minimap-search-btn {
-  background: #1f2c3a;
-  border: 1px solid #2a3a4a;
-  color: #d8e3ec;
-  border-radius: 3px;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
+  width: 22px;
+  height: 22px;
+  color: #cfd6df;
+  background: #20262d;
+  border: 1px solid #303741;
+  border-radius: 4px;
 }
 .minimap-search-btn:disabled {
   opacity: 0.4;
-  cursor: default;
+}
+.minimap-overview-panel {
+  position: absolute;
+  z-index: 4;
+  right: 14px;
+  bottom: 14px;
+  padding: 8px;
+  border: 1px solid #303741;
+  border-radius: 9px;
+  background: rgba(18, 23, 29, 0.92);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
+}
+.minimap-overview-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  color: #68727f;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
 }
 .minimap-overview {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  border: 1px solid #1b2530;
-  border-radius: 4px;
+  display: block;
   overflow: hidden;
+  border-radius: 5px;
 }
 .minimap-overview canvas {
   display: block;

@@ -16,6 +16,34 @@ const frames = stubAnimationFrame()
 const { mount } = await import('@vue/test-utils')
 const Minimap = (await import('../src/minimap/Minimap.vue')).default
 
+test('renders the dark workbench toolbar shell without removing canvas, search, or overview', () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+
+  assert.equal(wrapper.find('.minimap-toolbar').exists(), true)
+  assert.equal(wrapper.findAll('.minimap-toolbar-button').length >= 9, true)
+  assert.equal(wrapper.find('.minimap-toolbar-button[aria-label="撤销"]').attributes('disabled'), 'disabled')
+  assert.equal(wrapper.find('canvas').attributes('tabindex'), '0')
+  assert.equal(wrapper.find('.minimap-search').exists(), true)
+  assert.equal(wrapper.find('.minimap-overview-panel').exists(), true)
+
+  wrapper.destroy()
+})
+
+test('search and overview options still hide their panels in the polished shell', () => {
+  const wrapper = mount(Minimap, {
+    propsData: {
+      graph: createDemoGraph(),
+      options: { enableSearch: false, enableOverview: false },
+    },
+  })
+
+  assert.equal(wrapper.find('.minimap-search').exists(), false)
+  assert.equal(wrapper.find('.minimap-overview-panel').exists(), false)
+  assert.equal(wrapper.find('.minimap-toolbar').exists(), true)
+
+  wrapper.destroy()
+})
+
 function dispatchDrop(wrapper, payload, point) {
   const canvasEl = wrapper.find('canvas').element
   const evt = new Event('drop', { bubbles: true, cancelable: true })
