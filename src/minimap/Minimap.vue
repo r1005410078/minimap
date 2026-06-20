@@ -1107,7 +1107,7 @@ function copySelection() {
   if (props.beforeCopy && props.beforeCopy(payload) === false) return unapplied('blocked')
 
   clipboard = captureSubtreeSnapshot(props.graph, expandedIds)
-  const capturedPayload = { ids, expandedIds: clipboard.nodes.map((node) => node.id) }
+  const capturedPayload = { ids, capturedIds: clipboard.nodes.map((node) => node.id) }
   emit('copy', capturedPayload)
   return {
     applied: true,

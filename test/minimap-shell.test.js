@@ -508,7 +508,7 @@ test('copySelection captures a clipboard snapshot without mutating the graph', (
 
   assert.equal(result.applied, true)
   assert.equal(graph.nodes.size, beforeSize)
-  assert.deepEqual(wrapper.emitted('copy')[0][0].expandedIds.sort(), ['feeder-1', 'feeder-2', 'feeder-3', 'grid-tie'])
+  assert.deepEqual(wrapper.emitted('copy')[0][0].capturedIds.sort(), ['feeder-1', 'feeder-2', 'feeder-3', 'grid-tie'])
   assert.equal(wrapper.emitted('change'), undefined)
   assert.equal(wrapper.vm.canUndo(), false)
   wrapper.destroy()
