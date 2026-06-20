@@ -1273,11 +1273,12 @@ watch(() => props.options, () => updateLayout())
       <div class="minimap-toolbar" aria-label="画布工具栏">
         <button class="minimap-toolbar-button is-primary" type="button" aria-label="返回">◀</button>
         <span class="minimap-toolbar-separator"></span>
-        <button class="minimap-toolbar-button" type="button" aria-label="撤销" disabled>↶</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="重做" disabled>↷</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="撤销" @click="undo">↶</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="重做" @click="redo">↷</button>
         <span class="minimap-toolbar-separator"></span>
         <button class="minimap-toolbar-button" type="button" aria-label="选择">□</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="剪切" disabled>⌘</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="复制" @click="copySelection">⌘</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="删除" @click="deleteSelection">⌫</button>
         <button class="minimap-toolbar-button" type="button" aria-label="框选">▣</button>
         <span class="minimap-toolbar-separator"></span>
         <button class="minimap-toolbar-button" type="button" aria-label="定位">◎</button>

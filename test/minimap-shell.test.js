@@ -22,7 +22,8 @@ test('renders the dark workbench toolbar shell without removing canvas, search, 
 
   assert.equal(wrapper.find('.minimap-toolbar').exists(), true)
   assert.equal(wrapper.findAll('.minimap-toolbar-button').length >= 9, true)
-  assert.equal(wrapper.find('.minimap-toolbar-button[aria-label="撤销"]').attributes('disabled'), 'disabled')
+  assert.equal(wrapper.find('.minimap-toolbar-button[aria-label="撤销"]').exists(), true)
+  assert.equal(wrapper.find('.minimap-toolbar-button[aria-label="撤销"]').attributes('disabled'), undefined)
   assert.equal(wrapper.find('canvas').attributes('tabindex'), '0')
   assert.equal(wrapper.find('.minimap-search').exists(), true)
   assert.equal(wrapper.find('.minimap-overview-panel').exists(), true)
@@ -616,6 +617,32 @@ test('keyboard Delete Backspace and Cmd/Ctrl+C trigger edit commands', () => {
   wrapper.vm.undo()
   wrapper.vm.select(['grid-tie'])
   dispatchKey(wrapper, 'c', { metaKey: true })
+  assert.equal(wrapper.emitted('copy').length, 1)
+
+  wrapper.destroy()
+})
+
+function toolbarButton(wrapper, label) {
+  return wrapper.find(`.minimap-toolbar-button[aria-label="${label}"]`)
+}
+
+test('toolbar undo redo delete and copy buttons call real edit commands', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  wrapper.vm.select(['grid-tie'])
+  await toolbarButton(wrapper, '删除').trigger('click')
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  await toolbarButton(wrapper, '撤销').trigger('click')
+  assert.equal(graph.nodes.has('grid-tie'), true)
+
+  await toolbarButton(wrapper, '重做').trigger('click')
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  await toolbarButton(wrapper, '撤销').trigger('click')
+  wrapper.vm.select(['grid-tie'])
+  await toolbarButton(wrapper, '复制').trigger('click')
   assert.equal(wrapper.emitted('copy').length, 1)
 
   wrapper.destroy()
