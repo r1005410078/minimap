@@ -54,6 +54,18 @@ function firstItemCenter(group) {
   }
 }
 
+function itemCenterAt(group, index) {
+  const rowHeight = GROUP.itemH + GROUP.itemGap
+  const colWidth = GROUP.itemW + GROUP.itemGap
+  const columns = Math.max(1, group.columns)
+  const row = Math.floor(index / columns)
+  const col = index % columns
+  return {
+    x: group.x + GROUP.padding + col * colWidth + GROUP.itemW / 2,
+    y: group.y + GROUP.header + GROUP.padding + row * rowHeight - (group.scrollTop ?? 0) + GROUP.itemH / 2,
+  }
+}
+
 function nodePoint(layout, nodeId, offset = {}) {
   const rect = layout.nodes.get(nodeId)
   return {
@@ -181,6 +193,10 @@ test('dragging an ungrouped child onto its own real parent reorders within that 
 
   dispatchPointerDown(wrapper, from)
   dispatchPointerMove(wrapper, to)
+
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true)
+  assert.equal(attachLineDrawn(contexts.at(-1), defaultTheme), true)
+
   dispatchPointerUp(wrapper, to)
 
   assert.equal(graph.nodes.get('feeder-1').parentId, 'grid-tie')
@@ -296,7 +312,22 @@ function dropSlotDrawn(ctx, theme) {
   return calls.some((call) => call.method === 'set:fillStyle' && call.args[0] === theme.group.dropSlot.fill)
 }
 
-test('plain node drop target is recognized and can be dropped on', () => {
+// Helper to check if an attach-preview connector line was drawn in the current frame.
+// 连接线用 moveTo/lineTo 画路径，drawDropSlot 的方框边框走 roundedRect（测试环境里
+// 走 ctx.roundRect，不会产生 moveTo 调用），两者不会混淆。
+function attachLineDrawn(ctx, theme) {
+  const lastClear = ctx.calls.map((c) => c.method).lastIndexOf('clearRect')
+  const calls = ctx.calls.slice(lastClear + 1)
+  return calls.some((call, i) => {
+    if (call.method !== 'moveTo') return false
+    for (let j = i - 1; j >= 0; j--) {
+      if (calls[j].method === 'set:strokeStyle') return calls[j].args[0] === theme.group.dropSlot.stroke
+    }
+    return false
+  })
+}
+
+test('plain node drop target shows an attach preview and can be dropped on', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const wrapper = mount(Minimap, { propsData: { graph } })
@@ -306,12 +337,13 @@ test('plain node drop target is recognized and can be dropped on', () => {
 
   // Start drag on feeder-1
   dispatchPointerDown(wrapper, from)
-  // Hover over a non-sibling plain node - this should show an attach preview
+  // Hover over a non-sibling plain node WITHOUT releasing yet - this should show an
+  // attach preview (box + connector line), not a whole-node highlight
   dispatchPointerMove(wrapper, to)
 
-  // Verify that a preview box is drawn (nest-mode attach preview)
-  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true,
-    'an attach preview should be drawn when hovering over a non-sibling node')
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true)
+  assert.equal(attachLineDrawn(contexts.at(-1), defaultTheme), true)
+  assert.deepEqual(highlightedLabels(contexts.at(-1), defaultTheme), [])
 
   // Complete the drag by releasing
   dispatchPointerUp(wrapper, to)
@@ -323,14 +355,14 @@ test('plain node drop target is recognized and can be dropped on', () => {
   wrapper.destroy()
 })
 
-test('dragging an already-selected node shows the live drop target preview, not the stale selection relation', () => {
+test('dragging an already-selected node shows the live attach preview, not the stale selection relation', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const wrapper = mount(Minimap, { propsData: { graph } })
 
   // feeder-1 is selected before the drag starts (e.g. from an earlier click), so
   // buildSelectionRelations would normally highlight its parent (grid-tie) and dim
-  // everything else - that must not fight with the live drag-target preview.
+  // everything else - that must not fight with the live drag-target attach preview.
   wrapper.vm.select(['feeder-1'])
 
   const from = nodeCenter(layout, 'feeder-1')
@@ -339,14 +371,12 @@ test('dragging an already-selected node shows the live drop target preview, not 
   dispatchPointerDown(wrapper, from)
   dispatchPointerMove(wrapper, to)
 
-  // The attach preview (drop slot) should be drawn, and the stale selection highlight
-  // should not appear
-  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true,
-    'an attach preview should be drawn as the live drop target')
-  const highlightedMidDrag = highlightedLabels(contexts.at(-1), defaultTheme)
-  assert.ok(
-    !highlightedMidDrag.includes('Grid Tie'),
-    `feeder-1's old parent (grid-tie) should not show the stale selection-relation highlight while dragging; got: ${highlightedMidDrag}`,
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true)
+  assert.equal(attachLineDrawn(contexts.at(-1), defaultTheme), true)
+  assert.deepEqual(
+    highlightedLabels(contexts.at(-1), defaultTheme),
+    [],
+    'no node should show the stale selection-relation highlight while dragging',
   )
 
   dispatchPointerUp(wrapper, to)
@@ -463,7 +493,7 @@ test('dragging a sibling onto the trailing edge of the last remaining sibling in
   wrapper.destroy()
 })
 
-test('dragging a sibling onto the middle of another sibling shows an attach preview for nesting it', () => {
+test('dragging a sibling onto the middle of another sibling shows an attach preview, not a highlight', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const wrapper = mount(Minimap, { propsData: { graph } })
@@ -474,10 +504,9 @@ test('dragging a sibling onto the middle of another sibling shows an attach prev
   dispatchPointerDown(wrapper, from)
   dispatchPointerMove(wrapper, to)
 
-  // When dragging a sibling onto another sibling's middle (nest mode), a preview rect
-  // is drawn instead of highlighting the target node
-  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true,
-    'an attach preview (drop slot) should be drawn when nesting')
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true)
+  assert.equal(attachLineDrawn(contexts.at(-1), defaultTheme), true)
+  assert.deepEqual(highlightedLabels(contexts.at(-1), defaultTheme), [])
 
   dispatchPointerUp(wrapper, to)
 
@@ -485,5 +514,23 @@ test('dragging a sibling onto the middle of another sibling shows an attach prev
   assert.equal(graph.nodes.get('feeder-1').parentId, 'feeder-2')
   assert.equal(graph.nodes.get('grid-tie').children.includes('feeder-1'), false)
   assert.equal(graph.nodes.get('feeder-2').children.includes('feeder-1'), true)
+  wrapper.destroy()
+})
+
+test('dragging a node within a group does not draw an attach preview connector line', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const targetGroup = layout.groups.find((g) => g.parentId === 'heap-1')
+  const wrapper = mount(Minimap, { propsData: { graph } })
+
+  const from = itemCenterAt(targetGroup, 0)
+  const to = itemCenterAt(targetGroup, 1)
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+
+  assert.equal(attachLineDrawn(contexts.at(-1), defaultTheme), false)
+
+  dispatchPointerUp(wrapper, to)
   wrapper.destroy()
 })

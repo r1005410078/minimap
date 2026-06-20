@@ -405,6 +405,21 @@ function drawDropSlot(ctx, rect, theme, opacity = 1) {
   ctx.globalAlpha = previousAlpha
 }
 
+// 拖拽挂接预览的连接线：从未来父节点连到占位框，复用真实连线同一套正交路径算法，
+// 用预览色虚线区分"这只是预览"——parentBox/previewBox 都是已经转换好的屏幕坐标矩形。
+function drawAttachPreviewLine(ctx, parentBox, previewBox, mainAxis, theme) {
+  const dropSlot = { ...defaultTheme.group.dropSlot, ...(theme.group.dropSlot || {}) }
+  const path = orthogonalPath(parentBox, previewBox, mainAxis)
+  ctx.strokeStyle = dropSlot.stroke
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.beginPath()
+  ctx.moveTo(path[0].x, path[0].y)
+  for (const point of path.slice(1)) ctx.lineTo(point.x, point.y)
+  ctx.stroke()
+  ctx.setLineDash([])
+}
+
 function drawSelectionRect(ctx, rect, theme) {
   const selection = { ...defaultTheme.node, ...(theme.node || {}) }
   const previousAlpha = ctx.globalAlpha ?? 1
@@ -549,8 +564,11 @@ export function renderScene(ctx, scene) {
     drawNodeDragGhost(ctx, graph, state.groupDrag, theme, renderers, viewport, selectedIds, highlightedIds, dimmedIds)
   }
 
-  if (state.siblingInsertPreview) {
-    drawDropSlot(ctx, state.siblingInsertPreview.rect, theme, 1)
+  if (state.attachPreview) {
+    if (state.attachPreview.parentRect) {
+      drawAttachPreviewLine(ctx, state.attachPreview.parentRect, state.attachPreview.rect, mainAxis, theme)
+    }
+    drawDropSlot(ctx, state.attachPreview.rect, theme, 1)
   }
 
   if (state.selectionRect) drawSelectionRect(ctx, state.selectionRect, theme)

@@ -344,7 +344,8 @@ function updateDragTarget(worldPoint) {
     dragState.targetParentId = null
     dragState.targetGroupId = null
     dragState.insertIndex = 0
-    dragState.insertPreviewRect = null
+    dragState.attachPreviewRect = null
+    dragState.attachPreviewParentRect = null
   } else if (target.group) {
     const autoScrolling = shouldAutoScroll(target.group)
     const groupChanged = previousGroupId !== target.group.id
@@ -357,13 +358,15 @@ function updateDragTarget(worldPoint) {
     dragState.targetParentId = target.parentId
     dragState.targetGroupId = target.group.id
     dragState.insertIndex = target.insertIndex
-    dragState.insertPreviewRect = null
+    dragState.attachPreviewRect = null
+    dragState.attachPreviewParentRect = null
   } else {
     clearDragShiftAnimation()
     dragState.targetParentId = target.parentId
     dragState.targetGroupId = null
     dragState.insertIndex = target.insertIndex
-    dragState.insertPreviewRect = target.previewRect ?? null
+    dragState.attachPreviewRect = target.previewRect ?? null
+    dragState.attachPreviewParentRect = target.previewRect ? layout.nodes.get(target.parentId) : null
   }
 
   dragState.ghostWorldPoint = worldPoint
@@ -392,21 +395,20 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
   if (!ctx || !currentLayout) return
   lastRenderedLayout = currentLayout
   lastRenderedViewport = { ...renderViewport }
-  // 拖拽过程中暂时不展示旧选区的父子关系高亮/降权——否则会跟拖拽目标高亮互相打架，
-  // 视觉上显得"父节点亮了"而不是真正悬停的目标（旧选区跟当前拖拽目标是两件不相关的事）。
+  // 拖拽过程中暂时不展示旧选区的父子关系高亮/降权——拖拽时的反馈完全交给下面的
+  // attachPreview（占位框+连接线），不需要整节点高亮。
   const relations = dragState?.dragging
     ? buildSelectionRelations(props.graph, currentLayout, [])
     : buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
-  const dragHighlightId =
-    dragState?.dragging && !dragState.targetGroupId && !dragState.insertPreviewRect && dragState.targetParentId
-      ? dragState.targetParentId
-      : null
-  const highlightedIds = dragHighlightId
-    ? new Set([...relations.highlightedIds, dragHighlightId])
-    : relations.highlightedIds
-  const siblingInsertPreview =
-    dragState?.dragging && dragState.insertPreviewRect
-      ? { rect: worldRectToScreen(dragState.insertPreviewRect, renderViewport) }
+  const highlightedIds = relations.highlightedIds
+  const attachPreview =
+    dragState?.dragging && dragState.attachPreviewRect
+      ? {
+          rect: worldRectToScreen(dragState.attachPreviewRect, renderViewport),
+          parentRect: dragState.attachPreviewParentRect
+            ? worldRectToScreen(dragState.attachPreviewParentRect, renderViewport)
+            : null,
+        }
       : null
   renderScene(ctx, {
     layout: currentLayout,
@@ -425,7 +427,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
       groupDrag: dragRenderContext(),
       groupScrollbarHoverId: hoveredScrollbarGroupId,
       selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
-      siblingInsertPreview,
+      attachPreview,
     },
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
@@ -753,7 +755,8 @@ function handlePointerDown(event) {
       targetParentId: null,
       targetGroupId: null,
       insertIndex: 0,
-      insertPreviewRect: null,
+      attachPreviewRect: null,
+      attachPreviewParentRect: null,
       ghostWorldPoint: null,
       ghostScreenRect: null,
       lastScreenPoint: null,
