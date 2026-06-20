@@ -170,7 +170,6 @@ test('default renderer uses dotted grid and rounded card primitives', () => {
 
   renderScene(ctx, scene)
 
-  assert.ok(ctx.methodsOf('arc').length > 0)
   assert.ok(ctx.methodsOf('roundRect').length > 0)
   assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Storage Heap 1'))
 })

@@ -319,14 +319,11 @@ function drawGroup(ctx, graph, group, rect, state, theme, scrollbarHovered = fal
 
     const parentNode = graph.nodes.get(group.parentId)
     const title = parentNode?.label ?? group.parentId
-    const headerTextY = rect.y + 16
-    const titleX = rect.x + 22
-    const countX = rect.x + rect.width - 12
-
-    ctx.fillStyle = theme.accent || theme.group.header
-    ctx.beginPath()
-    ctx.arc(rect.x + 12, rect.y + 14, 3.5, 0, Math.PI * 2)
-    ctx.fill()
+    const headerTextY = rect.y + 18
+    const chevronX = rect.x + 12
+    const dotX = rect.x + 30
+    const titleX = rect.x + 44
+    const countX = rect.x + rect.width - 16
 
     ctx.fillStyle = theme.group.header
     ctx.font = theme.group.font
@@ -337,7 +334,8 @@ function drawGroup(ctx, graph, group, rect, state, theme, scrollbarHovered = fal
     ctx.fillText(String(group.children.length), countX, headerTextY)
     const chevron = group.expanded ? '▾' : '▸'
     ctx.fillStyle = theme.group.header
-    ctx.fillText(chevron, rect.x + 4, headerTextY)
+    ctx.textAlign = 'center'
+    ctx.fillText(chevron, chevronX, headerTextY)
     ctx.textAlign = 'left'
     ctx.textBaseline = 'alphabetic'
     if (group.overflowY) drawGroupScrollbar(ctx, group, rect, theme, scrollbarHovered)
