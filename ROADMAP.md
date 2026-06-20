@@ -16,7 +16,7 @@
 
 - **当前阶段**：第五阶段切片 1 —— 编辑操作底座
 - **当前阶段 Spec**：[第五阶段切片 1：编辑操作底座设计](docs/superpowers/specs/2026-06-20-phase-5-edit-operation-base.md)
-- **当前阶段计划**：待创建；spec 确认后写第五阶段切片 1 implementation plan
+- **当前阶段计划**：[Phase 5 Edit Operation Base Implementation Plan](docs/superpowers/plans/2026-06-20-phase-5-edit-operation-base.md)
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
