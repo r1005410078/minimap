@@ -129,6 +129,12 @@ export default {
       return this.visibleRows.slice(this.virtualWindow.start, this.virtualWindow.end)
     },
   },
+  watch: {
+    resources(nextResources) {
+      const defaults = collectExpandedKeys(normalizeResourceTree(nextResources))
+      this.expandedKeys = new Set([...this.expandedKeys, ...defaults])
+    },
+  },
   mounted() {
     this.measureViewport()
   },
@@ -192,6 +198,33 @@ export default {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         this.focusedKey = moveResourceFocus(this.visibleRows, this.focusedKey, event.key === 'ArrowDown' ? 1 : -1)
+      } else if (event.key === 'ArrowRight' && this.focusedKey) {
+        const row = this.visibleRows.find((item) => item.key === this.focusedKey)
+        if (row?.type !== 'folder') return
+        event.preventDefault()
+        if (!row.expanded) {
+          this.toggleFolder(row.key)
+          return
+        }
+        const rowIndex = this.visibleRows.findIndex((item) => item.key === row.key)
+        const child = this.visibleRows[rowIndex + 1]
+        if (child && child.depth > row.depth) this.focusedKey = child.key
+      } else if (event.key === 'ArrowLeft' && this.focusedKey) {
+        const row = this.visibleRows.find((item) => item.key === this.focusedKey)
+        if (!row) return
+        event.preventDefault()
+        if (row.type === 'folder' && row.expanded) {
+          this.toggleFolder(row.key)
+          return
+        }
+        const rowIndex = this.visibleRows.findIndex((item) => item.key === row.key)
+        for (let index = rowIndex - 1; index >= 0; index -= 1) {
+          const candidate = this.visibleRows[index]
+          if (candidate.type === 'folder' && candidate.depth < row.depth) {
+            this.focusedKey = candidate.key
+            return
+          }
+        }
       } else if (event.key === ' ' && this.focusedKey) {
         event.preventDefault()
         const next = toggleFocusedResource({

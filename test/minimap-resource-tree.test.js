@@ -144,3 +144,83 @@ test('disabled used resources cannot be selected or dragged', async () => {
   assert.equal(disabled.attributes('draggable'), undefined)
   wrapper.destroy()
 })
+
+test('ArrowRight expands a focused folder and ArrowLeft collapses it', async () => {
+  const wrapper = mount(ResourceTree, {
+    propsData: {
+      resources: [{
+        id: 'root',
+        label: 'Root',
+        type: 'folder',
+        expanded: true,
+        children: [{
+          id: 'folder',
+          label: 'Folder',
+          type: 'folder',
+          children: [{ id: 'leaf', label: 'Leaf', type: 'resource' }],
+        }],
+      }],
+    },
+  })
+
+  await wrapper.find('[data-row-key="folder:root/folder"]').trigger('click')
+  assert.equal(wrapper.find('[data-resource-id="leaf"]').exists(), true)
+  await wrapper.find('[data-row-key="folder:root/folder"]').trigger('click')
+  assert.equal(wrapper.find('[data-resource-id="leaf"]').exists(), false)
+
+  wrapper.vm.focusedKey = 'folder:root/folder'
+  await wrapper.find('.resource-tree-scroll').trigger('keydown', { key: 'ArrowRight' })
+  assert.equal(wrapper.find('[data-resource-id="leaf"]').exists(), true)
+
+  await wrapper.find('.resource-tree-scroll').trigger('keydown', { key: 'ArrowLeft' })
+  assert.equal(wrapper.find('[data-resource-id="leaf"]').exists(), false)
+  wrapper.destroy()
+})
+
+test('ArrowRight moves focus to first child when a focused folder is already expanded', async () => {
+  const wrapper = mount(ResourceTree, {
+    propsData: {
+      resources: [{
+        id: 'root',
+        label: 'Root',
+        type: 'folder',
+        expanded: true,
+        children: [{ id: 'leaf', label: 'Leaf', type: 'resource' }],
+      }],
+    },
+  })
+
+  wrapper.vm.focusedKey = 'folder:root'
+  await wrapper.find('.resource-tree-scroll').trigger('keydown', { key: 'ArrowRight' })
+
+  assert.equal(wrapper.vm.focusedKey, 'resource:root/leaf')
+  wrapper.destroy()
+})
+
+test('updating resources applies default expanded state from the new tree', async () => {
+  const wrapper = mount(ResourceTree, {
+    propsData: {
+      resources: [{
+        id: 'old',
+        label: 'Old',
+        type: 'folder',
+        expanded: false,
+        children: [{ id: 'hidden', label: 'Hidden', type: 'resource' }],
+      }],
+    },
+  })
+
+  assert.equal(wrapper.find('[data-resource-id="hidden"]').exists(), false)
+  await wrapper.setProps({
+    resources: [{
+      id: 'next',
+      label: 'Next',
+      type: 'folder',
+      expanded: true,
+      children: [{ id: 'visible', label: 'Visible', type: 'resource' }],
+    }],
+  })
+
+  assert.equal(wrapper.find('[data-resource-id="visible"]').exists(), true)
+  wrapper.destroy()
+})

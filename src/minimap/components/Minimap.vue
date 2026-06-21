@@ -487,6 +487,8 @@ export default {
       historyCanUndo: false,
       /** @type {boolean} 重做栈是否非空。 */
       historyCanRedo: false,
+      /** @type {number} graph 原地 mutation 后递增，用于驱动依赖 Map 内容的 computed 重新求值。 */
+      graphRevision: 0,
     }
   },
 
@@ -544,6 +546,7 @@ export default {
 
     /** @returns {Set<string>} 已在画布节点 `data.resourceId` 中出现的资源 id；仅 `disableUsedResources` 时填充。 */
     usedResourceIds() {
+      void this.graphRevision
       if (this.effectiveOptions.disableUsedResources !== true) return new Set()
       const ids = new Set()
       for (const node of this.graph.nodes.values()) {
@@ -863,6 +866,7 @@ export default {
         emitImport: (payload) => this.$emit('import', payload),
         emitExport: (payload) => this.$emit('export', payload),
         emitChange: (payload) => {
+          this.graphRevision += 1
           this.$emit('change', payload)
           this.syncHistoryChrome()
         },

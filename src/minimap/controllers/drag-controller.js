@@ -834,7 +834,12 @@ export function createDragController(deps) {
           })),
         },
       }
-    const result = deps.applyOperation(operation, { before: deps.getBeforeNodeDrop() })
+    const beforeNodeDrop = deps.getBeforeNodeDrop()
+    const result = deps.applyOperation(operation, {
+      before: beforeNodeDrop
+        ? (payload) => beforeNodeDrop(resources.length > 1 ? { resources, parentId, index } : payload)
+        : null,
+    })
     if (!result.applied) return
 
     deps.updateLayout()

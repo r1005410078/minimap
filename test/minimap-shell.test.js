@@ -1027,3 +1027,27 @@ test('options.disableUsedResources disables resources whose ids exist in graph n
   assert.equal(row.classes().includes('is-disabled'), true)
   wrapper.destroy()
 })
+
+test('options.disableUsedResources disables a resource immediately after it is dropped', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mountMinimap({
+    propsData: {
+      graph,
+      options: { disableUsedResources: true },
+      resources: [{ category: '储能设备', expanded: true, items: [{ id: 'site', label: '站点' }] }],
+    },
+  })
+
+  assert.equal(wrapper.find('[data-resource-id="site"]').classes().includes('is-disabled'), false)
+
+  const canvas = wrapper.find('canvas').element
+  const evt = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(evt, 'dataTransfer', { value: { getData: () => JSON.stringify({ id: 'site', label: '站点' }) } })
+  Object.defineProperty(evt, 'clientX', { value: 0, configurable: true })
+  Object.defineProperty(evt, 'clientY', { value: -100000, configurable: true })
+  canvas.dispatchEvent(evt)
+  await wrapper.vm.$nextTick()
+
+  assert.equal(wrapper.find('[data-resource-id="site"]').classes().includes('is-disabled'), true)
+  wrapper.destroy()
+})

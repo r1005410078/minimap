@@ -254,3 +254,38 @@ test('dropping multiple resources onto a node creates consecutive children and e
   assert.equal(calls[1].batchIndex, 1)
   wrapper.destroy()
 })
+
+test('beforeNodeDrop receives a batch-compatible payload for multi-resource drops', () => {
+  const graph = createDemoGraph()
+  const calls = []
+  const wrapper = mountMinimap({
+    propsData: {
+      graph,
+      beforeNodeDrop(payload) {
+        calls.push(payload)
+        return false
+      },
+    },
+  })
+  const target = wrapper.vm.controller.getLayout().nodes.get('grid-tie')
+  const beforeChildren = graph.nodes.get('grid-tie').children.slice()
+
+  dispatchDrop(
+    wrapper,
+    {
+      resources: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+    },
+    { x: target.x + 10, y: target.y + 10 },
+  )
+
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].resources.map((resource) => resource.id), ['a', 'b'])
+  assert.equal(calls[0].resource, undefined)
+  assert.equal(calls[0].parentId, 'grid-tie')
+  assert.deepEqual(graph.nodes.get('grid-tie').children, beforeChildren)
+  assert.equal(wrapper.emitted('node-drop'), undefined)
+  wrapper.destroy()
+})
