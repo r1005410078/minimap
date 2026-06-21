@@ -14,9 +14,9 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：资源树虚拟化与批量拖入设计已产出，等待用户 review spec；确认后进入 implementation plan。范围限定为左侧资源树 10000 资源项、嵌套层级、多选、批量拖入、已用资源禁用，不改主画布布局/渲染主链路。
+- **当前阶段**：资源树虚拟化与批量拖入 implementation plan 已产出，等待用户 review plan；确认后按切片 1 -> 5 实施。范围限定为左侧资源树 10000 资源项、嵌套层级、多选、批量拖入、已用资源禁用，不改主画布布局/渲染主链路。
 - **当前阶段 Spec**：[Resource Tree Virtualization Design](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)
-- **当前阶段计划**：待头脑风暴产出后补充
+- **当前阶段计划**：[Resource Tree Virtualization Implementation Plan](docs/superpowers/plans/2026-06-22-resource-tree-virtualization.md)
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -51,7 +51,7 @@
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
 - **性能优化切片**：
   - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
-- **资源树虚拟化切片**（左侧资源树支持 10000 资源项，参考 VS Code 文件树；[spec](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)，等待用户 review 后写 plan）：
+- **资源树虚拟化切片**（左侧资源树支持 10000 资源项，参考 VS Code 文件树；[spec](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)，[plan](docs/superpowers/plans/2026-06-22-resource-tree-virtualization.md)，等待用户 review plan 后实施）：
   - [ ] 切片 1：纯资源树模型与虚拟窗口（资源归一化、嵌套 flatten、搜索过滤、已用资源禁用、固定行高窗口和快速滚动 overscan）
   - [ ] 切片 2：资源树选择模型（单选、Cmd/Ctrl 切换、Shift 范围、键盘焦点、禁用行排除，folder focus 与 resource selection 分离）
   - [ ] 切片 3：虚拟化 `ResourceTree.vue`（固定行高虚拟行、嵌套展开折叠、debounced search、快速滚动不白屏、稳定 key、多选/焦点/禁用样式、拖拽 payload 延迟组装）
