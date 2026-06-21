@@ -20,13 +20,25 @@ function clampIndex(index, length) {
   return Math.max(0, Math.min(index, length))
 }
 
+function graphNodeFromResource({ id, resource, parentId }) {
+  const data = { ...(resource.data || {}), resourceId: resource.id }
+  return {
+    id,
+    label: resource.label,
+    parentId,
+    children: [],
+    ...(resource.kind ? { kind: resource.kind } : {}),
+    data,
+  }
+}
+
 function applyDropNode(graph, operation) {
   const { resource, parentId, index, id } = operation.payload
   const parent = graph.nodes.get(parentId)
   if (!parent || !id || graph.nodes.has(id)) return blockedResult(graph, operation, 'invalid')
 
   const insertIndex = clampIndex(index, parent.children.length)
-  const node = { id, label: resource.label, parentId, children: [] }
+  const node = graphNodeFromResource({ id, resource, parentId })
   graph.nodes.set(id, node)
   parent.children.splice(insertIndex, 0, id)
 
@@ -38,6 +50,35 @@ function applyDropNode(graph, operation) {
       type: 'remove-dropped-node',
       payload: { parentId, childId: id, index: insertIndex, node },
     },
+    graph,
+  })
+}
+
+function applyDropNodes(graph, operation) {
+  const { parentId, index, nodes } = operation.payload
+  const parent = graph.nodes.get(parentId)
+  if (!parent || !Array.isArray(nodes) || nodes.length === 0) return blockedResult(graph, operation, 'invalid')
+  for (const item of nodes) {
+    if (!item?.id || !item.resource?.id || !item.resource?.label || graph.nodes.has(item.id)) {
+      return blockedResult(graph, operation, 'invalid')
+    }
+  }
+
+  const before = cloneGraphData(graph)
+  const insertIndex = clampIndex(index, parent.children.length)
+  const insertedIds = []
+  for (const item of nodes) {
+    const node = graphNodeFromResource({ id: item.id, resource: item.resource, parentId })
+    graph.nodes.set(node.id, node)
+    insertedIds.push(node.id)
+  }
+  parent.children.splice(insertIndex, 0, ...insertedIds)
+
+  return result({
+    applied: true,
+    type: operation.type,
+    operation: { ...operation, payload: { ...operation.payload, index: insertIndex, insertedIds } },
+    inverse: { type: 'replace-graph', payload: { graph: before } },
     graph,
   })
 }
@@ -323,6 +364,7 @@ function applyReplaceGraph(graph, operation) {
 
 function applyOperation(graph, operation) {
   if (operation.type === 'drop-node') return applyDropNode(graph, operation)
+  if (operation.type === 'drop-nodes') return applyDropNodes(graph, operation)
   if (operation.type === 'remove-dropped-node') return applyRemoveDroppedNode(graph, operation)
   if (operation.type === 'reorder-group-child') return applyReorderGroupChild(graph, operation)
   if (operation.type === 'reorder-group-children') return applyReorderGroupChildren(graph, operation)

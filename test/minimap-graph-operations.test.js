@@ -540,3 +540,48 @@ test('move-node respects readonly and before hooks', () => {
   )
   assert.equal(graph.nodes.get('grid-tie').parentId, 'energy-root')
 })
+
+test('drop-nodes inserts consecutive resource nodes with data.resourceId and can undo redo', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  const result = manager.apply({
+    type: 'drop-nodes',
+    payload: {
+      parentId: 'energy-root',
+      index: 1,
+      nodes: [
+        { id: 'res-a-1', resource: { id: 'a', label: 'A', kind: 'device', data: { color: 'red' } } },
+        { id: 'res-b-1', resource: { id: 'b', label: 'B' } },
+      ],
+    },
+  })
+
+  assert.equal(result.applied, true)
+  assert.deepEqual(result.operation.payload.insertedIds, ['res-a-1', 'res-b-1'])
+  assert.deepEqual(graph.nodes.get('energy-root').children.slice(1, 3), ['res-a-1', 'res-b-1'])
+  assert.deepEqual(graph.nodes.get('res-a-1'), {
+    id: 'res-a-1',
+    label: 'A',
+    parentId: 'energy-root',
+    children: [],
+    kind: 'device',
+    data: { color: 'red', resourceId: 'a' },
+  })
+
+  assert.equal(manager.undo().applied, true)
+  assert.equal(graph.nodes.has('res-a-1'), false)
+  assert.equal(graph.nodes.has('res-b-1'), false)
+
+  assert.equal(manager.redo().applied, true)
+  assert.deepEqual(graph.nodes.get('energy-root').children.slice(1, 3), ['res-a-1', 'res-b-1'])
+})
+
+test('drop-nodes rejects missing parent empty nodes and id collisions', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  assert.equal(manager.apply({ type: 'drop-nodes', payload: { parentId: 'missing', index: 0, nodes: [{ id: 'x', resource: { id: 'x', label: 'X' } }] } }).applied, false)
+  assert.equal(manager.apply({ type: 'drop-nodes', payload: { parentId: 'energy-root', index: 0, nodes: [] } }).applied, false)
+  assert.equal(manager.apply({ type: 'drop-nodes', payload: { parentId: 'energy-root', index: 0, nodes: [{ id: 'grid-tie', resource: { id: 'x', label: 'X' } }] } }).applied, false)
+})
