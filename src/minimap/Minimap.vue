@@ -20,14 +20,6 @@ import {
   resolveDropTarget,
   edgePanVelocity,
 } from './interaction.js'
-import { createGraphOperationManager, captureSubtreeSnapshot } from './graph-operations.js'
-import { deserializeGraph, serializeGraph } from './graph-serialization.js'
-import {
-  BUILT_IN_CONTEXT_MENU_ACTIONS,
-  buildContextMenuItems,
-  mergeContextMenuItems,
-} from './context-menu.js'
-import { getClipboard, hasClipboard, setClipboard } from './clipboard.js'
 import {
   buildVirtualOrder,
   childWorldRectsById,
@@ -35,13 +27,7 @@ import {
   dragShiftEasedProgress,
   dragShiftProgress,
 } from './drag-transition.js'
-import {
-  applySelectionClick,
-  applySelectionSet,
-  idsInSelectionRect,
-  normalizeRect,
-} from './selection.js'
-import { searchNodes } from './search.js'
+import { applySelectionClick, idsInSelectionRect, normalizeRect } from './selection.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
@@ -126,19 +112,7 @@ let scrollbarDragState = null
 let panState = null
 let marqueeState = null
 let hoveredScrollbarGroupId = null
-let operationManager = null
-let contextMenuDocumentListener = null
 const contextMenuState = ref(null)
-
-let internalSelectedIds = []
-
-const CONTEXT_MENU_WIDTH = 190
-const CONTEXT_MENU_MAX_HEIGHT = 360
-
-function currentSelectedIds() {
-  if (props.selectedIds !== null) return props.selectedIds
-  return internalSelectedIds
-}
 
 function syncConfigFromProps() {
   internalReadonly.value = props.readonly
@@ -336,146 +310,8 @@ function scheduleDragShift(group, insertIndex, { reset = false } = {}) {
   dragState.shiftStartedAt = timestamp
 }
 
-function setSelected(ids) {
-  const nextIds = [...ids]
-  if (props.selectedIds === null) internalSelectedIds = nextIds
-  emit('select', nextIds)
-  controller.renderCurrent()
-}
-
 function isAdditiveSelection(event) {
   return event.shiftKey || event.metaKey || event.ctrlKey
-}
-
-function clampContextMenuPosition(screenPoint, items) {
-  const itemCount = items.filter((item) => item.type !== 'separator').length
-  const separatorCount = items.filter((item) => item.type === 'separator').length
-  const estimatedHeight = Math.min(
-    CONTEXT_MENU_MAX_HEIGHT,
-    16 + itemCount * 30 + separatorCount * 8,
-  )
-  const { width: cssWidth, height: cssHeight } = controller.getCssSize()
-  return {
-    x: Math.max(8, Math.min(screenPoint.x, cssWidth - CONTEXT_MENU_WIDTH - 8)),
-    y: Math.max(8, Math.min(screenPoint.y, cssHeight - estimatedHeight - 8)),
-  }
-}
-
-function closeContextMenu() {
-  contextMenuState.value = null
-  if (contextMenuDocumentListener) {
-    document.removeEventListener('pointerdown', contextMenuDocumentListener, true)
-    contextMenuDocumentListener = null
-  }
-}
-
-function handleContextMenuDocumentPointerDown(event) {
-  const menuEl = contextMenuRef.value
-  if (menuEl && menuEl.contains(event.target)) return
-  closeContextMenu()
-}
-
-function canPaste() {
-  return hasClipboard()
-}
-
-function groupForHit(hit) {
-  const layout = controller.getLayout()
-  if (!hit || hit.type !== 'group' || !layout) return null
-  return layout.groups.find((group) => group.id === hit.id) ?? null
-}
-
-function contextFromHit(hit, event) {
-  const screenPoint = controller.screenPointFromClient(event.clientX, event.clientY)
-  const worldPoint = controller.pointFromClient(event.clientX, event.clientY)
-  if (hit?.type === 'node') {
-    const node = props.graph.nodes.get(hit.id)
-    return {
-      targetType: 'node',
-      targetId: hit.id,
-      groupId: null,
-      screenPoint,
-      worldPoint,
-      selectedIds: currentSelectedIds(),
-      readonly: effectiveReadonly.value,
-      canPaste: canPaste(),
-      canUndo: canUndo(),
-      canRedo: canRedo(),
-      options: effectiveOptions.value,
-      hasToggleableGroup: !!node?.children?.length,
-    }
-  }
-  if (hit?.type === 'group') {
-    const group = groupForHit(hit)
-    return {
-      targetType: 'group',
-      targetId: group?.parentId ?? hit.childId ?? null,
-      groupId: hit.id,
-      screenPoint,
-      worldPoint,
-      selectedIds: currentSelectedIds(),
-      readonly: effectiveReadonly.value,
-      canPaste: canPaste(),
-      canUndo: canUndo(),
-      canRedo: canRedo(),
-      options: effectiveOptions.value,
-      hasToggleableGroup: !!group,
-    }
-  }
-  return {
-    targetType: 'canvas',
-    targetId: null,
-    groupId: null,
-    screenPoint,
-    worldPoint,
-    selectedIds: currentSelectedIds(),
-    readonly: effectiveReadonly.value,
-    canPaste: canPaste(),
-    canUndo: canUndo(),
-    canRedo: canRedo(),
-    options: effectiveOptions.value,
-    hasToggleableGroup: false,
-  }
-}
-
-function openContextMenu(event) {
-  const layout = controller.getLayout()
-  if (!layout) return
-  event.preventDefault()
-  event.stopPropagation()
-  closeContextMenu()
-  cancelPointerInteractions()
-  canvasRef.value?.focus?.()
-  const hit = hitTest(layout, controller.pointFromClient(event.clientX, event.clientY))
-  const context = contextFromHit(hit, event)
-  const defaults = buildContextMenuItems(context)
-  const items = mergeContextMenuItems(context, defaults, props.contextMenuItems)
-  contextMenuState.value = {
-    context,
-    items,
-    position: clampContextMenuPosition(context.screenPoint, items),
-  }
-  if (!contextMenuDocumentListener) {
-    contextMenuDocumentListener = handleContextMenuDocumentPointerDown
-    document.addEventListener('pointerdown', contextMenuDocumentListener, true)
-  }
-}
-
-function targetIdsForContext(context) {
-  if (!context) return []
-  const targetId = context.targetType === 'group' ? context.groupId : context.targetId
-  if (!targetId) return []
-  const selected = currentSelectedIds()
-  return selected.includes(targetId) ? selected : [targetId]
-}
-
-function runWithTemporarySelection(ids, command) {
-  const previous = currentSelectedIds()
-  const shouldSwap = ids.length > 0 && !ids.every((id) => previous.includes(id))
-  if (shouldSwap) setSelected(ids)
-  const result = command()
-  if (shouldSwap) setSelected(previous)
-  return result
 }
 
 function ghostRectForPoint(worldPoint) {
@@ -632,7 +468,7 @@ function clearScrollbarHover() {
 }
 
 function handlePointerDown(event) {
-  closeContextMenu()
+  controller.closeContextMenu()
   const layout = controller.getLayout()
   if (!layout) return
   if (event.button !== 0) return
@@ -703,7 +539,7 @@ function handlePointerDown(event) {
       controller.renderCurrent()
       return
     }
-    setSelected([])
+    controller.setSelected([])
     panState = {
       pointerId: event.pointerId,
       startScreen: { x: event.clientX, y: event.clientY },
@@ -713,7 +549,7 @@ function handlePointerDown(event) {
     return
   }
 
-  setSelected(applySelectionClick(currentSelectedIds(), hit.id, { additive: isAdditiveSelection(event) }))
+  controller.setSelected(applySelectionClick(controller.getSelectedIds(), hit.id, { additive: isAdditiveSelection(event) }))
 }
 
 function handlePointerMove(event) {
@@ -782,7 +618,7 @@ function handlePointerUp() {
     controller.flushScheduledRender()
     const ids = marqueeState.active ? idsInSelectionRect(controller.getLayout(), marqueeState.rect, controller.getViewport()) : []
     marqueeState = null
-    setSelected(ids)
+    controller.setSelected(ids)
     return
   }
 
@@ -835,10 +671,7 @@ function handlePointerUp() {
             index,
           },
         }
-        const result = graphOperations().apply(operation, {
-          readonly: effectiveReadonly.value,
-          before: props.beforeGroupReorder,
-        })
+        const result = controller.applyOperation(operation, { before: props.beforeGroupReorder })
         if (result.applied) {
           if (targetGroup) groupScrollPatch = { groupId: targetGroup.id, scrollTop: targetGroup.scrollTop }
           updateLayoutAfterDrag = true
@@ -856,10 +689,7 @@ function handlePointerUp() {
           type: 'move-node',
           payload: { nodeId: dragState.nodeId, toParentId: dragState.targetParentId, index },
         }
-        const result = graphOperations().apply(operation, {
-          readonly: effectiveReadonly.value,
-          before: props.beforeNodeMove,
-        })
+        const result = controller.applyOperation(operation, { before: props.beforeNodeMove })
         if (result.applied) {
           updateLayoutAfterDrag = true
           nodeMovePayload = {
@@ -889,14 +719,14 @@ function handlePointerUp() {
     if (renderAfterDrag) controller.renderCurrent()
     return
   } else {
-    setSelected(applySelectionClick(currentSelectedIds(), dragState.nodeId, { additive: dragState.additive }))
+    controller.setSelected(applySelectionClick(controller.getSelectedIds(), dragState.nodeId, { additive: dragState.additive }))
   }
 
   dragState = null
 }
 
 function handleWheel(event) {
-  closeContextMenu()
+  controller.closeContextMenu()
   const layout = controller.getLayout()
   if (!layout) return
   if (dragState || scrollbarDragState || panState) return
@@ -923,37 +753,32 @@ function handleKeyDown(event) {
   if (event.key === 'Escape') {
     if (contextMenuState.value) {
       event.preventDefault()
-      closeContextMenu()
+      controller.closeContextMenu()
       return
     }
-    if (currentSelectedIds().length === 0) return
+    if (controller.getSelectedIds().length === 0) return
     event.preventDefault()
-    setSelected([])
+    controller.setSelected([])
     return
   }
   if (event.key === 'Delete' || event.key === 'Backspace') {
     event.preventDefault()
-    deleteSelection()
+    controller.deleteSelection()
     return
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
     event.preventDefault()
-    copySelection()
+    controller.copySelection()
     return
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
     event.preventDefault()
-    paste()
+    controller.paste()
   }
 }
 
 function handleDragOver(event) {
   event.preventDefault()
-}
-
-function graphOperations() {
-  if (!operationManager) operationManager = createGraphOperationManager(props.graph)
-  return operationManager
 }
 
 function emitChange(result) {
@@ -980,7 +805,7 @@ function resolveResourceDropTarget(point) {
     if (parent) return { parentId: hit.childId, index: parent.children.length }
   }
 
-  const selected = currentSelectedIds()
+  const selected = controller.getSelectedIds()
   const parentId = selected[0] ?? props.graph.rootIds[0]
   const parent = props.graph.nodes.get(parentId)
   if (!parent) return null
@@ -1007,10 +832,7 @@ function handleDrop(event) {
     type: 'drop-node',
     payload: { resource, parentId, index, id },
   }
-  const result = graphOperations().apply(operation, {
-    readonly: effectiveReadonly.value,
-    before: props.beforeNodeDrop,
-  })
+  const result = controller.applyOperation(operation, { before: props.beforeNodeDrop })
   if (!result.applied) return
 
   controller.updateLayout()
@@ -1018,18 +840,6 @@ function handleDrop(event) {
   emitChange(result)
 }
 
-function select(ids, mode = 'replace') {
-  setSelected(applySelectionSet(currentSelectedIds(), ids, mode))
-}
-
-function clearSelection() {
-  setSelected([])
-}
-
-// fitToScreen/centerOnNode/centerOnSelection/zoomTo 都经由 controller 的 runViewportTween
-// 触发动画，但 panState/marqueeState/dragState/scrollbarDragState 仍然是 Minimap.vue 本地状态，
-// core-controller 并不知道它们的存在——所以这里要在调用前手动取消正在进行的指针交互，
-// 保持跟旧版 runViewportTween 内部调用 cancelPointerInteractions() 一致的行为。
 function fitToScreen() {
   cancelPointerInteractions()
   controller.fitToScreen()
@@ -1050,39 +860,6 @@ function zoomTo(scale, center) {
   controller.zoomTo(scale, center)
 }
 
-function jumpToSearchResult(id) {
-  centerOnNode(id)
-  select([id])
-}
-
-function search(keyword) {
-  searchKeyword.value = keyword
-  const matches = searchNodes(props.graph, keyword)
-  searchMatches.value = matches
-  searchCurrentIndex.value = matches.length > 0 ? 0 : -1
-  if (matches.length > 0) jumpToSearchResult(matches[0])
-  const payload = { keyword, matches, current: matches[0] ?? null }
-  emit('search', payload)
-  return payload
-}
-
-function searchNext() {
-  if (searchMatches.value.length === 0) return
-  searchCurrentIndex.value = (searchCurrentIndex.value + 1) % searchMatches.value.length
-  const id = searchMatches.value[searchCurrentIndex.value]
-  jumpToSearchResult(id)
-  emit('search', { keyword: searchKeyword.value, matches: searchMatches.value, current: id })
-}
-
-function searchPrevious() {
-  if (searchMatches.value.length === 0) return
-  const length = searchMatches.value.length
-  searchCurrentIndex.value = (searchCurrentIndex.value - 1 + length) % length
-  const id = searchMatches.value[searchCurrentIndex.value]
-  jumpToSearchResult(id)
-  emit('search', { keyword: searchKeyword.value, matches: searchMatches.value, current: id })
-}
-
 function handleOverviewNavigate(worldPoint) {
   const { width, height } = controller.getCssSize()
   controller.applyViewport(centerViewportOn(worldPoint, controller.getViewport(), width, height))
@@ -1095,231 +872,6 @@ function emitConfigChange(key, value, context) {
   emit('config-change', { key, value, source: 'context-menu', context })
 }
 
-function executeContextMenuAction(action, context) {
-  if (action === 'copy') return runWithTemporarySelection(targetIdsForContext(context), copySelection)
-  if (action === 'delete') return runWithTemporarySelection(targetIdsForContext(context), deleteSelection)
-  if (action === 'paste-into-target') return pasteInto(context.targetType === 'group' ? context.targetId : context.targetId)
-  if (action === 'paste') return paste()
-  if (action === 'fit-to-screen') return fitToScreen()
-  if (action === 'center-selection') return centerOnSelection()
-  if (action === 'center-target' && context.targetId) return centerOnNode(context.targetId)
-  if (action === 'toggle-group' && context.groupId) {
-    const group = controller.getLayout()?.groups.find((item) => item.id === context.groupId)
-    if (!group) return
-    controller.setGroupExpanded(context.groupId, !group.expanded)
-    return
-  }
-  if (action === 'toggle-search') return emitConfigChange('enableSearch', !effectiveOptions.value.enableSearch, context)
-  if (action === 'toggle-grid') return emitConfigChange('showGrid', !effectiveOptions.value.showGrid, context)
-  if (action === 'toggle-performance') return emitConfigChange('showPerformance', !effectiveOptions.value.showPerformance, context)
-  if (action === 'toggle-hide-text-during-interaction') {
-    return emitConfigChange(
-      'hideTextDuringInteraction',
-      !effectiveOptions.value.hideTextDuringInteraction,
-      context,
-    )
-  }
-  if (action === 'toggle-readonly') return emitConfigChange('readonly', !effectiveReadonly.value, context)
-}
-
-function runContextMenuItem(item) {
-  if (!contextMenuState.value || item.disabled) return
-  const context = contextMenuState.value.context
-  emit('context-menu-action', { action: item.action, item, context })
-  if (BUILT_IN_CONTEXT_MENU_ACTIONS.has(item.action)) {
-    executeContextMenuAction(item.action, context)
-  }
-  closeContextMenu()
-}
-
-function undo() {
-  const result = graphOperations().undo()
-  if (result.applied) {
-    controller.updateLayout()
-    emitChange(result)
-  }
-  return result
-}
-
-function redo() {
-  const result = graphOperations().redo()
-  if (result.applied) {
-    controller.updateLayout()
-    emitChange(result)
-  }
-  return result
-}
-
-function canUndo() {
-  return graphOperations().canUndo()
-}
-
-function canRedo() {
-  return graphOperations().canRedo()
-}
-
-function selectedRealNodeIds() {
-  const layout = controller.getLayout()
-  if (!layout) return currentSelectedIds()
-  const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
-  const ids = []
-  for (const id of currentSelectedIds()) {
-    const group = groupsById.get(id)
-    if (group) ids.push(...group.children)
-    else ids.push(id)
-  }
-  return [...new Set(ids)]
-}
-
-function selectionAfterDeleting(deletedIds) {
-  const deleted = new Set(deletedIds)
-  return currentSelectedIds().filter((id) => !deleted.has(id))
-}
-
-function deleteSelection() {
-  const ids = currentSelectedIds()
-  const expandedIds = selectedRealNodeIds()
-  const operation = { type: 'delete-nodes', payload: { ids, expandedIds } }
-  const result = graphOperations().apply(operation, {
-    readonly: effectiveReadonly.value,
-    before: props.beforeDelete,
-  })
-  if (!result.applied) return result
-
-  controller.updateLayout({ animate: false })
-  setSelected(selectionAfterDeleting(result.operation.payload.deletedIds || []))
-  emit('delete', { ids, deletedIds: result.operation.payload.deletedIds || [] })
-  emitChange(result)
-  return result
-}
-
-function copySelection() {
-  const ids = currentSelectedIds()
-  const expandedIds = selectedRealNodeIds()
-  const payload = { ids, expandedIds }
-  const unapplied = (reason) => ({
-    applied: false,
-    type: 'copy-selection',
-    operation: { type: 'copy-selection', payload },
-    inverse: null,
-    previousGraph: props.graph,
-    nextGraph: props.graph,
-    reason,
-  })
-
-  if (expandedIds.length === 0) return unapplied('empty')
-  if (props.beforeCopy && props.beforeCopy(payload) === false) return unapplied('blocked')
-
-  const snapshot = captureSubtreeSnapshot(props.graph, expandedIds)
-  setClipboard(snapshot)
-  const capturedPayload = { ids, capturedIds: snapshot.nodes.map((node) => node.id) }
-  emit('copy', capturedPayload)
-  return {
-    applied: true,
-    type: 'copy-selection',
-    operation: { type: 'copy-selection', payload: capturedPayload },
-    inverse: null,
-    previousGraph: props.graph,
-    nextGraph: props.graph,
-    reason: null,
-  }
-}
-
-function pasteTargetId() {
-  const id = currentSelectedIds()[0] ?? null
-  const layout = controller.getLayout()
-  if (!id || !layout) return id
-  const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
-  const group = groupsById.get(id)
-  return group ? group.parentId : id
-}
-
-function nextPasteId(sourceId, usedIds) {
-  let index = 1
-  let id = `paste-${sourceId}-${index}`
-  while (usedIds.has(id)) {
-    index += 1
-    id = `paste-${sourceId}-${index}`
-  }
-  usedIds.add(id)
-  return id
-}
-
-function createPasteIdMap(snapshot) {
-  const usedIds = new Set(props.graph.nodes.keys())
-  const idMap = {}
-  for (const node of snapshot.nodes) idMap[node.id] = nextPasteId(node.id, usedIds)
-  return idMap
-}
-
-function pasteInto(targetParentId = pasteTargetId()) {
-  const snapshot = getClipboard() ?? { rootIds: [], nodes: [] }
-  const idMap = createPasteIdMap(snapshot)
-  const operation = { type: 'paste-nodes', payload: { targetParentId, snapshot, idMap } }
-  const result = graphOperations().apply(operation, {
-    readonly: effectiveReadonly.value,
-    before: props.beforePaste,
-  })
-  if (!result.applied) return result
-
-  controller.updateLayout()
-  emit('paste', {
-    targetParentId,
-    pastedIds: result.operation.payload.pastedIds || [],
-    idMap,
-  })
-  emitChange(result)
-  return result
-}
-
-function paste() {
-  return pasteInto()
-}
-
-function exportGraph() {
-  const graph = serializeGraph(props.graph)
-  emit('export', { graph })
-  return graph
-}
-
-function importGraph(data) {
-  if (effectiveReadonly.value) {
-    return {
-      applied: false,
-      type: 'replace-graph',
-      operation: { type: 'replace-graph', payload: { data } },
-      inverse: null,
-      previousGraph: props.graph,
-      nextGraph: props.graph,
-      reason: 'readonly',
-    }
-  }
-  const parsed = deserializeGraph(data)
-  if (!parsed.valid) {
-    return {
-      applied: false,
-      type: 'replace-graph',
-      operation: { type: 'replace-graph', payload: { data } },
-      inverse: null,
-      previousGraph: props.graph,
-      nextGraph: props.graph,
-      reason: parsed.reason,
-    }
-  }
-  const operation = { type: 'replace-graph', payload: { graph: parsed.graph } }
-  const result = graphOperations().apply(operation, {
-    readonly: effectiveReadonly.value,
-    before: props.beforeImport,
-  })
-  if (!result.applied) return result
-
-  controller.updateLayout({ animate: false })
-  setSelected([])
-  emit('import', { graph: props.graph })
-  emitChange(result)
-  return result
-}
-
 defineExpose({
   fitToScreen: () => fitToScreen(),
   centerOnNode: (id) => centerOnNode(id),
@@ -1327,20 +879,20 @@ defineExpose({
   zoomTo: (scale, center) => zoomTo(scale, center),
   setViewport: (viewport) => controller.setViewport(viewport),
   getViewport: () => controller.getViewport(),
-  select,
-  clearSelection,
-  search,
-  searchNext,
-  searchPrevious,
-  undo,
-  redo,
-  canUndo,
-  canRedo,
-  deleteSelection,
-  copySelection,
-  paste,
-  exportGraph,
-  importGraph,
+  select: (ids, mode) => controller.select(ids, mode),
+  clearSelection: () => controller.clearSelection(),
+  search: (keyword) => controller.search(keyword),
+  searchNext: () => controller.searchNext(),
+  searchPrevious: () => controller.searchPrevious(),
+  undo: () => controller.undo(),
+  redo: () => controller.redo(),
+  canUndo: () => controller.canUndo(),
+  canRedo: () => controller.canRedo(),
+  deleteSelection: () => controller.deleteSelection(),
+  copySelection: () => controller.copySelection(),
+  paste: () => controller.paste(),
+  exportGraph: () => controller.exportGraph(),
+  importGraph: (data) => controller.importGraph(data),
 })
 
 function createInteractionController() {
@@ -1352,8 +904,35 @@ function createInteractionController() {
     getRenderers: () => ({ node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer }),
     getViewportProp: () => props.viewport,
     getGroupStatesProp: () => props.groupStates,
-    getSelectedIds: () => currentSelectedIds(),
     getInteractionRenderState: () => interactionRenderState(),
+    getSelectedIdsProp: () => props.selectedIds,
+    emitSelect: (ids) => emit('select', ids),
+    getReadonly: () => effectiveReadonly.value,
+    getBeforeDelete: () => props.beforeDelete,
+    getBeforeCopy: () => props.beforeCopy,
+    getBeforeImport: () => props.beforeImport,
+    getBeforePaste: () => props.beforePaste,
+    emitDelete: (payload) => emit('delete', payload),
+    emitCopy: (payload) => emit('copy', payload),
+    emitPaste: (payload) => emit('paste', payload),
+    emitImport: (payload) => emit('import', payload),
+    emitExport: (payload) => emit('export', payload),
+    emitChange: (payload) => emit('change', payload),
+    centerOnNode: (id) => centerOnNode(id),
+    fitToScreen: () => fitToScreen(),
+    centerOnSelection: () => centerOnSelection(),
+    emitSearch: (payload) => emit('search', payload),
+    onSearchStateChange: ({ keyword, matches, currentIndex }) => {
+      searchKeyword.value = keyword
+      searchMatches.value = matches
+      searchCurrentIndex.value = currentIndex
+    },
+    cancelPointerInteractions: () => cancelPointerInteractions(),
+    emitConfigChange,
+    emitContextMenuAction: (payload) => emit('context-menu-action', payload),
+    getContextMenuItemsProp: () => props.contextMenuItems,
+    getMenuEl: () => contextMenuRef.value,
+    onMenuStateChange: (state) => { contextMenuState.value = state },
     emitViewportChange: (next) => emit('viewport-change', next),
     emitGroupStateChange: (next) => emit('group-state-change', next),
     onRenderStats: (stats) => { renderStats.value = stats },
@@ -1366,30 +945,30 @@ function createInteractionController() {
     onLostPointerCapture: cancelPointerInteractions,
     onKeyDown: handleKeyDown,
     onWheel: handleWheel,
-    onContextMenu: openContextMenu,
     onDragOver: handleDragOver,
     onDrop: handleDrop,
   })
 }
 
+controller = createInteractionController()
+
 onMounted(() => {
-  controller = createInteractionController()
   controller.mount(canvasRef.value, containerRef.value)
 })
 
 onUnmounted(() => {
   cancelPointerInteractions()
+  controller?.closeContextMenu()
   controller?.destroy()
   controller = null
-  closeContextMenu()
 })
 
 watch(() => props.layoutDirection, () => controller.updateLayout())
 watch(
   () => props.graph,
   () => {
-    closeContextMenu()
-    operationManager = createGraphOperationManager(props.graph)
+    controller.closeContextMenu()
+    controller.onGraphReplaced()
     controller.updateLayout()
   },
 )
@@ -1398,11 +977,11 @@ watch(() => props.groupStates, () => controller.updateLayout())
 watch(() => props.viewport, () => controller.renderCurrent())
 watch(() => props.options, () => {
   syncConfigFromProps()
-  closeContextMenu()
+  controller.closeContextMenu()
   controller.updateLayout()
 })
 watch(() => props.readonly, () => syncConfigFromProps())
-watch(() => props.contextMenuItems, () => closeContextMenu())
+watch(() => props.contextMenuItems, () => controller.closeContextMenu())
 </script>
 
 <template>
@@ -1412,13 +991,13 @@ watch(() => props.contextMenuItems, () => closeContextMenu())
       <div class="minimap-toolbar" aria-label="画布工具栏">
         <button class="minimap-toolbar-button is-primary" type="button" aria-label="返回">◀</button>
         <span class="minimap-toolbar-separator"></span>
-        <button class="minimap-toolbar-button" type="button" aria-label="撤销" @click="undo">↶</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="重做" @click="redo">↷</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="撤销" @click="controller.undo">↶</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="重做" @click="controller.redo">↷</button>
         <span class="minimap-toolbar-separator"></span>
         <button class="minimap-toolbar-button" type="button" aria-label="选择">□</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="复制" @click="copySelection">⌘</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="粘贴" @click="paste">⎘</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="删除" @click="deleteSelection">⌫</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="复制" @click="controller.copySelection">⌘</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="粘贴" @click="controller.paste">⎘</button>
+        <button class="minimap-toolbar-button" type="button" aria-label="删除" @click="controller.deleteSelection">⌫</button>
         <button class="minimap-toolbar-button" type="button" aria-label="框选">▣</button>
         <span class="minimap-toolbar-separator"></span>
         <button class="minimap-toolbar-button" type="button" aria-label="定位">◎</button>
@@ -1439,21 +1018,21 @@ watch(() => props.contextMenuItems, () => closeContextMenu())
           :value="searchKeyword"
           class="minimap-search-input"
           placeholder="搜索节点..."
-          @input="search($event.target.value)"
-          @keydown.enter="searchNext"
+          @input="controller.search($event.target.value)"
+          @keydown.enter="controller.searchNext"
         />
         <span class="minimap-search-count">{{ searchMatches.length ? `${searchCurrentIndex + 1}/${searchMatches.length}` : '0/0' }}</span>
         <button
           class="minimap-search-btn minimap-search-prev"
           :disabled="searchMatches.length === 0"
-          @click="searchPrevious"
+          @click="controller.searchPrevious"
         >
           ‹
         </button>
         <button
           class="minimap-search-btn minimap-search-next"
           :disabled="searchMatches.length === 0"
-          @click="searchNext"
+          @click="controller.searchNext"
         >
           ›
         </button>
@@ -1493,7 +1072,7 @@ watch(() => props.contextMenuItems, () => closeContextMenu())
             :data-menu-id="item.id"
             :aria-disabled="item.disabled ? 'true' : 'false'"
             :disabled="item.disabled"
-            @click="runContextMenuItem(item)"
+            @click="controller.runContextMenuItem(item)"
           >
             <span class="minimap-context-menu-check" aria-hidden="true">
               {{ item.type === 'checkbox' ? (item.checked ? '✓' : '') : '' }}
