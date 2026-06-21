@@ -15,8 +15,8 @@
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
 - **当前阶段**：Controller 抽取切片 3 —— drag-controller（第五阶段切片 5/6 暂缓，等 controller 抽取完成后再回来做）
-- **当前阶段 Spec**：待头脑风暴产出后补充
-- **当前阶段计划**：待头脑风暴产出后补充
+- **当前阶段 Spec**：[design](docs/superpowers/specs/2026-06-21-controller-extraction-slice-3-design.md)（已确认，待写计划）
+- **当前阶段计划**：待写计划
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
