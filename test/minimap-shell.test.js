@@ -30,6 +30,28 @@ test('renders canvas shell with search, overview, and bottom controls', () => {
   wrapper.destroy()
 })
 
+test('resource tree header icon collapses and restores the resource panel', async () => {
+  const wrapper = mountMinimap({
+    propsData: {
+      graph: createDemoGraph(),
+      resources: [{ category: '储能设备', expanded: true, items: [{ id: 'site', label: '站点' }] }],
+    },
+  })
+
+  assert.equal(wrapper.find('.minimap-resources').exists(), true)
+  assert.equal(wrapper.find('.minimap-resource-restore').exists(), false)
+
+  await wrapper.find('.resource-tree-collapse').trigger('click')
+  assert.equal(wrapper.find('.minimap-resources').exists(), false)
+  const restore = wrapper.find('.minimap-resource-restore')
+  assert.equal(restore.attributes('aria-label'), '展开资源树')
+  assert.equal(restore.element.parentElement.classList.contains('minimap-canvas-container'), true)
+
+  await restore.trigger('click')
+  assert.equal(wrapper.find('.minimap-resources').exists(), true)
+  wrapper.destroy()
+})
+
 test('search and overview options still hide their panels in the polished shell', () => {
   const wrapper = mountMinimap( {
     propsData: {
@@ -1025,6 +1047,27 @@ test('options.disableUsedResources disables resources whose ids exist in graph n
   await wrapper.vm.$nextTick()
   const row = wrapper.find('[data-resource-id="site"]')
   assert.equal(row.classes().includes('is-disabled'), true)
+  wrapper.destroy()
+})
+
+test('options.disableUsedResources refreshes when graph data.resourceId is mutated in place', async () => {
+  const graph = createDemoGraph()
+  const wrapper = mountMinimap({
+    propsData: {
+      graph,
+      options: { disableUsedResources: true },
+      resources: [{ category: '储能设备', expanded: true, items: [{ id: 'site', label: '站点' }] }],
+    },
+  })
+
+  await wrapper.vm.$nextTick()
+  assert.equal(wrapper.find('[data-resource-id="site"]').classes().includes('is-disabled'), false)
+
+  graph.nodes.get('grid-tie').data = { resourceId: 'site' }
+  wrapper.vm.$forceUpdate()
+  await wrapper.vm.$nextTick()
+
+  assert.equal(wrapper.find('[data-resource-id="site"]').classes().includes('is-disabled'), true)
   wrapper.destroy()
 })
 

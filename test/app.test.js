@@ -10,6 +10,7 @@ stubResizeObserver()
 
 const { mount } = await import('@vue/test-utils')
 const App = (await import('../src/App.vue')).default
+const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
 
 test('App mounts the demo graph and resource tree without throwing', () => {
   const wrapper = mount(App)
@@ -17,5 +18,8 @@ test('App mounts the demo graph and resource tree without throwing', () => {
   assert.ok(ctx.calls.some((call) => call.method === 'clearRect'))
   assert.ok(wrapper.find('.resource-tree-title').exists())
   assert.ok(wrapper.find('.resource-row.resource-category-row').exists())
+  const counts = wrapper.findComponent(Minimap).props('resources').map((category) => String(category.items.length))
+  assert.deepEqual(counts, ['2500', '2200', '2300', '2400'])
+  assert.equal(wrapper.find('[data-resource-id="site"]').classes().includes('is-disabled'), true)
   wrapper.destroy()
 })

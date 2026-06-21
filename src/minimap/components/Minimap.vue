@@ -1,9 +1,11 @@
 <template>
   <div class="minimap">
     <ResourceTree
+      v-if="!resourceTreeCollapsed"
       class="minimap-resources"
       :resources="resources"
-      :used-resource-ids="usedResourceIds"
+      :used-resource-ids="resolveUsedResourceIds()"
+      @collapse="resourceTreeCollapsed = true"
     />
     <div ref="containerRef" class="minimap-canvas-container">
       <canvas
@@ -11,6 +13,19 @@
         :class="{ 'is-active-border-enabled': effectiveOptions.enableActiveBorder === true }"
         tabindex="0"
       ></canvas>
+      <button
+        v-if="resourceTreeCollapsed"
+        class="minimap-resource-restore"
+        type="button"
+        aria-label="展开资源树"
+        title="展开资源树"
+        @click="resourceTreeCollapsed = false"
+      >
+        <svg class="minimap-resource-restore-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M3 2.5h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" />
+          <path d="M6 2.5v11M7.5 5.5 10 8l-2.5 2.5" />
+        </svg>
+      </button>
       <div v-if="effectiveOptions.enableSearch !== false" class="minimap-search">
         <input
           :value="searchKeyword"
@@ -231,7 +246,7 @@
  * @property {boolean} [showPerformance=true] 是否显示左下角绘制性能 HUD。
  * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
  * @property {boolean} [disableInitialCenter=false] 为 `true` 时首次布局不自动居中（测试用）。
- * @property {boolean} [disableUsedResources=false] 禁用已在画布中出现的资源项，匹配 `node.data.resourceId`。
+ * @property {boolean} [disableUsedResources=true] 禁用已在画布中出现的资源项，匹配 `node.data.resourceId`。
  */
 
 /**
@@ -489,6 +504,8 @@ export default {
       historyCanRedo: false,
       /** @type {number} graph 原地 mutation 后递增，用于驱动依赖 Map 内容的 computed 重新求值。 */
       graphRevision: 0,
+      /** @type {boolean} 左侧资源树是否收起。 */
+      resourceTreeCollapsed: false,
     }
   },
 
@@ -526,6 +543,7 @@ export default {
         showPerformance: true,
         hideTextDuringInteraction: false,
         disableInitialCenter: false,
+        disableUsedResources: true,
         ...this.internalOptions,
       }
     },
@@ -542,17 +560,6 @@ export default {
           visible: this.effectiveOptions.showGrid !== false,
         },
       }
-    },
-
-    /** @returns {Set<string>} 已在画布节点 `data.resourceId` 中出现的资源 id；仅 `disableUsedResources` 时填充。 */
-    usedResourceIds() {
-      void this.graphRevision
-      if (this.effectiveOptions.disableUsedResources !== true) return new Set()
-      const ids = new Set()
-      for (const node of this.graph.nodes.values()) {
-        if (node.data?.resourceId) ids.add(node.data.resourceId)
-      }
-      return ids
     },
   },
 
@@ -632,6 +639,19 @@ export default {
   },
 
   methods: {
+    /** @returns {Set<string>} 已在画布节点 `data.resourceId` 中出现的资源 id；仅 `disableUsedResources` 时填充。 */
+    resolveUsedResourceIds() {
+      void this.graphRevision
+      if (this.effectiveOptions.disableUsedResources !== true) return new Set()
+      const ids = new Set()
+      // Vue 2 不能观察父层 graph.nodes(Map) 的原地 entry mutation，因此这里在渲染期解析。
+      for (const node of this.graph.nodes.values()) {
+        const resourceId = node.data?.resourceId
+        if (resourceId !== undefined && resourceId !== null && resourceId !== '') ids.add(String(resourceId))
+      }
+      return ids
+    },
+
     /** 将 `readonly` / `options` prop 同步到内部副本。 */
     syncConfigFromProps() {
       this.internalReadonly = this.readonly
@@ -909,8 +929,44 @@ export default {
   background: #0b0f14;
 }
 .minimap-resources {
-  flex: 0 0 220px;
-  overflow-y: auto;
+  flex: 0 0 300px;
+  overflow: hidden;
+}
+.minimap-resource-restore {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: #8e98a5;
+  background: rgba(16, 20, 24, 0.88);
+  border: 1px solid rgba(48, 55, 65, 0.92);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+.minimap-resource-restore:hover {
+  color: #dce3ec;
+  background: rgba(23, 28, 34, 0.96);
+  border-color: #343c47;
+}
+.minimap-resource-restore:focus-visible {
+  outline: 1px solid #4b8cff;
+  outline-offset: 2px;
+}
+.minimap-resource-restore-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
 }
 .minimap-canvas-container {
   flex: 1 1 auto;

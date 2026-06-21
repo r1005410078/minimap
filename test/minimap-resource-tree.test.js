@@ -29,7 +29,7 @@ test('renders the reference resource tree categories, counts, and draggable item
   const wrapper = mount(ResourceTree, { propsData: { resources } })
 
   assert.equal(wrapper.find('.resource-tree-title').text(), '资源树')
-  assert.equal(wrapper.find('.resource-tree-hint').text(), '拖至画布')
+  assert.equal(wrapper.find('.resource-tree-collapse').attributes('aria-label'), '收起资源树')
 
   const labels = wrapper.findAll('.resource-row.resource-category-row .resource-item-label').wrappers.map((w) => w.text())
   assert.deepEqual(labels, ['储能设备', '光伏设备', '配电设备', '监控设备'])
@@ -40,6 +40,16 @@ test('renders the reference resource tree categories, counts, and draggable item
   const item = wrapper.find('[data-resource-id="bms-cluster"]')
   assert.equal(item.text().includes('BMS 簇'), true)
   assert.equal(item.attributes('draggable'), 'true')
+  assert.equal(wrapper.find('.resource-item-handle').exists(), false)
+  wrapper.destroy()
+})
+
+test('clicking the header icon requests resource tree collapse', async () => {
+  const wrapper = mount(ResourceTree, { propsData: { resources } })
+
+  await wrapper.find('.resource-tree-collapse').trigger('click')
+
+  assert.equal(wrapper.emitted('collapse').length, 1)
   wrapper.destroy()
 })
 

@@ -2,7 +2,12 @@
   <aside class="resource-tree">
     <div class="resource-tree-header">
       <h2 class="resource-tree-title">资源树</h2>
-      <button class="resource-tree-hint" type="button" disabled>拖至画布</button>
+      <button class="resource-tree-collapse" type="button" aria-label="收起资源树" title="收起资源树" @click="$emit('collapse')">
+        <svg class="resource-tree-collapse-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M3 2.5h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" />
+          <path d="M6 2.5v11M10 5.5 7.5 8l2.5 2.5" />
+        </svg>
+      </button>
     </div>
     <label class="resource-search">
       <span class="resource-search-icon" aria-hidden="true">⌕</span>
@@ -42,8 +47,7 @@
             <span v-if="row.type === 'folder'" class="resource-category-caret" aria-hidden="true"></span>
             <span v-else class="resource-item-dot" aria-hidden="true"></span>
             <span class="resource-item-label">{{ row.label }}</span>
-            <span v-if="row.type === 'resource'" class="resource-item-handle" aria-hidden="true">⌘</span>
-            <span v-else class="resource-category-count">{{ row.count }}</span>
+            <span v-if="row.type === 'folder'" class="resource-category-count">{{ row.count }}</span>
           </div>
         </div>
       </div>
@@ -281,14 +285,37 @@ export default {
   font-size: 14px;
   font-weight: 700;
 }
-.resource-tree-hint {
+.resource-tree-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
   height: 28px;
-  padding: 0 10px;
-  color: #69717c;
+  padding: 0;
+  color: #8e98a5;
   background: #171c22;
   border: 1px solid #2a3038;
   border-radius: 5px;
-  font: inherit;
+  cursor: pointer;
+}
+.resource-tree-collapse:hover {
+  color: #dce3ec;
+  background: #20262d;
+  border-color: #3a434e;
+}
+.resource-tree-collapse:focus-visible {
+  outline: 1px solid #4b8cff;
+  outline-offset: 2px;
+}
+.resource-tree-collapse-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
 }
 .resource-search {
   display: flex;
@@ -316,6 +343,23 @@ export default {
   height: calc(100% - 68px);
   overflow: auto;
   outline: none;
+  scrollbar-color: #55606b rgba(18, 23, 29, 0.45);
+  scrollbar-width: thin;
+}
+.resource-tree-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.resource-tree-scroll::-webkit-scrollbar-track {
+  background: rgba(18, 23, 29, 0.45);
+  border-radius: 999px;
+}
+.resource-tree-scroll::-webkit-scrollbar-thumb {
+  background: #4a5560;
+  border: 2px solid rgba(18, 23, 29, 0.9);
+  border-radius: 999px;
+}
+.resource-tree-scroll::-webkit-scrollbar-thumb:hover {
+  background: #66717d;
 }
 .resource-tree-spacer {
   position: relative;
@@ -405,9 +449,5 @@ export default {
   border-radius: 3px;
   background: #2bdd7f;
   box-shadow: 0 0 12px rgba(43, 221, 127, 0.45);
-}
-.resource-item-handle {
-  color: #535b65;
-  font-size: 11px;
 }
 </style>
