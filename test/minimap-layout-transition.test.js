@@ -5,7 +5,7 @@ import {
   easeOutCubic,
   layoutAt,
   resolveAnchorCenter,
-} from '../src/minimap/layout-transition.js'
+} from '../src/minimap/graph/layout-transition.js'
 
 function layoutOf({ nodes = [], groups = [], visibleItems = nodes.map(([id, rect]) => ({ type: 'node', id, ...rect })) }) {
   return {

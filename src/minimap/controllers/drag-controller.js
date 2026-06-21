@@ -1,7 +1,7 @@
-import { GROUP, clampGroupScroll } from './layout.js'
-import { worldRectToScreen } from './renderer.js'
-import { screenToWorld } from './coords.js'
-import { panViewportBy, viewportOptions } from './viewport.js'
+import { GROUP, clampGroupScroll } from '../graph/layout.js'
+import { worldRectToScreen } from '../render/renderer.js'
+import { screenToWorld } from '../coords/coords.js'
+import { panViewportBy, viewportOptions } from '../coords/viewport.js'
 import {
   hitTest,
   findInsertionIndex,
@@ -12,15 +12,15 @@ import {
   resolveDropTarget,
   edgePanVelocity,
   hitScrollbarThumb,
-} from './interaction.js'
+} from '../interaction/interaction.js'
 import {
   buildVirtualOrder,
   childWorldRectsById,
   currentShiftRects,
   dragShiftEasedProgress,
   dragShiftProgress,
-} from './drag-transition.js'
-import { applySelectionClick, idsInSelectionRect, normalizeRect } from './selection.js'
+} from '../interaction/drag-transition.js'
+import { applySelectionClick, idsInSelectionRect, normalizeRect } from '../interaction/selection.js'
 
 const DRAG_SHIFT_DURATION_MS = 150
 

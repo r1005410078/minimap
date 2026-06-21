@@ -2,10 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubAnimationFrame, stubCanvasContext, stubResizeObserver } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
-import { centerViewportOn } from '../src/minimap/viewport.js'
-import { computeOverviewViewport, mainViewportFrameRect, clampRectToCanvas } from '../src/minimap/overview.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout } from '../src/minimap/graph/layout.js'
+import { centerViewportOn } from '../src/minimap/coords/viewport.js'
+import { computeOverviewViewport, mainViewportFrameRect, clampRectToCanvas } from '../src/minimap/render/overview.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -14,8 +14,8 @@ stubResizeObserver()
 const frames = stubAnimationFrame()
 
 const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/Minimap.vue')).default
-const Overview = (await import('../src/minimap/Overview.vue')).default
+const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const Overview = (await import('../src/minimap/components/Overview.vue')).default
 
 function settle() {
   frames.runNext(0)

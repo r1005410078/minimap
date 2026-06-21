@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createRenderScheduler } from '../src/minimap/render-scheduler.js'
+import { createRenderScheduler } from '../src/minimap/render/render-scheduler.js'
 
 function createFrameHarness() {
   const frames = []

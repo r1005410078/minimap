@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { createGraphOperationManager, captureSubtreeSnapshot } from '../src/minimap/graph-operations.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { createGraphOperationManager, captureSubtreeSnapshot } from '../src/minimap/graph/graph-operations.js'
 
 function labels(graph, parentId) {
   return graph.nodes.get(parentId).children.slice()

@@ -2,10 +2,10 @@
 // 只做渲染逻辑，ctx 由外部传入（真实或 mock），不碰 DOM。
 // 见 docs/superpowers/specs/2026-06-18-phase-1-canvas-renderer.md
 
-import { worldToScreen } from './coords.js'
+import { worldToScreen } from '../coords/coords.js'
 import { orthogonalPath } from './orthogonal.js'
 import { defaultTheme } from './theme.js'
-import { GROUP, visibleGroupChildren } from './layout.js'
+import { GROUP, visibleGroupChildren } from '../graph/layout.js'
 
 const now = () => (globalThis.performance ?? Date).now()
 

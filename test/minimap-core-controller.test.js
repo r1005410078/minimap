@@ -2,9 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { createCoreController } from '../src/minimap/core-controller.js'
-import { defaultTheme } from '../src/minimap/theme.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { createCoreController } from '../src/minimap/controllers/core-controller.js'
+import { defaultTheme } from '../src/minimap/render/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)

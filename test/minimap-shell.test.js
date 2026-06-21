@@ -2,12 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { clearClipboard } from '../src/minimap/clipboard.js'
-import { computeLayout, keepAnchorStable } from '../src/minimap/layout.js'
-import { easeOutCubic } from '../src/minimap/layout-transition.js'
-import { resolveEdges } from '../src/minimap/renderer.js'
-import { defaultTheme } from '../src/minimap/theme.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { clearClipboard } from '../src/minimap/edit/clipboard.js'
+import { computeLayout, keepAnchorStable } from '../src/minimap/graph/layout.js'
+import { easeOutCubic } from '../src/minimap/graph/layout-transition.js'
+import { resolveEdges } from '../src/minimap/render/renderer.js'
+import { defaultTheme } from '../src/minimap/render/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -16,7 +16,7 @@ const observers = stubResizeObserver()
 const frames = stubAnimationFrame()
 
 const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/Minimap.vue')).default
+const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
 
 test('renders the dark workbench toolbar shell without removing canvas, search, or overview', () => {
   const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })

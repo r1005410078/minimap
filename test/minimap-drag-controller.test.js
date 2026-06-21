@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { stubAnimationFrame } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
-import { scrollbarMetrics } from '../src/minimap/interaction.js'
-import { createGraphOperationManager } from '../src/minimap/graph-operations.js'
-import { createDragController } from '../src/minimap/drag-controller.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout } from '../src/minimap/graph/layout.js'
+import { scrollbarMetrics } from '../src/minimap/interaction/interaction.js'
+import { createGraphOperationManager } from '../src/minimap/graph/graph-operations.js'
+import { createDragController } from '../src/minimap/controllers/drag-controller.js'
 
 const raf = stubAnimationFrame()
 

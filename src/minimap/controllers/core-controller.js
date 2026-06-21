@@ -1,4 +1,4 @@
-import { computeLayout, clampGroupScroll, locateChildGroup, childRectInGroup, scrollTopToReveal, keepAnchorStable } from './layout.js'
+import { computeLayout, clampGroupScroll, locateChildGroup, childRectInGroup, scrollTopToReveal, keepAnchorStable } from '../graph/layout.js'
 import {
   DEFAULT_VIEWPORT,
   normalizeViewport,
@@ -10,13 +10,13 @@ import {
   fitViewportToBounds,
   centerViewportOn,
   tweenViewport,
-} from './viewport.js'
-import { createLayoutTransition, layoutAt, resolveAnchorCenter } from './layout-transition.js'
-import { screenToWorld } from './coords.js'
-import { renderScene, worldRectToScreen } from './renderer.js'
-import { buildSelectionRelations } from './selection.js'
-import { createRenderScheduler } from './render-scheduler.js'
-import { resolveRenderQuality } from './render-quality.js'
+} from '../coords/viewport.js'
+import { createLayoutTransition, layoutAt, resolveAnchorCenter } from '../graph/layout-transition.js'
+import { screenToWorld } from '../coords/coords.js'
+import { renderScene, worldRectToScreen } from '../render/renderer.js'
+import { buildSelectionRelations } from '../interaction/selection.js'
+import { createRenderScheduler } from '../render/render-scheduler.js'
+import { resolveRenderQuality } from '../render/render-quality.js'
 
 export function createCoreController(deps) {
   let canvasEl = null

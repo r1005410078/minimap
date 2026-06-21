@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { worldToScreen, screenToWorld } from '../src/minimap/coords.js'
+import { worldToScreen, screenToWorld } from '../src/minimap/coords/coords.js'
 
 test('worldToScreen applies viewport scale and offset', () => {
   const viewport = { x: -10, y: 5, scale: 2 }

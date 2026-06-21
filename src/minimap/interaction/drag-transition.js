@@ -1,6 +1,6 @@
 // 组内拖拽换位时的子节点矩形插值；纯函数，不依赖 Vue / Canvas。
-import { easeOutCubic } from './layout-transition.js'
-import { GROUP } from './layout.js'
+import { easeOutCubic } from '../graph/layout-transition.js'
+import { GROUP } from '../graph/layout.js'
 
 export function buildVirtualOrder(children, childId, insertIndex) {
   const order = children.filter((id) => id !== childId)

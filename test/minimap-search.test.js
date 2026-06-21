@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { searchNodes } from '../src/minimap/search.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { searchNodes } from '../src/minimap/edit/search.js'
 
 test('searchNodes matches id and label case-insensitively', () => {
   const graph = createDemoGraph()

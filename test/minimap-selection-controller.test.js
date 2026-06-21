@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createSelectionController } from '../src/minimap/selection-controller.js'
+import { createSelectionController } from '../src/minimap/controllers/selection-controller.js'
 
 function createDeps(overrides = {}) {
   const emitted = []

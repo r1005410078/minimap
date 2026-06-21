@@ -1,15 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { computeLayout, GROUP } from '../src/minimap/layout.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { easeOutCubic } from '../src/minimap/layout-transition.js'
+import { computeLayout, GROUP } from '../src/minimap/graph/layout.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { easeOutCubic } from '../src/minimap/graph/layout-transition.js'
 import {
   buildVirtualOrder,
   childWorldRectsById,
   currentShiftRects,
   dragShiftEasedProgress,
   interpolateChildRects,
-} from '../src/minimap/drag-transition.js'
+} from '../src/minimap/interaction/drag-transition.js'
 
 const LAYOUT_OPTS = { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 }
 

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { DEFAULT_VIEWPORT } from '../src/minimap/viewport.js'
-import { computeOverviewViewport, mainViewportFrameRect, clampRectToCanvas } from '../src/minimap/overview.js'
+import { DEFAULT_VIEWPORT } from '../src/minimap/coords/viewport.js'
+import { computeOverviewViewport, mainViewportFrameRect, clampRectToCanvas } from '../src/minimap/render/overview.js'
 
 test('computeOverviewViewport does not clamp scale below the main viewport minScale', () => {
   const bounds = { minX: 0, maxX: 10000, minY: 0, maxY: 10000 }

@@ -1,4 +1,4 @@
-import { applySelectionSet } from './selection.js'
+import { applySelectionSet } from '../interaction/selection.js'
 
 export function createSelectionController(deps) {
   let internalSelectedIds = []

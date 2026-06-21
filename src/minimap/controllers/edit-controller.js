@@ -1,6 +1,6 @@
-import { createGraphOperationManager, captureSubtreeSnapshot } from './graph-operations.js'
-import { getClipboard, setClipboard } from './clipboard.js'
-import { deserializeGraph, serializeGraph } from './graph-serialization.js'
+import { createGraphOperationManager, captureSubtreeSnapshot } from '../graph/graph-operations.js'
+import { getClipboard, setClipboard } from '../edit/clipboard.js'
+import { deserializeGraph, serializeGraph } from '../graph/graph-serialization.js'
 
 export function createEditController(deps) {
   let operationManager = createGraphOperationManager(deps.getGraph())

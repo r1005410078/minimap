@@ -1,4 +1,4 @@
-import { searchNodes } from './search.js'
+import { searchNodes } from '../edit/search.js'
 
 export function createSearchController(deps) {
   let keyword = ''

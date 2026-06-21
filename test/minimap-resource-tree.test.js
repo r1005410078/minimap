@@ -5,7 +5,7 @@ import { installDomEnv } from './helpers/dom-env.js'
 installDomEnv()
 
 const { mount } = await import('@vue/test-utils')
-const ResourceTree = (await import('../src/minimap/ResourceTree.vue')).default
+const ResourceTree = (await import('../src/minimap/components/ResourceTree.vue')).default
 
 const resources = [
   {

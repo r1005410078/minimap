@@ -32,6 +32,7 @@ When implementation questions arise, check the design document first. If the des
 
 ## Architecture Rules
 
+- Organize `src/minimap/` into layered subdirectories per [architecture.md](architecture.md); classify new files before adding them.
 - Keep high-volume graph rendering out of Vue DOM. Vue should own state, controls, and component composition; Canvas should own large-scale drawing.
 - Keep pure logic separate from Vue components. Layout, grouping, hit testing, coordinate transforms, history, and search should be testable without a browser.
 - Main layout uses stable layered tree layout. Extra `edges` are drawn and highlighted by default, but do not participate in the primary layout unless the design changes.

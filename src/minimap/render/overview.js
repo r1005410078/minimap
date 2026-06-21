@@ -1,7 +1,7 @@
 // Phase 4 切片 3：Overview 小地图导航。纯函数，不依赖 Vue/DOM。
 // 见 docs/superpowers/specs/2026-06-20-phase-4-overview-navigation.md
-import { fitViewportToBounds } from './viewport.js'
-import { screenToWorld } from './coords.js'
+import { fitViewportToBounds } from '../coords/viewport.js'
+import { screenToWorld } from '../coords/coords.js'
 import { worldRectToScreen } from './renderer.js'
 
 // 缩略图自己的"完整显示全部内容"视口变换，不受主视口 minScale/maxScale 限制——

@@ -3,7 +3,7 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 
-import { GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from './layout.js'
+import { GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from '../graph/layout.js'
 
 const SCROLLBAR_WIDTH = 8
 

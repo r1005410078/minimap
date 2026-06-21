@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv } from './helpers/dom-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
-import { clearClipboard, setClipboard } from '../src/minimap/clipboard.js'
-import { createContextMenuController } from '../src/minimap/context-menu-controller.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout } from '../src/minimap/graph/layout.js'
+import { clearClipboard, setClipboard } from '../src/minimap/edit/clipboard.js'
+import { createContextMenuController } from '../src/minimap/controllers/context-menu-controller.js'
 
 installDomEnv()
 

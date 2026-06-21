@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubAnimationFrame, stubCanvasContext, stubResizeObserver } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout, GROUP } from '../src/minimap/layout.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout, GROUP } from '../src/minimap/graph/layout.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -12,7 +12,7 @@ stubResizeObserver()
 const frames = stubAnimationFrame()
 
 const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/Minimap.vue')).default
+const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
 
 function callsSinceLastClear(ctx) {
   const lastClear = ctx.calls.map((call) => call.method).lastIndexOf('clearRect')

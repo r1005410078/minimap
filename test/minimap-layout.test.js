@@ -4,7 +4,7 @@ import {
   createDemoGraph,
   createStressGraph,
   reorderGroupChild,
-} from '../src/minimap/graph.js'
+} from '../src/minimap/graph/graph.js'
 import {
   GROUP,
   GROUP_THRESHOLD,
@@ -15,7 +15,7 @@ import {
   locateChildGroup,
   scrollTopToReveal,
   visibleGroupChildren,
-} from '../src/minimap/layout.js'
+} from '../src/minimap/graph/layout.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
 

@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout } from '../src/minimap/graph/layout.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -11,7 +11,7 @@ stubCanvasContext()
 stubResizeObserver()
 
 const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/Minimap.vue')).default
+const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
 
 function dispatchPointerDown(wrapper, point) {
   const canvasEl = wrapper.find('canvas').element

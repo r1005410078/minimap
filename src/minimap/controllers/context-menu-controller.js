@@ -1,6 +1,6 @@
-import { hitTest } from './interaction.js'
-import { hasClipboard } from './clipboard.js'
-import { BUILT_IN_CONTEXT_MENU_ACTIONS, buildContextMenuItems, mergeContextMenuItems } from './context-menu.js'
+import { hitTest } from '../interaction/interaction.js'
+import { hasClipboard } from '../edit/clipboard.js'
+import { BUILT_IN_CONTEXT_MENU_ACTIONS, buildContextMenuItems, mergeContextMenuItems } from '../edit/context-menu.js'
 
 const CONTEXT_MENU_WIDTH = 190
 const CONTEXT_MENU_MAX_HEIGHT = 360

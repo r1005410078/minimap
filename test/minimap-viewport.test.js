@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { screenToWorld } from '../src/minimap/coords.js'
-import { easeOutCubic } from '../src/minimap/layout-transition.js'
+import { screenToWorld } from '../src/minimap/coords/coords.js'
+import { easeOutCubic } from '../src/minimap/graph/layout-transition.js'
 import {
   DEFAULT_VIEWPORT,
   centerViewportOn,
@@ -13,7 +13,7 @@ import {
   tweenViewport,
   viewportOptions,
   zoomViewportAt,
-} from '../src/minimap/viewport.js'
+} from '../src/minimap/coords/viewport.js'
 
 function assertApprox(actual, expected, tolerance = 0.000001) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} is not within ${tolerance} of ${expected}`)

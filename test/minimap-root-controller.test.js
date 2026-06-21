@@ -2,10 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
-import { createMinimapController } from '../src/minimap/minimap-controller.js'
-import { defaultTheme } from '../src/minimap/theme.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout } from '../src/minimap/graph/layout.js'
+import { createMinimapController } from '../src/minimap/controllers/minimap-controller.js'
+import { defaultTheme } from '../src/minimap/render/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)

@@ -4,7 +4,7 @@ import {
   BUILT_IN_CONTEXT_MENU_ACTIONS,
   buildContextMenuItems,
   mergeContextMenuItems,
-} from '../src/minimap/context-menu.js'
+} from '../src/minimap/edit/context-menu.js'
 
 function baseContext(overrides = {}) {
   return {

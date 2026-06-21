@@ -2,9 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout, GROUP } from '../src/minimap/layout.js'
-import { defaultTheme } from '../src/minimap/theme.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout, GROUP } from '../src/minimap/graph/layout.js'
+import { defaultTheme } from '../src/minimap/render/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -13,7 +13,7 @@ stubResizeObserver()
 const frames = stubAnimationFrame()
 
 const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/Minimap.vue')).default
+const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
 
 const LAYOUT_OPTS = { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 }
 

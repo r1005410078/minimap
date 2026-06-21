@@ -1,5 +1,5 @@
 import { screenToWorld } from './coords.js'
-import { easeOutCubic } from './layout-transition.js'
+import { easeOutCubic } from '../graph/layout-transition.js'
 
 export const DEFAULT_VIEWPORT = Object.freeze({ x: 0, y: 0, scale: 1 })
 

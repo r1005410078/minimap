@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
 import {
   deserializeGraph,
   serializeGraph,
   validateGraphVersion,
-} from '../src/minimap/graph-serialization.js'
+} from '../src/minimap/graph/graph-serialization.js'
 
 test('serializeGraph returns JSON-safe graph data with array nodes', () => {
   const graph = createDemoGraph()

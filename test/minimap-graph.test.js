@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph, createStressGraph, reorderGroupChild } from '../src/minimap/graph.js'
-import { GROUP_THRESHOLD, computeLayout } from '../src/minimap/layout.js'
+import { createDemoGraph, createStressGraph, reorderGroupChild } from '../src/minimap/graph/graph.js'
+import { GROUP_THRESHOLD, computeLayout } from '../src/minimap/graph/layout.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
 

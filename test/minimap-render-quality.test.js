@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveRenderQuality } from '../src/minimap/render-quality.js'
+import { resolveRenderQuality } from '../src/minimap/render/render-quality.js'
 
 test('full quality keeps text and group children at normal scale', () => {
   assert.deepEqual(resolveRenderQuality({ scale: 1, interacting: false }), {

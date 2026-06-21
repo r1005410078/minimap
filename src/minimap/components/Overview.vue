@@ -5,10 +5,10 @@
 // 固定尺寸 200×140px，不随容器变化，不需要 ResizeObserver。
 // 见 docs/superpowers/specs/2026-06-20-phase-4-overview-navigation.md
 import { ref, onMounted, onUnmounted } from 'vue'
-import { screenToWorld } from './coords.js'
-import { worldRectToScreen } from './renderer.js'
-import { defaultTheme } from './theme.js'
-import { computeOverviewViewport, mainViewportFrameRect, clampRectToCanvas } from './overview.js'
+import { screenToWorld } from '../coords/coords.js'
+import { worldRectToScreen } from '../render/renderer.js'
+import { defaultTheme } from '../render/theme.js'
+import { computeOverviewViewport, mainViewportFrameRect, clampRectToCanvas } from '../render/overview.js'
 
 const OVERVIEW_WIDTH = 200
 const OVERVIEW_HEIGHT = 140

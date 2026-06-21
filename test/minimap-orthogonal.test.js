@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { orthogonalPath } from '../src/minimap/orthogonal.js'
+import { orthogonalPath } from '../src/minimap/render/orthogonal.js'
 
 test('orthogonalPath routes left-to-right boxes as horizontal-vertical-horizontal', () => {
   const from = { x: 0, y: 20, width: 100, height: 40 }

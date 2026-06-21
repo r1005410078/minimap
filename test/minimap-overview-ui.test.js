@@ -7,7 +7,7 @@ installDomEnv()
 const contexts = stubCanvasContext()
 
 const { mount } = await import('@vue/test-utils')
-const Overview = (await import('../src/minimap/Overview.vue')).default
+const Overview = (await import('../src/minimap/components/Overview.vue')).default
 
 function dispatchPointer(wrapper, type, point) {
   const canvasEl = wrapper.find('canvas').element

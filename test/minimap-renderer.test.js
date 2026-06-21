@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph, createStressGraph } from '../src/minimap/graph.js'
-import { computeLayout, GROUP, visibleGroupChildren } from '../src/minimap/layout.js'
-import { orthogonalPath } from '../src/minimap/orthogonal.js'
-import { worldRectToScreen, collectVisible, resolveEdges, renderScene } from '../src/minimap/renderer.js'
-import { defaultTheme } from '../src/minimap/theme.js'
+import { createDemoGraph, createStressGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout, GROUP, visibleGroupChildren } from '../src/minimap/graph/layout.js'
+import { orthogonalPath } from '../src/minimap/render/orthogonal.js'
+import { worldRectToScreen, collectVisible, resolveEdges, renderScene } from '../src/minimap/render/renderer.js'
+import { defaultTheme } from '../src/minimap/render/theme.js'
 import { createMockCtx } from './helpers/mock-ctx.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }

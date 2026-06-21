@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { createSearchController } from '../src/minimap/search-controller.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { createSearchController } from '../src/minimap/controllers/search-controller.js'
 
 function createDeps(graph) {
   const centeredIds = []

@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout } from '../src/minimap/layout.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout } from '../src/minimap/graph/layout.js'
 import {
   applySelectionClick,
   applySelectionSet,
   buildSelectionRelations,
   idsInSelectionRect,
   intersectsRect,
-} from '../src/minimap/selection.js'
+} from '../src/minimap/interaction/selection.js'
 
 test('applySelectionClick replaces selection without modifier keys', () => {
   assert.deepEqual(applySelectionClick(['a', 'b'], 'c', { additive: false }), ['c'])

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { computeLayout, GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from '../src/minimap/layout.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { computeLayout, GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from '../src/minimap/graph/layout.js'
 import {
   hitTest,
   findInsertionIndex,
@@ -13,7 +13,7 @@ import {
   edgePanVelocity,
   scrollbarMetrics,
   hitScrollbarThumb,
-} from '../src/minimap/interaction.js'
+} from '../src/minimap/interaction/interaction.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
 

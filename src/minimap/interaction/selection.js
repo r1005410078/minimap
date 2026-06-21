@@ -1,5 +1,5 @@
-import { visibleGroupChildren } from './layout.js'
-import { resolveEdges, worldRectToScreen } from './renderer.js'
+import { visibleGroupChildren } from '../graph/layout.js'
+import { resolveEdges, worldRectToScreen } from '../render/renderer.js'
 
 export function normalizeRect(rect) {
   const x = Math.min(rect.x, rect.x + rect.width)

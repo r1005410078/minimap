@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoGraph } from '../src/minimap/graph.js'
-import { clearClipboard, getClipboard } from '../src/minimap/clipboard.js'
-import { createEditController } from '../src/minimap/edit-controller.js'
+import { createDemoGraph } from '../src/minimap/graph/graph.js'
+import { clearClipboard, getClipboard } from '../src/minimap/edit/clipboard.js'
+import { createEditController } from '../src/minimap/controllers/edit-controller.js'
 
 function createDeps(graph, overrides = {}) {
   const emitted = { delete: [], copy: [], paste: [], import: [], export: [], change: [] }

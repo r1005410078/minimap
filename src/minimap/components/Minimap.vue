@@ -4,9 +4,9 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import { createMinimapController } from './minimap-controller.js'
-import { defaultTheme } from './theme.js'
-import { centerViewportOn } from './viewport.js'
+import { createMinimapController } from '../controllers/minimap-controller.js'
+import { defaultTheme } from '../render/theme.js'
+import { centerViewportOn } from '../coords/viewport.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
