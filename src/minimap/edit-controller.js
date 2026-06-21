@@ -220,5 +220,6 @@ export function createEditController(deps) {
     importGraph,
     applyOperation,
     onGraphReplaced,
+    emitChangeIfApplied,
   }
 }

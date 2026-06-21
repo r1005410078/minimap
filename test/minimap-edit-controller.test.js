@@ -263,3 +263,16 @@ test('applyOperation is exposed for cross-controller use (e.g. drag-controller i
   assert.equal(beforeCalls.length, 1)
   assert.ok(graph.nodes.has('feeder-1'))
 })
+
+test('emitChangeIfApplied is exposed for cross-controller reuse (e.g. drag-controller) and only emits when applied', () => {
+  const graph = createDemoGraph()
+  const { deps, emitted } = createDeps(graph)
+  const controller = createEditController(deps)
+
+  controller.emitChangeIfApplied({ applied: false, type: 'move-node', operation: {}, previousGraph: graph, nextGraph: graph, reason: 'blocked' })
+  assert.equal(emitted.change.length, 0)
+
+  controller.emitChangeIfApplied({ applied: true, type: 'move-node', operation: { type: 'move-node', payload: {} }, previousGraph: graph, nextGraph: graph, reason: null })
+  assert.equal(emitted.change.length, 1)
+  assert.equal(emitted.change[0].type, 'move-node')
+})
