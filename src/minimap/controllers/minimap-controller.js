@@ -21,6 +21,7 @@ export function createMinimapController(deps) {
     ...deps,
     getSelectedIds: selection.getSelectedIds,
     getInteractionRenderState: () => drag.getInteractionRenderState(),
+    getSearchMatchId: () => search.getCurrentMatchId(),
   })
 
   const edit = createEditController({

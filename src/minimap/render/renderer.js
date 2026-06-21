@@ -470,7 +470,11 @@ function drawSelectionRect(ctx, rect, theme) {
 
 // 裁剪到分组框 body 范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
 // 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
-function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext, quality = {}) {
+function qualityFor(id, searchMatchId, quality) {
+  return id === searchMatchId ? { ...quality, showText: true } : quality
+}
+
+function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext, quality = {}, searchMatchId = null) {
   const virtualGroup = dragContext ? { ...group, children: dragContext.order } : group
   const bodyY = rect.y + GROUP.header * viewport.scale
   const bodyHeight = rect.height - GROUP.header * viewport.scale
@@ -489,7 +493,7 @@ function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, 
     }
     const itemState = makeState(child.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
-    else drawNode(ctx, node, childRect, itemState, theme, viewport.scale, quality)
+    else drawNode(ctx, node, childRect, itemState, theme, viewport.scale, qualityFor(child.id, searchMatchId, quality))
   }
   ctx.restore()
 }
@@ -536,6 +540,7 @@ export function renderScene(ctx, scene) {
   const dimmedIds = state.dimmedIds
   const highlightedEdgeIds = state.highlightedEdgeIds
   const dimmedEdgeIds = state.dimmedEdgeIds
+  const searchMatchId = state.searchMatchId ?? null
   const edges = resolveEdges(graph, layout)
   const resolvedDirection = layoutDirection || direction || inferDirectionFromLayout(graph, layout, edges)
   const mainAxis = edgeMainAxis(resolvedDirection)
@@ -603,6 +608,7 @@ export function renderScene(ctx, scene) {
         dimmedIds,
         dragContext,
         effectiveQuality,
+        searchMatchId,
       )
     }
     drawn++
@@ -614,7 +620,7 @@ export function renderScene(ctx, scene) {
     const node = graph.nodes.get(item.id)
     const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })
-    else drawNode(ctx, node, screen, itemState, theme, viewport.scale, effectiveQuality)
+    else drawNode(ctx, node, screen, itemState, theme, viewport.scale, qualityFor(item.id, searchMatchId, effectiveQuality))
     drawn++
   }
 

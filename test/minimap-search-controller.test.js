@@ -84,3 +84,23 @@ test('searchNext and searchPrevious are no-ops when there are no matches', () =>
   assert.deepEqual(centeredIds, [])
   assert.equal(emitted.length, 1) // only the initial search() emit, no extra emits from next/previous
 })
+
+test('getCurrentMatchId tracks the active match through search/next/previous, and is null before any search or with no matches', () => {
+  const graph = createDemoGraph()
+  const { deps } = createDeps(graph)
+  const controller = createSearchController(deps)
+
+  assert.equal(controller.getCurrentMatchId(), null)
+
+  controller.search('feeder')
+  assert.equal(controller.getCurrentMatchId(), 'feeder-1')
+
+  controller.searchNext()
+  assert.equal(controller.getCurrentMatchId(), 'feeder-2')
+
+  controller.searchPrevious()
+  assert.equal(controller.getCurrentMatchId(), 'feeder-1')
+
+  controller.search('does-not-exist')
+  assert.equal(controller.getCurrentMatchId(), null)
+})

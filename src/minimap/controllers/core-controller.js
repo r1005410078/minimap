@@ -268,6 +268,7 @@ export function createCoreController(deps) {
         groupScrollbarHoverId: interaction.groupScrollbarHoverId ?? null,
         selectionRect: interaction.selectionRect ?? null,
         attachPreview,
+        searchMatchId: deps.getSearchMatchId?.() ?? null,
       },
       quality: resolveRenderQuality({
         scale: renderViewport.scale,

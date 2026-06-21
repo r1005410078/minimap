@@ -229,6 +229,34 @@ test('overview quality skips grouped child detail drawing', () => {
   assert.equal(ctx.calls.some((call) => call.method === 'fillText' && String(call.args[0]).startsWith('cluster-')), false)
 })
 
+test('compact quality still draws text for the current search match node, but not for others', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ viewport: { x: 0, y: 0, scale: 0.3 } })
+
+  renderScene(ctx, {
+    ...scene,
+    quality: { showText: false, showGroupChildren: true },
+    state: { searchMatchId: 'energy-root' },
+  })
+
+  assert.equal(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'), true)
+  assert.equal(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Grid Tie'), false)
+})
+
+test('compact quality still draws text for the current search match inside a collapsed group', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ viewport: { x: 0, y: 0, scale: 0.3 } })
+
+  renderScene(ctx, {
+    ...scene,
+    quality: { showText: false, showGroupChildren: true },
+    state: { searchMatchId: 'cluster-1' },
+  })
+
+  assert.equal(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'cluster-1'), true)
+  assert.equal(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'cluster-2'), false)
+})
+
 test('default edges draw as three-segment orthogonal polylines', () => {
   const ctx = createMockCtx()
   const scene = demoScene({

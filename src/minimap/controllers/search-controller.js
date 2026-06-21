@@ -43,5 +43,9 @@ export function createSearchController(deps) {
     deps.emitSearch({ keyword, matches, current: id })
   }
 
-  return { search, searchNext, searchPrevious }
+  function getCurrentMatchId() {
+    return matches[currentIndex] ?? null
+  }
+
+  return { search, searchNext, searchPrevious, getCurrentMatchId }
 }
