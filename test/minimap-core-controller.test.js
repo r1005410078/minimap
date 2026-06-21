@@ -106,7 +106,7 @@ test('pointFromClient converts client coordinates to world coordinates through t
 test('updateLayout recomputes layout from getGraph/getLayoutDirection and renders', () => {
   const { controller, ctx } = mountController()
   const callsBefore = ctx.calls.length
-  controller.updateLayout()
+  controller.updateLayout({ animate: false })
   assert.ok(controller.getLayout())
   assert.ok(ctx.calls.length > callsBefore)
   controller.destroy()
@@ -214,12 +214,16 @@ test('scrollGroup in controlled groupStates mode does not mutate the group direc
 })
 
 test('setGroupExpanded toggles expanded state and relayouts', () => {
+  const frames = stubAnimationFrame()
   const { controller } = mountController()
   const before = controller.getLayout().groups.find((g) => g.parentId === 'heap-1')
   assert.equal(before.expanded, false)
   const heightBefore = before.height
 
   controller.setGroupExpanded(before.id, true)
+  while (frames.runNext(16)) {
+    // complete layout animation
+  }
 
   const after = controller.getLayout().groups.find((g) => g.parentId === 'heap-1')
   assert.equal(after.expanded, true)
@@ -292,5 +296,95 @@ test('flushScheduledRender renders immediately and cancelScheduledRender drops a
   const callsBeforeCancel = ctx.calls.length
   controller.cancelScheduledRender()
   assert.equal(ctx.calls.length, callsBeforeCancel)
+  controller.destroy()
+})
+
+test('updateLayout animates between the previous and next layout, settling on the final one', () => {
+  const frames = stubAnimationFrame()
+  const { controller } = mountController()
+
+  controller.setGroupExpanded('heap-1', true)
+  const midLayout = controller.getLayout()
+  const midGroup = midLayout.groups.find((g) => g.parentId === 'heap-1')
+  assert.ok(midGroup, 'animation has not started yet, group should still be present')
+  assert.equal(midGroup.expanded, false, 'before animation, group should be collapsed')
+
+  while (frames.runNext(16)) {
+    // 推进所有排队的动画帧直到结束
+  }
+
+  const finalLayout = controller.getLayout()
+  const finalGroup = finalLayout.groups.find((g) => g.parentId === 'heap-1')
+  assert.ok(finalGroup, 'after animation, group should still exist')
+  assert.equal(finalGroup.expanded, true, 'after animation, group should be expanded')
+  controller.destroy()
+})
+
+test('fitToScreen tweens the viewport to fit the layout bounds', () => {
+  const frames = stubAnimationFrame()
+  const { controller } = mountController()
+
+  controller.fitToScreen()
+  while (frames.runNext(16)) {
+    // 推进 viewport tween
+  }
+  assert.notDeepEqual(controller.getViewport(), { x: 0, y: 0, scale: 1 })
+  controller.destroy()
+})
+
+test('centerOnNode reveals a collapsed-group child and centers the viewport on it', () => {
+  const frames = stubAnimationFrame()
+  const { controller } = mountController()
+
+  controller.centerOnNode('cluster-20')
+  while (frames.runNext(16)) {
+    // 推进 viewport tween
+  }
+
+  const group = controller.getLayout().groups.find((g) => g.parentId === 'heap-1')
+  assert.ok(group.scrollTop > 0)
+  controller.destroy()
+})
+
+test('centerOnSelection centers on the bounding box of multiple targets', () => {
+  const frames = stubAnimationFrame()
+  const deps = createDeps({ getSelectedIds: () => ['feeder-1', 'feeder-2'] })
+  const ctrl = createCoreController(deps)
+  const { canvas, container } = createElements()
+  ctrl.mount(canvas, container)
+
+  ctrl.centerOnSelection()
+  while (frames.runNext(16)) {
+    // 推进 viewport tween
+  }
+
+  assert.notDeepEqual(ctrl.getViewport(), { x: 0, y: 0, scale: 1 })
+  ctrl.destroy()
+})
+
+test('zoomTo sets an exact scale anchored on a world point', () => {
+  const frames = stubAnimationFrame()
+  const { controller } = mountController()
+
+  controller.zoomTo(2, { x: 0, y: 0 })
+  while (frames.runNext(16)) {
+    // 推进 viewport tween
+  }
+
+  assert.equal(controller.getViewport().scale, 2)
+  controller.destroy()
+})
+
+test('setViewport settles any in-flight animation and applies the viewport immediately', () => {
+  const frames = stubAnimationFrame()
+  const { controller, ctx } = mountController()
+
+  controller.fitToScreen()
+  const callsBefore = ctx.calls.length
+  controller.setViewport({ x: 3, y: 4, scale: 1 })
+
+  assert.deepEqual(controller.getViewport(), { x: 3, y: 4, scale: 1 })
+  assert.ok(ctx.calls.length > callsBefore)
+  assert.equal(frames.runNext(16), false, 'the fitToScreen tween should have been cancelled')
   controller.destroy()
 })

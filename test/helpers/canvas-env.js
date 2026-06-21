@@ -37,6 +37,7 @@ export function stubAnimationFrame() {
   const scheduled = []
   const cancelled = []
   let nextId = 1
+  let cumulativeTime = 0
 
   globalThis.requestAnimationFrame = (callback) => {
     const id = nextId++
@@ -52,11 +53,12 @@ export function stubAnimationFrame() {
   return {
     scheduled,
     cancelled,
-    runNext(time = 0) {
+    runNext(deltaTime = 0) {
       const frame = scheduled.find((item) => !item.cancelled && !item.ran)
       if (!frame) return false
       frame.ran = true
-      frame.callback(time)
+      cumulativeTime += deltaTime
+      frame.callback(cumulativeTime)
       return true
     },
   }
