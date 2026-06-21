@@ -1,32 +1,3 @@
-<script setup>
-// 资源树展示：两层——分类（不可拖）+ 叶子资源项（可拖）。
-// 拖拽信息走原生 dataTransfer，由 Minimap.vue 的 drop 处理器读取。
-// 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
-import { ref } from 'vue'
-
-defineProps({
-  resources: { type: Array, default: () => [] },
-})
-
-const expandedOverrides = ref({})
-
-function isExpanded(category) {
-  return expandedOverrides.value[category.category] ?? category.expanded !== false
-}
-
-function toggleCategory(category) {
-  expandedOverrides.value = {
-    ...expandedOverrides.value,
-    [category.category]: !isExpanded(category),
-  }
-}
-
-function onDragStart(item, event) {
-  event.dataTransfer.setData('application/json', JSON.stringify(item))
-  event.dataTransfer.effectAllowed = 'copy'
-}
-</script>
-
 <template>
   <aside class="resource-tree">
     <div class="resource-tree-header">
@@ -68,7 +39,34 @@ function onDragStart(item, event) {
     </div>
   </aside>
 </template>
-
+<script>
+// 资源树展示：两层——分类（不可拖）+ 叶子资源项（可拖）。
+// 拖拽信息走原生 dataTransfer，由 Minimap.vue 的 drop 处理器读取。
+// 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
+export default {
+  props: {
+    resources: { type: Array, default: () => [] },
+  },
+  data() {
+    return { expandedOverrides: {} }
+  },
+  methods: {
+    isExpanded(category) {
+      return this.expandedOverrides[category.category] ?? category.expanded !== false
+    },
+    toggleCategory(category) {
+      this.expandedOverrides = {
+        ...this.expandedOverrides,
+        [category.category]: !this.isExpanded(category),
+      }
+    },
+    onDragStart(item, event) {
+      event.dataTransfer.setData('application/json', JSON.stringify(item))
+      event.dataTransfer.effectAllowed = 'copy'
+    },
+  },
+}
+</script>
 <style scoped>
 .resource-tree {
   height: 100%;

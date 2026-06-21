@@ -1,5 +1,5 @@
 <script setup>
-import Minimap from './minimap/components/Minimap.vue'
+import Minimap from './minimap/index.js'
 import { createDemoGraph } from './minimap/graph/graph.js'
 
 const graph = createDemoGraph()

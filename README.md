@@ -1,22 +1,21 @@
 # Minimap
 
-不引入第三方库的 Vue 2.7 大图 minimap 组件：Canvas 渲染、最多 10000 节点、相邻节点自动分组、左右/上下布局。
+不引入第三方库的 Vue 2.7 大图 minimap 组件：Canvas 渲染、最多 10000 节点、相邻节点自动分组、左右/上下布局、视口导航、搜索、Overview、完整编辑与撤销重做。
 
-完整功能路线图与各阶段验收标准见 [ROADMAP.md](ROADMAP.md)。
+完整功能路线图与各阶段验收标准见 [ROADMAP.md](ROADMAP.md)。模块分层与目录约束见 [docs/architecture.md](docs/architecture.md)。
 
 ## 状态
 
-第一阶段（核心可用能力）进行中。已落地并带测试的是**纯逻辑层**与 **Canvas 渲染器**（均不依赖浏览器，可用 `node --test` 验证）：
-
-| 模块 | 职责 |
+| 阶段 | 进度 |
 | --- | --- |
-| `src/minimap/graph.js` | 图数据模型、示例/压力数据、框内换位 |
-| `src/minimap/layout.js` | 分层树布局、自动分组折叠、视口锚点补偿 |
-| `src/minimap/coords.js` | 世界坐标 / 屏幕坐标互转 |
-| `src/minimap/renderer.js` | 场景绘制、视口裁剪、自定义绘制钩子、渲染统计 |
-| `src/minimap/theme.js` | 内置深色默认主题 |
+| 第一阶段：核心可用能力 | 已完成 |
+| 第二阶段：分组框能力 | 已完成 |
+| 第三阶段：视图和选择能力 | 已完成 |
+| 第四阶段：导航和查找能力 | 已完成 |
+| 第五阶段：编辑和状态能力 | 进行中（编辑/撤销/右键菜单已完成；loading/aria/performance 事件待做） |
+| Controller 抽取 | 已完成（编排逻辑在 `controllers/`，Vue 层为薄包装） |
 
-> Vue 组件壳（真实 `<canvas>` 挂载、DPR、资源树拖入）是下一个切片，尚未提供。当前可按下面的方式手动把模块接到一个 canvas 上。
+当前 **`npm test` 467 项全过**，`npm run build` 通过。
 
 ## 脚本
 
@@ -28,33 +27,39 @@ npm test         # node --test 单元测试
 
 ## 快速开始
 
-把图数据、布局、渲染三步接到一个 Canvas 2D 上下文：
+在 Vue 应用里引入组件（对外入口 [`src/minimap/index.js`](src/minimap/index.js)）：
 
-```js
-import { createDemoGraph } from './src/minimap/graph.js'
-import { computeLayout } from './src/minimap/layout.js'
-import { renderScene } from './src/minimap/renderer.js'
+```vue
+<script setup>
+import Minimap from './minimap/index.js'
+import { createDemoGraph } from './minimap/graph/graph.js'
 
 const graph = createDemoGraph()
-const canvas = document.querySelector('canvas')
-const ctx = canvas.getContext('2d')
+const resources = [
+  { category: '储能设备', expanded: true, items: [{ id: 'site', label: '站点' }] },
+]
+</script>
 
-const layout = computeLayout(graph, {
-  direction: 'horizontal', // 或 'vertical'
-  viewportWidth: canvas.width,
-  viewportHeight: canvas.height,
-})
-
-const viewport = { x: 80, y: 80, scale: 1 }
-const stats = renderScene(ctx, {
-  graph,
-  layout,
-  viewport,
-  width: canvas.width,
-  height: canvas.height,
-})
-// stats: { total, drawn, culled, durationMs }
+<template>
+  <Minimap :graph="graph" :resources="resources" />
+</template>
 ```
+
+组件内置：Canvas 主画布、左侧资源树拖入、搜索框、Overview 小地图、工具栏（撤销/重做/导入导出等）。交互编排由 [`minimap-controller`](src/minimap/controllers/minimap-controller.js) 驱动，`Minimap.vue` 只负责 props/emits/模板与生命周期。
+
+## 目录结构
+
+`src/minimap/` 按职责分 7 个子目录（各目录有 README 说明约束）：
+
+| 目录 | 职责 |
+| --- | --- |
+| [`components/`](src/minimap/components/) | `Minimap.vue`、`Overview.vue`、`ResourceTree.vue` |
+| [`controllers/`](src/minimap/controllers/) | 框架无关的状态机与 DOM 事件编排 |
+| [`graph/`](src/minimap/graph/) | 图数据、layout、mutation 唯一入口 |
+| [`coords/`](src/minimap/coords/) | 世界/屏幕坐标、viewport 数学 |
+| [`interaction/`](src/minimap/interaction/) | 命中检测、拖拽几何、选中运算 |
+| [`render/`](src/minimap/render/) | Canvas 绘制、合帧、降级、主题 |
+| [`edit/`](src/minimap/edit/) | 搜索、右键菜单项、剪贴板 |
 
 ## 数据模型
 
@@ -69,64 +74,76 @@ const graph = {
 
 - `node`：`{ id, label, parentId, children: string[], kind?, width?, height?, data? }`
 - `edge`：`{ id, source, target, label?, kind?, data? }`
-- 父子层级由 `parentId` + `children` 表达；`edges` 表达非父子/跨层/业务关系线，**不参与主布局**，只用于连线绘制。
-- **自动分组**：同一父节点的相邻子节点数量超过 `GROUP_THRESHOLD`（默认 5，即 ≥6）时，全部折叠成一个分组框；分组内部子节点顺序即真实逻辑顺序。
+- 父子层级由 `parentId` + `children` 表达；`edges` 不参与主布局，只用于连线绘制与高亮。
+- 同一父节点的相邻子节点 ≥ `GROUP_THRESHOLD + 1`（默认 6）时自动折叠成分组框。
 
-## API
+## 组件 API 概览
 
-### graph.js
+### 主要 props
 
-- `createDemoGraph()` → 能源系统示例图。
-- `createStressGraph(childCount = 10000)` → 压力测试图（根 + 1 父 + `childCount` 子，`nodes.size === childCount + 2`）。
-- `reorderGroupChild(graph, parentId, childId, newIndex)` → 把子节点移到父节点 `children` 的 `newIndex` 位置，结果保持唯一。
+| Prop | 说明 |
+| --- | --- |
+| `graph` | 图数据（必填） |
+| `resources` | 左侧资源树数据 |
+| `layoutDirection` | `'horizontal'` / `'vertical'` |
+| `selectedIds` / `groupStates` / `viewport` | 受控模式；不传则组件内部管理 |
+| `options` | 功能开关（搜索、Overview、网格、性能面板等） |
+| `theme` | 覆盖默认主题 |
+| `nodeRenderer` / `groupRenderer` / `edgeRenderer` | 自定义绘制钩子 |
+| `readonly` | 禁止一切编辑操作 |
+| `beforeNodeDrop` / `beforeGroupReorder` / `beforeNodeMove` / `beforeDelete` / … | 编辑拦截钩子 |
+| `contextMenuItems` | 覆盖/扩展右键菜单 |
 
-### layout.js
+### 主要 emits
 
-- `GROUP_THRESHOLD` → 自动分组阈值（`5`）。
-- `computeLayout(graph, { direction, viewportWidth, viewportHeight })` →
-  `{ nodes: Map<id,{x,y,width,height}>, groups, visibleItems, bounds }`。
-  - `horizontal`：深度增大 → `x` 增大；`vertical`：深度增大 → `y` 增大。
-  - 分组框尺寸受视口约束：最大宽 `viewportWidth*0.48`、最大高 `viewportHeight*0.42`，超出则 `overflowY=true`。
-  - `visibleItems` 已做结构性虚拟化：折叠进分组的子节点不单独出现，因此大图候选集很小。
-- `keepAnchorStable(viewport, beforeWorld, afterWorld)` → 重新布局后补偿视口，让锚点节点保持在原屏幕位置。
+`select`、`viewport-change`、`group-state-change`、`change`（含 undo/redo 元数据）、`node-drop`、`node-move`、`group-reorder`、`search`、`delete`、`copy`、`paste`、`import`、`export`、`context-menu-action`、`config-change`
 
-### coords.js
+### `defineExpose` 方法
 
-- `worldToScreen(point, viewport)` → `{ x: x*scale + viewport.x, y: y*scale + viewport.y }`。
-- `screenToWorld(point, viewport)` → 上式逆变换（用于拖入落点、命中检测、缩放中心等）。
+相机：`fitToScreen`、`centerOnNode`、`centerOnSelection`、`zoomTo`、`setViewport`、`getViewport`
 
-### renderer.js
+选择：`select`、`clearSelection`
 
-- `renderScene(ctx, scene)` → 绘制场景并返回 `{ total, drawn, culled, durationMs }`。
-  `scene`：`{ layout, graph, viewport, width, height, theme?, state?, renderers? }`。
-  - 绘制顺序：网格 → 连线 → 分组框 → 普通节点。
-  - 只对视口内的项发绘制调用（视口裁剪）。
-  - `state.selectedIds`（`Set<string>`，可选）驱动选中态。
-- 纯函数（无 ctx 依赖，便于复用/测试）：
-  - `worldRectToScreen(rect, viewport)`
-  - `collectVisible(layout, viewport, width, height)` → `{ items, culled }`
-  - `resolveEdges(graph, layout)` → `[{ id, kind, from, to }]`（端点落在折叠子节点上时路由到其分组框）
+搜索：`search`、`searchNext`、`searchPrevious`
 
-## 自定义绘制
+编辑：`undo`、`redo`、`canUndo`、`canRedo`、`deleteSelection`、`copySelection`、`paste`、`exportGraph`、`importGraph`
 
-通过 `renderers` 替换默认绘制；只负责视觉输出，不改数据/视口/选中：
+## 底层模块（可选）
+
+不经过 Vue 组件、直接接 Canvas 时，可按层 import 纯函数模块，例如：
 
 ```js
-renderScene(ctx, {
-  graph, layout, viewport, width, height,
-  renderers: {
-    node(ctx, { node, rect, state, theme, viewport }) {
-      ctx.fillStyle = state.selected ? '#5aa9ff' : '#1e2a38'
-      ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
-    },
-    // group(ctx, { group, rect, state, theme, viewport }) { ... }
-    // edge(ctx, { edge, from, to, theme, viewport }) { ... }
-  },
+import { createDemoGraph } from './src/minimap/graph/graph.js'
+import { computeLayout } from './src/minimap/graph/layout.js'
+import { renderScene } from './src/minimap/render/renderer.js'
+
+const graph = createDemoGraph()
+const layout = computeLayout(graph, {
+  direction: 'horizontal',
+  viewportWidth: 1200,
+  viewportHeight: 760,
 })
+const stats = renderScene(ctx, {
+  graph,
+  layout,
+  viewport: { x: 80, y: 80, scale: 1 },
+  width: canvas.width,
+  height: canvas.height,
+})
+// stats: { total, drawn, culled, durationMs }
 ```
 
-`theme` 缺省用 `src/minimap/theme.js` 的 `defaultTheme`，可传入自定义对象覆盖颜色/字号/网格/内边距。
+常用入口：
+
+| 模块 | 路径 | 职责 |
+| --- | --- | --- |
+| 图与布局 | `graph/graph.js`、`graph/layout.js` | 数据模型、`computeLayout`、`keepAnchorStable` |
+| 坐标 | `coords/coords.js`、`coords/viewport.js` | 坐标变换、平移缩放、fit/tween |
+| 渲染 | `render/renderer.js`、`render/theme.js` | `renderScene`、自定义 `renderers`、默认主题 |
+| 变更 | `graph/graph-operations.js` | 所有图 mutation 的唯一入口（含 undo/redo） |
+
+自定义绘制通过 `renderers: { node, group, edge }` 传入 `renderScene` 或组件 props；只负责视觉，不改数据/视口/选中。示例见 [docs/architecture.md](docs/architecture.md) 与各层 README。
 
 ## 约束
 
-不引入新的第三方运行时或开发依赖。实现使用 Vue 2.7、Vite、Canvas 2D、原生 HTML 拖拽、原生 pointer 事件，以及 Node 内置测试运行器。详见 [docs/project-conventions.md](docs/project-conventions.md)。
+不引入新的第三方运行时库。实现使用 Vue 2.7、Vite、Canvas 2D、原生 pointer/拖拽事件、ResizeObserver、`requestAnimationFrame`，以及 Node 内置测试运行器。详见 [docs/project-conventions.md](docs/project-conventions.md)。

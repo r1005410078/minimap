@@ -1,210 +1,3 @@
-<script setup>
-// Phase 1 Vue 组件壳骨架：挂载真实 canvas、DPR 适配、ResizeObserver 驱动的按需重渲染。
-// 分组框命中检测细分、框内拖拽换位、滚轮滚动、展开折叠点击见 Phase 2 切片3。
-// 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
-// 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import { createMinimapController } from '../controllers/minimap-controller.js'
-import { defaultTheme } from '../render/theme.js'
-import { centerViewportOn } from '../coords/viewport.js'
-import Overview from './Overview.vue'
-import ResourceTree from './ResourceTree.vue'
-
-const props = defineProps({
-  graph: { type: Object, required: true },
-  resources: { type: Array, default: () => [] },
-  layoutDirection: { type: String, default: 'horizontal' },
-  selectedIds: { type: Array, default: null },
-  groupStates: { type: Object, default: null },
-  viewport: { type: Object, default: null },
-  options: { type: Object, default: null },
-  theme: { type: Object, default: null },
-  nodeRenderer: { type: Function, default: null },
-  groupRenderer: { type: Function, default: null },
-  edgeRenderer: { type: Function, default: null },
-  readonly: { type: Boolean, default: false },
-  beforeNodeDrop: { type: Function, default: null },
-  beforeGroupReorder: { type: Function, default: null },
-  beforeDelete: { type: Function, default: null },
-  beforeCopy: { type: Function, default: null },
-  beforeImport: { type: Function, default: null },
-  beforeNodeMove: { type: Function, default: null },
-  beforePaste: { type: Function, default: null },
-  contextMenuItems: { type: [Function, Array], default: null },
-})
-
-const emit = defineEmits([
-  'select',
-  'node-drop',
-  'change',
-  'group-state-change',
-  'group-reorder',
-  'viewport-change',
-  'search',
-  'delete',
-  'copy',
-  'import',
-  'export',
-  'paste',
-  'node-move',
-  'context-menu-action',
-  'config-change',
-])
-
-const containerRef = ref(null)
-const canvasRef = ref(null)
-const overviewRef = ref(null)
-const searchKeyword = ref('')
-const searchMatches = ref([])
-const searchCurrentIndex = ref(-1)
-const contextMenuRef = ref(null)
-const renderStats = ref(null)
-const internalReadonly = ref(props.readonly)
-const internalOptions = ref({ ...(props.options ?? {}) })
-const effectiveReadonly = computed(() => internalReadonly.value)
-const effectiveOptions = computed(() => ({
-  enableSearch: true,
-  enableOverview: true,
-  enableActiveBorder: false,
-  showGrid: true,
-  showPerformance: false,
-  hideTextDuringInteraction: false,
-  ...internalOptions.value,
-}))
-const effectiveTheme = computed(() => {
-  const baseTheme = props.theme || defaultTheme
-  return {
-    ...baseTheme,
-    grid: {
-      ...(baseTheme.grid || {}),
-      visible: effectiveOptions.value.showGrid !== false,
-    },
-  }
-})
-
-let controller = null
-const contextMenuState = ref(null)
-
-function syncConfigFromProps() {
-  internalReadonly.value = props.readonly
-  internalOptions.value = { ...(props.options ?? {}) }
-}
-
-function handleOverviewNavigate(worldPoint) {
-  const { width, height } = controller.getCssSize()
-  controller.applyViewport(centerViewportOn(worldPoint, controller.getViewport(), width, height))
-}
-
-function emitConfigChange(key, value, context) {
-  if (key === 'readonly') internalReadonly.value = value
-  else internalOptions.value = { ...internalOptions.value, [key]: value }
-  controller.renderCurrent()
-  emit('config-change', { key, value, source: 'context-menu', context })
-}
-
-defineExpose({
-  fitToScreen: () => controller.fitToScreen(),
-  centerOnNode: (id) => controller.centerOnNode(id),
-  centerOnSelection: () => controller.centerOnSelection(),
-  zoomTo: (scale, center) => controller.zoomTo(scale, center),
-  setViewport: (viewport) => controller.setViewport(viewport),
-  getViewport: () => controller.getViewport(),
-  select: (ids, mode) => controller.select(ids, mode),
-  clearSelection: () => controller.clearSelection(),
-  search: (keyword) => controller.search(keyword),
-  searchNext: () => controller.searchNext(),
-  searchPrevious: () => controller.searchPrevious(),
-  undo: () => controller.undo(),
-  redo: () => controller.redo(),
-  canUndo: () => controller.canUndo(),
-  canRedo: () => controller.canRedo(),
-  deleteSelection: () => controller.deleteSelection(),
-  copySelection: () => controller.copySelection(),
-  paste: () => controller.paste(),
-  exportGraph: () => controller.exportGraph(),
-  importGraph: (data) => controller.importGraph(data),
-})
-
-function createInteractionController() {
-  return createMinimapController({
-    getGraph: () => props.graph,
-    getLayoutDirection: () => props.layoutDirection,
-    getOptions: () => effectiveOptions.value,
-    getTheme: () => effectiveTheme.value,
-    getRenderers: () => ({ node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer }),
-    getViewportProp: () => props.viewport,
-    getGroupStatesProp: () => props.groupStates,
-    getSelectedIdsProp: () => props.selectedIds,
-    emitSelect: (ids) => emit('select', ids),
-    getReadonly: () => effectiveReadonly.value,
-    getBeforeDelete: () => props.beforeDelete,
-    getBeforeCopy: () => props.beforeCopy,
-    getBeforeImport: () => props.beforeImport,
-    getBeforePaste: () => props.beforePaste,
-    emitDelete: (payload) => emit('delete', payload),
-    emitCopy: (payload) => emit('copy', payload),
-    emitPaste: (payload) => emit('paste', payload),
-    emitImport: (payload) => emit('import', payload),
-    emitExport: (payload) => emit('export', payload),
-    emitChange: (payload) => emit('change', payload),
-    emitSearch: (payload) => emit('search', payload),
-    onSearchStateChange: ({ keyword, matches, currentIndex }) => {
-      searchKeyword.value = keyword
-      searchMatches.value = matches
-      searchCurrentIndex.value = currentIndex
-    },
-    emitConfigChange,
-    emitContextMenuAction: (payload) => emit('context-menu-action', payload),
-    getContextMenuItemsProp: () => props.contextMenuItems,
-    getMenuEl: () => contextMenuRef.value,
-    onMenuStateChange: (state) => { contextMenuState.value = state },
-    emitViewportChange: (next) => emit('viewport-change', next),
-    emitGroupStateChange: (next) => emit('group-state-change', next),
-    getBeforeNodeDrop: () => props.beforeNodeDrop,
-    getBeforeGroupReorder: () => props.beforeGroupReorder,
-    getBeforeNodeMove: () => props.beforeNodeMove,
-    emitNodeDrop: (payload) => emit('node-drop', payload),
-    emitGroupReorder: (payload) => emit('group-reorder', payload),
-    emitNodeMove: (payload) => emit('node-move', payload),
-    onRenderStats: (stats) => { renderStats.value = stats },
-    onOverviewRender: (scene) => overviewRef.value?.render(scene),
-  })
-}
-
-controller = createInteractionController()
-
-onMounted(() => {
-  controller.mount(canvasRef.value, containerRef.value)
-})
-
-onUnmounted(() => {
-  controller?.cancelPointerInteractions()
-  controller?.closeContextMenu()
-  controller?.destroy()
-  controller = null
-})
-
-watch(() => props.layoutDirection, () => controller.updateLayout())
-watch(
-  () => props.graph,
-  () => {
-    controller.closeContextMenu()
-    controller.onGraphReplaced()
-    controller.updateLayout()
-  },
-)
-watch(() => props.selectedIds, () => controller.renderCurrent())
-watch(() => props.groupStates, () => controller.updateLayout())
-watch(() => props.viewport, () => controller.renderCurrent())
-watch(() => props.options, () => {
-  syncConfigFromProps()
-  controller.closeContextMenu()
-  controller.updateLayout()
-})
-watch(() => props.readonly, () => syncConfigFromProps())
-watch(() => props.contextMenuItems, () => controller.closeContextMenu())
-</script>
-
 <template>
   <div class="minimap">
     <ResourceTree class="minimap-resources" :resources="resources" />
@@ -305,7 +98,629 @@ watch(() => props.contextMenuItems, () => controller.closeContextMenu())
     </div>
   </div>
 </template>
+<script>
+/**
+ * @typedef {Object} GraphNode
+ * @property {string} id 节点唯一标识。
+ * @property {string} label 显示文本。
+ * @property {string|null} parentId 父节点 id；根节点为 `null`。
+ * @property {string[]} children 有序子节点 id 列表。
+ * @property {string} [kind] 业务类型标记，影响默认样式或资源拖入映射。
+ * @property {number} [width] 布局宽度覆盖（世界坐标 px）。
+ * @property {number} [height] 布局高度覆盖（世界坐标 px）。
+ * @property {*} [data] 业务自定义载荷，组件不解读。
+ */
 
+/**
+ * @typedef {Object} GraphEdge
+ * @property {string} id 边唯一标识。
+ * @property {string} source 源节点 id。
+ * @property {string} target 目标节点 id。
+ * @property {string} [label] 边标签。
+ * @property {string} [kind] 边类型。
+ * @property {*} [data] 业务自定义载荷。
+ */
+
+/**
+ * @typedef {Object} Graph
+ * @property {number} version 图结构版本号，导入导出时校验。
+ * @property {Map<string, GraphNode>} nodes 节点表；组件就地修改，不复制整图。
+ * @property {string[]} rootIds 根节点 id 有序列表。
+ * @property {GraphEdge[]} edges 附加连线；不参与主树布局，仅绘制与高亮。
+ */
+
+/**
+ * @typedef {Object} ResourceItem
+ * @property {string} id 资源 id，拖入后通常映射为新节点 id 或 kind。
+ * @property {string} label 资源树展示名。
+ * @property {string} [kind] 拖入落图时的节点 kind 提示。
+ */
+
+/**
+ * @typedef {Object} ResourceCategory
+ * @property {string} category 分类标题。
+ * @property {boolean} [expanded] 默认是否展开；可被用户本地折叠状态覆盖。
+ * @property {ResourceItem[]} items 该分类下可拖拽的叶子资源。
+ */
+
+/**
+ * @typedef {Object} Viewport
+ * @property {number} x 视口左上角世界坐标 x。
+ * @property {number} y 视口左上角世界坐标 y。
+ * @property {number} scale 缩放倍率（1 = 100%）。
+ */
+
+/**
+ * @typedef {Object} MinimapOptions
+ * @property {boolean} [enableSearch=true] 是否渲染内建搜索框；`false` 时仍可通过 `$refs` 调用搜索方法。
+ * @property {boolean} [enableOverview=true] 是否渲染右下角 Overview 缩略图。
+ * @property {boolean} [enableActiveBorder=false] 画布聚焦时是否显示蓝色描边。
+ * @property {boolean} [showGrid=true] 是否绘制背景网格。
+ * @property {boolean} [showPerformance=false] 是否显示左下角绘制性能 HUD。
+ * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
+ */
+
+/**
+ * @typedef {Object} RenderStats
+ * @property {number} drawn 本帧实际绘制的可见项数量。
+ * @property {number} total 布局可见项总数。
+ * @property {number} culled 视口裁剪掉的项数量。
+ * @property {number} durationMs 本帧 `renderScene` 耗时（毫秒）。
+ */
+
+/**
+ * @typedef {Object} ContextMenuState
+ * @property {{ x: number, y: number }} position 菜单相对画布容器的 CSS 像素坐标。
+ * @property {Array<{ id: string, type?: string, label?: string, disabled?: boolean, danger?: boolean, checked?: boolean }>} items 当前可见菜单项。
+ */
+
+/**
+ * @typedef {Object} NodeDropPayload
+ * @property {ResourceItem} resource 被拖入的资源描述（来自 `dataTransfer`）。
+ * @property {string} parentId 挂载到的父节点 id。
+ * @property {number} index 在父节点 `children` 中的插入下标。
+ */
+
+/**
+ * @typedef {Object} NodeMovePayload
+ * @property {string} nodeId 被移动的节点 id。
+ * @property {string} fromParentId 原父节点 id。
+ * @property {string} toParentId 目标父节点 id。
+ * @property {number} index 在目标父节点 `children` 中的新下标。
+ */
+
+/**
+ * @typedef {Object} GroupReorderPayload
+ * @property {string} parentId 分组所属父节点 id。
+ * @property {string} nodeId 被重排的子节点 id。
+ * @property {number} fromIndex 原下标。
+ * @property {number} toIndex 新下标。
+ */
+
+/**
+ * @typedef {Object} ChangePayload
+ * @property {Graph} graph 变更后的图引用（与 `graph` prop 同一对象）。
+ * @property {string} [reason] 变更原因，如 `undo` / `redo` / `drop` / `delete` 等。
+ * @property {*} [meta] 与 `reason` 配套的附加元数据。
+ */
+
+/**
+ * @typedef {Object} ConfigChangePayload
+ * @property {string} key 被 toggled 的配置键（如 `enableSearch`、`readonly`）。
+ * @property {*} value 新值。
+ * @property {'context-menu'} source 变更来源。
+ * @property {*} [context] 右键菜单上下文快照。
+ */
+
+/**
+ * @typedef {Object} SearchEmitPayload
+ * @property {string} keyword 当前关键词。
+ * @property {string[]} matches 命中节点 id 列表（布局顺序）。
+ * @property {number} currentIndex 当前高亮命中在 `matches` 中的下标（-1 表示无选中）。
+ */
+
+/**
+ * @typedef {Object} RenderScene
+ * @property {*} layout `computeLayout` 结果。
+ * @property {Viewport} viewport 主画布当前视口。
+ * @property {number} mainWidth 主画布 CSS 宽度。
+ * @property {number} mainHeight 主画布 CSS 高度。
+ * @property {Object} [theme] 合并后的有效主题。
+ */
+
+/**
+ * @typedef {(payload: NodeDropPayload) => boolean|void} BeforeNodeDropHook
+ * 返回 `false` 阻止默认拖入落图 mutation。
+ */
+
+/**
+ * @typedef {(payload: GroupReorderPayload) => boolean|void} BeforeGroupReorderHook
+ * 返回 `false` 阻止分组内子节点重排。
+ */
+
+/**
+ * @typedef {(payload: NodeMovePayload) => boolean|void} BeforeNodeMoveHook
+ * 返回 `false` 阻止跨父节点移动。
+ */
+
+/**
+ * @typedef {(payload: *) => boolean|void} BeforeEditHook
+ * 通用编辑拦截钩子（删除、复制、粘贴、导入等）；返回 `false` 阻止操作。
+ */
+
+/**
+ * @typedef {(context: *, defaults: *) => Array|*} ContextMenuItemsFactory
+ * 右键菜单扩展：函数形式可过滤/追加默认项；数组形式按 id 覆盖并追加。
+ */
+
+/**
+ * @typedef {(scene: RenderScene, ctx: CanvasRenderingContext2D) => void} CustomRenderer
+ * 自定义节点/分组/边绘制钩子；只接收稳定公开参数，不得依赖组件私有状态。
+ */
+
+/**
+ * Minimap 根 Vue 组件（Options API）。
+ *
+ * 职责边界：
+ * - **本组件**：props/emits 声明、DOM 模板（资源树 / 工具栏 / 搜索 / Overview / 右键菜单）、
+ *   生命周期挂载与卸载、将调用转发给 `minimap-controller`。
+ * - **controller 层**：指针事件、拖拽状态机、布局动画、Canvas 绘制调度、undo/redo。
+ *
+ * 受控 / 非受控：
+ * - 传入 `selectedIds` / `groupStates` / `viewport` 时为受控模式；省略时由 controller 内部维护，
+ *   并通过对应 emit 通知外部。
+ * - `readonly` 与 `options` 可在运行时经右键菜单 toggled；内部副本经 `internalReadonly` /
+ *   `internalOptions` 合并为 `effectiveReadonly` / `effectiveOptions`。
+ *
+ * 对外命令式 API（通过 `$refs.minimap.xxx()` 调用，见各 `methods` JSDoc）：
+ * 相机、选中、搜索、编辑历史与剪贴板。
+ *
+ * @see docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
+ * @see docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
+ * @see ../controllers/minimap-controller.js
+ */
+import { createMinimapController } from '../controllers/minimap-controller.js'
+import { defaultTheme } from '../render/theme.js'
+import { centerViewportOn } from '../coords/viewport.js'
+import Overview from './Overview.vue'
+import ResourceTree from './ResourceTree.vue'
+
+export default {
+  name: 'Minimap',
+  components: { Overview, ResourceTree },
+
+  props: {
+    /** @type {import('vue').PropOptions<Graph>} 图数据；必填。组件就地修改 `nodes`/`children`，不克隆整图。 */
+    graph: { type: Object, required: true },
+
+    /** @type {import('vue').PropOptions<ResourceCategory[]>} 左侧资源树数据；默认空数组。 */
+    resources: { type: Array, default: () => [] },
+
+    /** @type {import('vue').PropOptions<'horizontal'|'vertical'>} 树布局主轴方向；变化时触发布局重算（含过渡动画）。 */
+    layoutDirection: { type: String, default: 'horizontal' },
+
+    /** @type {import('vue').PropOptions<string[]|null>} 受控选中 id 列表；`null`/省略时非受控。 */
+    selectedIds: { type: Array, default: null },
+
+    /** @type {import('vue').PropOptions<Record<string, { collapsed?: boolean }>|null>} 受控分组折叠状态；键为 parentId。 */
+    groupStates: { type: Object, default: null },
+
+    /** @type {import('vue').PropOptions<Viewport|null>} 受控视口；省略时非受控。 */
+    viewport: { type: Object, default: null },
+
+    /** @type {import('vue').PropOptions<MinimapOptions|null>} 功能开关；与内建默认值合并为 `effectiveOptions`。 */
+    options: { type: Object, default: null },
+
+    /** @type {import('vue').PropOptions<Partial<typeof defaultTheme>|null>} 主题覆盖；浅合并 `defaultTheme`。 */
+    theme: { type: Object, default: null },
+
+    /** @type {import('vue').PropOptions<CustomRenderer|null>} 自定义节点绘制；传 `null` 使用默认 renderer。 */
+    nodeRenderer: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<CustomRenderer|null>} 自定义分组框绘制。 */
+    groupRenderer: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<CustomRenderer|null>} 自定义边绘制。 */
+    edgeRenderer: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<boolean>} 只读模式；为 `true` 时禁止一切编辑类操作。 */
+    readonly: { type: Boolean, default: false },
+
+    /** @type {import('vue').PropOptions<BeforeNodeDropHook|null>} 资源拖入落图前拦截。 */
+    beforeNodeDrop: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<BeforeGroupReorderHook|null>} 分组内重排前拦截。 */
+    beforeGroupReorder: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<BeforeEditHook|null>} 删除选中前拦截。 */
+    beforeDelete: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<BeforeEditHook|null>} 复制选中前拦截。 */
+    beforeCopy: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<BeforeEditHook|null>} 导入图数据前拦截。 */
+    beforeImport: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<BeforeNodeMoveHook|null>} 跨父移动前拦截。 */
+    beforeNodeMove: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<BeforeEditHook|null>} 粘贴前拦截。 */
+    beforePaste: { type: Function, default: null },
+
+    /** @type {import('vue').PropOptions<ContextMenuItemsFactory|null>} 覆盖或扩展右键菜单项。 */
+    contextMenuItems: { type: [Function, Array], default: null },
+  },
+
+  /**
+   * 组件事件。Vue 2.7 中 `emits` 选项主要用于文档与 Vue 3 兼容；运行时仍通过 `$emit` 触发。
+   *
+   * | 事件 | 载荷 |
+   * |------|------|
+   * | `select` | `string[]` 新选中 id 列表 |
+   * | `node-drop` | {@link NodeDropPayload} |
+   * | `node-move` | {@link NodeMovePayload} |
+   * | `group-reorder` | {@link GroupReorderPayload} |
+   * | `change` | {@link ChangePayload} |
+   * | `viewport-change` | {@link Viewport} |
+   * | `group-state-change` | `Record<string, { collapsed?: boolean }>` |
+   * | `search` | {@link SearchEmitPayload} |
+   * | `delete` / `copy` / `paste` / `import` / `export` | 各 edit-controller 载荷 |
+   * | `context-menu-action` | `{ id: string, context: * }` |
+   * | `config-change` | {@link ConfigChangePayload} |
+   */
+  emits: [
+    'select',
+    'node-drop',
+    'change',
+    'group-state-change',
+    'group-reorder',
+    'viewport-change',
+    'search',
+    'delete',
+    'copy',
+    'import',
+    'export',
+    'paste',
+    'node-move',
+    'context-menu-action',
+    'config-change',
+  ],
+
+  /**
+   * 组件本地 UI 状态。编排逻辑与指针状态在 `this.controller`（非响应式实例属性）中。
+   * @returns {Object}
+   */
+  data() {
+    return {
+      /** @type {string} 搜索框当前关键词（由 controller 搜索状态同步）。 */
+      searchKeyword: '',
+      /** @type {string[]} 当前搜索命中节点 id 列表。 */
+      searchMatches: [],
+      /** @type {number} 当前命中在 `searchMatches` 中的下标；-1 表示无。 */
+      searchCurrentIndex: -1,
+      /** @type {RenderStats|null} 最近一次主画布绘制的性能统计。 */
+      renderStats: null,
+      /** @type {boolean} 内部只读副本；可被右键菜单或 prop 同步更新。 */
+      internalReadonly: this.readonly,
+      /** @type {MinimapOptions} 内部 options 副本；与 prop 默认值合并后供 controller 读取。 */
+      internalOptions: { ...(this.options ?? {}) },
+      /** @type {ContextMenuState|null} 右键菜单可见性与项列表；`null` 时菜单 DOM 不渲染。 */
+      contextMenuState: null,
+    }
+  },
+
+  computed: {
+    /** @returns {boolean} 合并 prop 与内部 toggled 后的有效只读标志。 */
+    effectiveReadonly() {
+      return this.internalReadonly
+    },
+
+    /**
+     * @returns {Required<MinimapOptions>} 内建默认值与 `internalOptions` 浅合并后的功能开关。
+     */
+    effectiveOptions() {
+      return {
+        enableSearch: true,
+        enableOverview: true,
+        enableActiveBorder: false,
+        showGrid: true,
+        showPerformance: false,
+        hideTextDuringInteraction: false,
+        ...this.internalOptions,
+      }
+    },
+
+    /**
+     * @returns {typeof defaultTheme} 传给 renderer 的最终主题；`showGrid` 会同步到 `theme.grid.visible`。
+     */
+    effectiveTheme() {
+      const baseTheme = this.theme || defaultTheme
+      return {
+        ...baseTheme,
+        grid: {
+          ...(baseTheme.grid || {}),
+          visible: this.effectiveOptions.showGrid !== false,
+        },
+      }
+    },
+  },
+
+  watch: {
+    /** 布局方向变化 → 重新 `computeLayout`（含锚点补偿动画）。 */
+    layoutDirection() {
+      this.controller.updateLayout()
+    },
+
+    /**
+     * 图引用被宿主整体替换 → 关闭菜单、重置交互状态并全量重布局。
+     * 注意：Vue 2 不追踪 `Map` 内部 mutation，就地改节点需宿主手动触发更新或替换 `graph` 引用。
+     */
+    graph() {
+      this.controller.closeContextMenu()
+      this.controller.onGraphReplaced()
+      this.controller.updateLayout()
+    },
+
+    /** 受控选中变化 → 仅重绘高亮，不重算布局。 */
+    selectedIds() {
+      this.controller.renderCurrent()
+    },
+
+    /** 受控分组折叠变化 → 重算布局并重绘。 */
+    groupStates() {
+      this.controller.updateLayout()
+    },
+
+    /** 受控视口变化 → 重绘（不重复 emit `viewport-change`）。 */
+    viewport() {
+      this.controller.renderCurrent()
+    },
+
+    /** options prop 变化 → 同步内部副本、关闭菜单并重布局（网格可见性等可能变化）。 */
+    options() {
+      this.syncConfigFromProps()
+      this.controller.closeContextMenu()
+      this.controller.updateLayout()
+    },
+
+    /** readonly prop 变化 → 同步内部副本。 */
+    readonly() {
+      this.syncConfigFromProps()
+    },
+
+    /** 自定义菜单项变化 → 关闭已打开菜单，避免展示过期项。 */
+    contextMenuItems() {
+      this.controller.closeContextMenu()
+    },
+  },
+
+  /**
+   * 创建 `minimap-controller` 实例。必须在 `mounted` 之前完成，以便 `$refs` 回调闭包可用。
+   * `controller` 故意不放入 `data()`，避免 Vue 2 响应式代理破坏 controller 内部引用相等性。
+   */
+  created() {
+    this.controller = this.createInteractionController()
+  },
+
+  /** 绑定 canvas / 容器 DOM，注册 ResizeObserver 与指针监听器，并触发首次绘制。 */
+  mounted() {
+    this.controller.mount(this.$refs.canvasRef, this.$refs.containerRef)
+  },
+
+  /**
+   * 卸载清理：取消进行中的指针交互与布局动画，断开 ResizeObserver，移除 canvas 监听器。
+   * 使用 Vue 2 的 `beforeDestroy`（非 `beforeUnmount`），以确保 @vue/test-utils 的 `destroy()` 能触发。
+   */
+  beforeDestroy() {
+    this.controller?.cancelPointerInteractions()
+    this.controller?.closeContextMenu()
+    this.controller?.destroy()
+    this.controller = null
+  },
+
+  methods: {
+    /** 将 `readonly` / `options` prop 同步到内部副本。 */
+    syncConfigFromProps() {
+      this.internalReadonly = this.readonly
+      this.internalOptions = { ...(this.options ?? {}) }
+    },
+
+    /**
+     * Overview 缩略图 `@navigate` 处理器：将点击/拖拽位置转为主视口居中。
+     * @param {{ x: number, y: number }} worldPoint Overview 上的世界坐标。
+     */
+    handleOverviewNavigate(worldPoint) {
+      const { width, height } = this.controller.getCssSize()
+      this.controller.applyViewport(centerViewportOn(worldPoint, this.controller.getViewport(), width, height))
+    },
+
+    /**
+     * 右键菜单 toggled 某项配置时调用；更新内部状态、重绘并 emit `config-change`。
+     * @param {string} key 配置键。
+     * @param {*} value 新值。
+     * @param {*} context 菜单上下文。
+     */
+    emitConfigChange(key, value, context) {
+      if (key === 'readonly') this.internalReadonly = value
+      else this.internalOptions = { ...this.internalOptions, [key]: value }
+      this.controller.renderCurrent()
+      this.$emit('config-change', { key, value, source: 'context-menu', context })
+    },
+
+    /** @returns {void} 缩放视口使整张图适应画布。会先取消进行中的指针交互。 */
+    fitToScreen() {
+      return this.controller.fitToScreen()
+    },
+
+    /**
+     * @param {string} id 目标节点 id。
+     * @returns {void} 将视口平移/缩放使该节点居中。
+     */
+    centerOnNode(id) {
+      return this.controller.centerOnNode(id)
+    },
+
+    /** @returns {void} 将当前选中节点（若有）居中。 */
+    centerOnSelection() {
+      return this.controller.centerOnSelection()
+    },
+
+    /**
+     * @param {number} scale 目标缩放倍率。
+     * @param {{ x: number, y: number }} [center] 缩放中心（世界坐标）；省略时使用视口中心。
+     * @returns {void}
+     */
+    zoomTo(scale, center) {
+      return this.controller.zoomTo(scale, center)
+    },
+
+    /**
+     * @param {Viewport} viewport 完整视口快照。
+     * @returns {void} 直接应用视口（受控模式下由宿主配合 `viewport-change` 使用）。
+     */
+    setViewport(viewport) {
+      return this.controller.setViewport(viewport)
+    },
+
+    /** @returns {Viewport} 当前视口快照。 */
+    getViewport() {
+      return this.controller.getViewport()
+    },
+
+    /**
+     * @param {string|string[]} ids 要选中的节点/分组 id。
+     * @param {'replace'|'add'|'toggle'} [mode='replace'] 选中模式。
+     * @returns {void}
+     */
+    select(ids, mode) {
+      return this.controller.select(ids, mode)
+    },
+
+    /** @returns {void} 清空选中并 emit `select`。 */
+    clearSelection() {
+      return this.controller.clearSelection()
+    },
+
+    /**
+     * @param {string} keyword 搜索关键词；空字符串清除搜索高亮。
+     * @returns {SearchEmitPayload} 命中摘要（同时 emit `search`）。
+     */
+    search(keyword) {
+      return this.controller.search(keyword)
+    },
+
+    /** @returns {SearchEmitPayload} 跳转到下一个命中并平移视口。 */
+    searchNext() {
+      return this.controller.searchNext()
+    },
+
+    /** @returns {SearchEmitPayload} 跳转到上一个命中并平移视口。 */
+    searchPrevious() {
+      return this.controller.searchPrevious()
+    },
+
+    /** @returns {void} 撤销上一步图编辑（若可 undo）。 */
+    undo() {
+      return this.controller.undo()
+    },
+
+    /** @returns {void} 重做上一步撤销（若可 redo）。 */
+    redo() {
+      return this.controller.redo()
+    },
+
+    /** @returns {boolean} 是否可撤销。 */
+    canUndo() {
+      return this.controller.canUndo()
+    },
+
+    /** @returns {boolean} 是否可重做。 */
+    canRedo() {
+      return this.controller.canRedo()
+    },
+
+    /** @returns {void} 删除当前选中（只读或 `beforeDelete` 拦截时 no-op）。 */
+    deleteSelection() {
+      return this.controller.deleteSelection()
+    },
+
+    /** @returns {void} 复制当前选中到内部剪贴板。 */
+    copySelection() {
+      return this.controller.copySelection()
+    },
+
+    /** @returns {void} 从内部剪贴板粘贴（只读或 `beforePaste` 拦截时 no-op）。 */
+    paste() {
+      return this.controller.paste()
+    },
+
+    /** @returns {Graph} 导出当前图 JSON 可序列化快照。 */
+    exportGraph() {
+      return this.controller.exportGraph()
+    },
+
+    /**
+     * @param {*} data 导入数据（经 `beforeImport` 校验）。
+     * @returns {void}
+     */
+    importGraph(data) {
+      return this.controller.importGraph(data)
+    },
+
+    /**
+     * 工厂：组装传给 `createMinimapController` 的 deps 闭包。
+     * 所有 getter 延迟读取最新 prop/computed；emit 回调统一走 `$emit`。
+     * @returns {ReturnType<typeof createMinimapController>}
+     * @private
+     */
+    createInteractionController() {
+      return createMinimapController({
+        getGraph: () => this.graph,
+        getLayoutDirection: () => this.layoutDirection,
+        getOptions: () => this.effectiveOptions,
+        getTheme: () => this.effectiveTheme,
+        getRenderers: () => ({ node: this.nodeRenderer, group: this.groupRenderer, edge: this.edgeRenderer }),
+        getViewportProp: () => this.viewport,
+        getGroupStatesProp: () => this.groupStates,
+        getSelectedIdsProp: () => this.selectedIds,
+        emitSelect: (ids) => this.$emit('select', ids),
+        getReadonly: () => this.effectiveReadonly,
+        getBeforeDelete: () => this.beforeDelete,
+        getBeforeCopy: () => this.beforeCopy,
+        getBeforeImport: () => this.beforeImport,
+        getBeforePaste: () => this.beforePaste,
+        emitDelete: (payload) => this.$emit('delete', payload),
+        emitCopy: (payload) => this.$emit('copy', payload),
+        emitPaste: (payload) => this.$emit('paste', payload),
+        emitImport: (payload) => this.$emit('import', payload),
+        emitExport: (payload) => this.$emit('export', payload),
+        emitChange: (payload) => this.$emit('change', payload),
+        emitSearch: (payload) => this.$emit('search', payload),
+        onSearchStateChange: ({ keyword, matches, currentIndex }) => {
+          this.searchKeyword = keyword
+          this.searchMatches = matches
+          this.searchCurrentIndex = currentIndex
+        },
+        emitConfigChange: (key, value, context) => this.emitConfigChange(key, value, context),
+        emitContextMenuAction: (payload) => this.$emit('context-menu-action', payload),
+        getContextMenuItemsProp: () => this.contextMenuItems,
+        getMenuEl: () => this.$refs.contextMenuRef,
+        onMenuStateChange: (state) => { this.contextMenuState = state },
+        emitViewportChange: (next) => this.$emit('viewport-change', next),
+        emitGroupStateChange: (next) => this.$emit('group-state-change', next),
+        getBeforeNodeDrop: () => this.beforeNodeDrop,
+        getBeforeGroupReorder: () => this.beforeGroupReorder,
+        getBeforeNodeMove: () => this.beforeNodeMove,
+        emitNodeDrop: (payload) => this.$emit('node-drop', payload),
+        emitGroupReorder: (payload) => this.$emit('group-reorder', payload),
+        emitNodeMove: (payload) => this.$emit('node-move', payload),
+        onRenderStats: (stats) => { this.renderStats = stats },
+        onOverviewRender: (scene) => this.$refs.overviewRef?.render(scene),
+      })
+    },
+  },
+}
+</script>
 <style scoped>
 .minimap {
   display: flex;
