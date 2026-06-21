@@ -159,6 +159,7 @@ function drawGrid(ctx, width, height, viewport, theme) {
   const size = theme.grid.size * viewport.scale
   if (size < 4) return
   const grid = { dot: true, dotRadius: 1.1, ...(theme.grid || {}) }
+  if (grid.visible === false) return
   if (grid.dot !== false) {
     ctx.fillStyle = grid.color
     const radius = Math.max(0.6, (grid.dotRadius ?? 1) * viewport.scale)
@@ -371,7 +372,7 @@ function drawGroupScrollbar(ctx, group, rect, theme, hovered) {
   ctx.fill()
 }
 
-function drawNode(ctx, node, rect, state, theme, scale = 1) {
+function drawNode(ctx, node, rect, state, theme, scale = 1, quality = {}) {
   withDimmedAlpha(ctx, state, () => {
     ctx.fillStyle = theme.node.fill
     ctx.beginPath()
@@ -384,6 +385,7 @@ function drawNode(ctx, node, rect, state, theme, scale = 1) {
         : theme.node.stroke
     ctx.lineWidth = 1
     ctx.stroke()
+    if (quality.showText === false) return
     ctx.fillStyle = theme.node.text
     ctx.font = scaledFont(theme.node.font, scale)
     ctx.textBaseline = 'middle'
@@ -444,7 +446,7 @@ function drawSelectionRect(ctx, rect, theme) {
 
 // 裁剪到分组框 body 范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
 // 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
-function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext) {
+function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext, quality = {}) {
   const virtualGroup = dragContext ? { ...group, children: dragContext.order } : group
   const bodyY = rect.y + GROUP.header * viewport.scale
   const bodyHeight = rect.height - GROUP.header * viewport.scale
@@ -463,7 +465,7 @@ function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, 
     }
     const itemState = makeState(child.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: childRect, state: itemState, theme, viewport })
-    else drawNode(ctx, node, childRect, itemState, theme, viewport.scale)
+    else drawNode(ctx, node, childRect, itemState, theme, viewport.scale, quality)
   }
   ctx.restore()
 }
@@ -495,7 +497,15 @@ export function renderScene(ctx, scene) {
     renderers = {},
     layoutDirection,
     direction,
+    quality = {},
   } = scene
+  const effectiveQuality = {
+    showText: true,
+    showGroupChildren: true,
+    simplifyEdges: false,
+    simplifyChrome: false,
+    ...quality,
+  }
   const selectedIds = state.selectedIds
   const highlightedIds = state.highlightedIds
   const dimmedIds = state.dimmedIds
@@ -554,7 +564,22 @@ export function renderScene(ctx, scene) {
     else {
       drawGroup(ctx, graph, group, screen, itemState, theme, scrollbarHovered)
     }
-    drawGroupChildren(ctx, graph, group, screen, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext)
+    if (effectiveQuality.showGroupChildren !== false) {
+      drawGroupChildren(
+        ctx,
+        graph,
+        group,
+        screen,
+        viewport,
+        theme,
+        renderers,
+        selectedIds,
+        highlightedIds,
+        dimmedIds,
+        dragContext,
+        effectiveQuality,
+      )
+    }
     drawn++
   }
 
@@ -564,7 +589,7 @@ export function renderScene(ctx, scene) {
     const node = graph.nodes.get(item.id)
     const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })
-    else drawNode(ctx, node, screen, itemState, theme, viewport.scale)
+    else drawNode(ctx, node, screen, itemState, theme, viewport.scale, effectiveQuality)
     drawn++
   }
 

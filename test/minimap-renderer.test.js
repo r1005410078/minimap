@@ -205,6 +205,30 @@ test('default renderer scales node and group text with the viewport', () => {
   assert.deepEqual(groupTitle.args.slice(1), [groupRect.x + 52, groupRect.y + 36])
 })
 
+test('compact quality skips default node text drawing', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ viewport: { x: 0, y: 0, scale: 0.3 } })
+
+  renderScene(ctx, {
+    ...scene,
+    quality: { showText: false, showGroupChildren: true },
+  })
+
+  assert.equal(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'), false)
+})
+
+test('overview quality skips grouped child detail drawing', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene({ viewport: { x: 0, y: 0, scale: 0.1 } })
+
+  renderScene(ctx, {
+    ...scene,
+    quality: { showText: false, showGroupChildren: false },
+  })
+
+  assert.equal(ctx.calls.some((call) => call.method === 'fillText' && String(call.args[0]).startsWith('cluster-')), false)
+})
+
 test('default edges draw as three-segment orthogonal polylines', () => {
   const ctx = createMockCtx()
   const scene = demoScene({

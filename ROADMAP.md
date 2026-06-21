@@ -49,7 +49,9 @@
   - [ ] 切片 6：性能状态与生命周期收尾（`performance` 事件或调试状态展示总节点数、可见节点数、缩放比例、帧耗时；验证销毁后没有残留事件监听、ResizeObserver 或动画循环）
 - **视觉整理切片**：
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
-- **下一步**：创建第五阶段切片 4「右键菜单」implementation plan。
+- **性能优化切片**：
+  - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
+- **下一步**：回到第五阶段切片 4「右键菜单」收尾，或继续性能优化后续切片（空间索引 / 静态层缓存 / 拖拽动态层合帧）。
 
 ## 目标
 

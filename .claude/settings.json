@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(node --test)",
+      "Bash(bun install *)",
+      "Bash(npm run *)",
+      "Bash(npm view *)",
+      "Bash(mkdir -p /Users/rongts/minimap/.spike)",
+      "Bash(cp /tmp/vue-loader-spike/Hello.vue /tmp/vue-loader-spike/loader.mjs /tmp/vue-loader-spike/test.mjs /Users/rongts/minimap/.spike/)",
+      "Bash(node test.mjs)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

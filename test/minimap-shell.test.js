@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph.js'
+import { clearClipboard } from '../src/minimap/clipboard.js'
 import { computeLayout, keepAnchorStable } from '../src/minimap/layout.js'
 import { easeOutCubic } from '../src/minimap/layout-transition.js'
 import { resolveEdges } from '../src/minimap/renderer.js'
@@ -65,6 +66,35 @@ function dispatchDrop(wrapper, payload, point) {
   Object.defineProperty(evt, 'clientX', { value: point.x, configurable: true })
   Object.defineProperty(evt, 'clientY', { value: point.y, configurable: true })
   canvasEl.dispatchEvent(evt)
+}
+
+function dispatchContextMenu(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  const evt = new MouseEvent('contextmenu', {
+    bubbles: true,
+    cancelable: true,
+    clientX: point.x,
+    clientY: point.y,
+  })
+  canvasEl.dispatchEvent(evt)
+  return evt
+}
+
+function dispatchPointer(wrapper, type, point, options = {}) {
+  const canvasEl = wrapper.find('canvas').element
+  const evt = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: point.x,
+    clientY: point.y,
+    button: options.button ?? 0,
+    ctrlKey: options.ctrlKey ?? false,
+    metaKey: options.metaKey ?? false,
+    shiftKey: options.shiftKey ?? false,
+  })
+  Object.defineProperty(evt, 'pointerId', { value: options.pointerId ?? 1, configurable: true })
+  canvasEl.dispatchEvent(evt)
+  return evt
 }
 
 function callsSinceLastClear(ctx) {
@@ -260,6 +290,75 @@ test('resize re-renders without starting a layout animation', () => {
   assert.equal(frames.scheduled.length, scheduledBefore)
   assert.ok(ctx.calls.length > callsBefore)
   wrapper.destroy()
+})
+
+test('blank canvas pan coalesces repeated pointer moves into one render frame', () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const ctx = contexts.at(-1)
+  dispatchPointer(wrapper, 'pointerdown', { x: 780, y: 580 })
+  const callsAfterDown = ctx.calls.length
+  const frameBaseline = frames.scheduled.length
+
+  dispatchPointer(wrapper, 'pointermove', { x: 760, y: 570 })
+  dispatchPointer(wrapper, 'pointermove', { x: 740, y: 560 })
+  dispatchPointer(wrapper, 'pointermove', { x: 720, y: 550 })
+
+  assert.equal(frames.scheduled.length, frameBaseline + 1)
+  assert.equal(ctx.calls.length, callsAfterDown)
+  assert.equal(runFrameFrom(frameBaseline, 1000), true)
+  assert.ok(ctx.calls.length > callsAfterDown)
+  wrapper.destroy()
+})
+
+test('marquee pointerup flushes a scheduled selection render immediately', () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const ctx = contexts.at(-1)
+
+  dispatchPointer(wrapper, 'pointerdown', { x: 780, y: 580 }, { ctrlKey: true })
+  const callsAfterDown = ctx.calls.length
+  const frameBaseline = frames.scheduled.length
+  dispatchPointer(wrapper, 'pointermove', { x: 720, y: 530 }, { ctrlKey: true })
+
+  assert.equal(frames.scheduled.length, frameBaseline + 1)
+  assert.equal(ctx.calls.length, callsAfterDown)
+
+  dispatchPointer(wrapper, 'pointerup', { x: 720, y: 530 }, { ctrlKey: true })
+
+  assert.ok(ctx.calls.length > callsAfterDown)
+  wrapper.destroy()
+})
+
+test('pan text hiding is opt-in through options', () => {
+  const defaultWrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const defaultCtx = contexts.at(-1)
+  const defaultFrameBaseline = frames.scheduled.length
+  dispatchPointer(defaultWrapper, 'pointerdown', { x: 780, y: 580 })
+  dispatchPointer(defaultWrapper, 'pointermove', { x: 740, y: 560 })
+
+  assert.equal(runFrameFrom(defaultFrameBaseline, 1000), true)
+  assert.equal(
+    callsSinceLastClear(defaultCtx).some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'),
+    true,
+  )
+  defaultWrapper.destroy()
+
+  const enabledWrapper = mount(Minimap, {
+    propsData: {
+      graph: createDemoGraph(),
+      options: { hideTextDuringInteraction: true },
+    },
+  })
+  const enabledCtx = contexts.at(-1)
+  const enabledFrameBaseline = frames.scheduled.length
+  dispatchPointer(enabledWrapper, 'pointerdown', { x: 780, y: 580 })
+  dispatchPointer(enabledWrapper, 'pointermove', { x: 740, y: 560 })
+
+  assert.equal(runFrameFrom(enabledFrameBaseline, 1100), true)
+  assert.equal(
+    callsSinceLastClear(enabledCtx).some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'),
+    false,
+  )
+  enabledWrapper.destroy()
 })
 
 test('new layout changes cancel the previous animation frame', async () => {
@@ -571,6 +670,7 @@ test('paste targets the real parent node when the selection is a group box', () 
 })
 
 test('paste returns empty when there is no selection or no clipboard content', () => {
+  clearClipboard()
   const graph = createDemoGraph()
   const wrapper = mount(Minimap, { propsData: { graph } })
 
@@ -726,5 +826,145 @@ test('toolbar undo redo delete copy and paste buttons call real edit commands', 
   await toolbarButton(wrapper, '重做').trigger('click')
   assert.equal(graph.nodes.has(pastedId), false)
 
+  wrapper.destroy()
+})
+
+async function openContextMenu(wrapper, point) {
+  dispatchContextMenu(wrapper, point)
+  await wrapper.vm.$nextTick()
+}
+
+async function clickContextMenuItem(wrapper, id) {
+  await wrapper.find(`.minimap-context-menu-item[data-menu-id="${id}"]`).trigger('click')
+}
+
+test('right-clicking a node opens the node context menu with common canvas actions', async () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  flushAnimationFrames()
+  const ctx = contexts.at(-1)
+  const rootRect = renderedRectForLabel(ctx, 'Energy Root')
+  const event = dispatchContextMenu(wrapper, centerOf(rootRect))
+  await wrapper.vm.$nextTick()
+
+  assert.equal(event.defaultPrevented, true)
+  assert.equal(wrapper.find('.minimap-context-menu').exists(), true)
+  const ids = wrapper.findAll('.minimap-context-menu-item').wrappers.map((item) => item.attributes('data-menu-id'))
+  assert.ok(ids.includes('add-child'))
+  assert.ok(ids.includes('copy'))
+  assert.ok(ids.includes('fit-to-screen'))
+  assert.ok(ids.includes('toggle-search'))
+  assert.ok(wrapper.find('.minimap-context-menu-item[data-menu-id="add-child"]').attributes('disabled'))
+
+  wrapper.destroy()
+})
+
+test('right-clicking blank canvas opens only common canvas actions and closes on Escape', async () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  await openContextMenu(wrapper, { x: 760, y: 560 })
+
+  const labels = wrapper.findAll('.minimap-context-menu-item').wrappers.map((item) => item.text())
+  assert.equal(labels.includes('复制'), false)
+  assert.ok(labels.includes('粘贴'))
+  assert.ok(labels.includes('居中选中'))
+
+  wrapper.find('canvas').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await wrapper.vm.$nextTick()
+  assert.equal(wrapper.find('.minimap-context-menu').exists(), false)
+
+  wrapper.destroy()
+})
+
+test('context menu position is clamped inside the canvas container', async () => {
+  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  await openContextMenu(wrapper, { x: 795, y: 595 })
+
+  const style = wrapper.find('.minimap-context-menu').attributes('style')
+  assert.match(style, /left: \d+px/)
+  assert.match(style, /top: \d+px/)
+  assert.doesNotMatch(style, /left: 795px/)
+
+  wrapper.destroy()
+})
+
+test('context menu copy, paste, delete and config actions reuse existing commands', async () => {
+  const graph = createDemoGraph()
+
+  const copyWrapper = mount(Minimap, { propsData: { graph } })
+  const ctx = contexts.at(-1)
+  const feederRect = renderedRectForLabel(ctx, 'Feeder 2')
+  await openContextMenu(copyWrapper, centerOf(feederRect))
+  await clickContextMenuItem(copyWrapper, 'copy')
+  assert.equal(copyWrapper.emitted('copy').at(-1)[0].capturedIds.includes('feeder-2'), true)
+  copyWrapper.destroy()
+
+  const pasteGraph = createDemoGraph()
+  const pasteWrapper = mount(Minimap, { propsData: { graph: pasteGraph } })
+  pasteWrapper.vm.select(['cluster-25'])
+  await openContextMenu(pasteWrapper, { x: 760, y: 560 })
+  await clickContextMenuItem(pasteWrapper, 'paste')
+  assert.equal(pasteWrapper.emitted('paste').at(-1)[0].targetParentId, 'cluster-25')
+  pasteWrapper.destroy()
+
+  const deleteGraph = createDemoGraph()
+  const deleteWrapper = mount(Minimap, { propsData: { graph: deleteGraph } })
+  const deleteCtx = contexts.at(-1)
+  const deleteRect = renderedRectForLabel(deleteCtx, 'Feeder 3')
+  await openContextMenu(deleteWrapper, centerOf(deleteRect))
+  await clickContextMenuItem(deleteWrapper, 'delete')
+  assert.equal(deleteGraph.nodes.has('feeder-3'), false)
+  deleteWrapper.destroy()
+
+  const configWrapper = mount(Minimap, {
+    propsData: {
+      graph: createDemoGraph(),
+      options: { enableSearch: true, showGrid: true, showPerformance: false },
+    },
+  })
+  await openContextMenu(configWrapper, { x: 760, y: 560 })
+  await clickContextMenuItem(configWrapper, 'toggle-search')
+  assert.equal(configWrapper.find('.minimap-search').exists(), false)
+  await openContextMenu(configWrapper, { x: 760, y: 560 })
+  await clickContextMenuItem(configWrapper, 'toggle-grid')
+  assert.equal(configWrapper.emitted('config-change').at(-1)[0].key, 'showGrid')
+  assert.equal(configWrapper.emitted('config-change').at(-1)[0].value, false)
+  assert.equal(
+    callsSinceLastClear(contexts.at(-1)).some((call) => call.method === 'arc'),
+    false,
+  )
+  await openContextMenu(configWrapper, { x: 760, y: 560 })
+  await clickContextMenuItem(configWrapper, 'toggle-performance')
+  assert.equal(configWrapper.find('.minimap-performance').exists(), true)
+  assert.match(configWrapper.find('.minimap-performance').text(), /ms/)
+  await openContextMenu(configWrapper, { x: 760, y: 560 })
+  await clickContextMenuItem(configWrapper, 'toggle-hide-text-during-interaction')
+  assert.equal(configWrapper.emitted('config-change').at(-1)[0].key, 'hideTextDuringInteraction')
+  assert.equal(configWrapper.emitted('config-change').at(-1)[0].value, true)
+  await openContextMenu(configWrapper, { x: 760, y: 560 })
+  assert.equal(
+    configWrapper
+      .find('.minimap-context-menu-item[data-menu-id="toggle-grid"] .minimap-context-menu-check')
+      .text()
+      .trim(),
+    '',
+  )
+  configWrapper.destroy()
+})
+
+test('contextMenuItems can hide defaults and append custom actions', async () => {
+  const wrapper = mount(Minimap, {
+    propsData: {
+      graph: createDemoGraph(),
+      contextMenuItems: (context, defaults) =>
+        defaults
+          .filter((item) => item.id !== 'toggle-performance')
+          .concat({ id: 'inspect-node', label: '查看详情', action: 'inspect-node' }),
+    },
+  })
+
+  await openContextMenu(wrapper, { x: 760, y: 560 })
+  assert.equal(wrapper.find('.minimap-context-menu-item[data-menu-id="toggle-performance"]').exists(), false)
+  await clickContextMenuItem(wrapper, 'inspect-node')
+  assert.equal(wrapper.emitted('context-menu-action').at(-1)[0].action, 'inspect-node')
+  assert.equal(wrapper.emitted('change'), undefined)
   wrapper.destroy()
 })

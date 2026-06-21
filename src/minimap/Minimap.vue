@@ -3,7 +3,7 @@
 // 分组框命中检测细分、框内拖拽换位、滚轮滚动、展开折叠点击见 Phase 2 切片3。
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import {
   computeLayout,
   keepAnchorStable,
@@ -46,6 +46,12 @@ import {
 import { createGraphOperationManager, captureSubtreeSnapshot } from './graph-operations.js'
 import { deserializeGraph, serializeGraph } from './graph-serialization.js'
 import {
+  BUILT_IN_CONTEXT_MENU_ACTIONS,
+  buildContextMenuItems,
+  mergeContextMenuItems,
+} from './context-menu.js'
+import { getClipboard, hasClipboard, setClipboard } from './clipboard.js'
+import {
   buildVirtualOrder,
   childWorldRectsById,
   currentShiftRects,
@@ -60,6 +66,8 @@ import {
   normalizeRect,
 } from './selection.js'
 import { searchNodes } from './search.js'
+import { createRenderScheduler } from './render-scheduler.js'
+import { resolveRenderQuality } from './render-quality.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
@@ -87,6 +95,7 @@ const props = defineProps({
   beforeImport: { type: Function, default: null },
   beforeNodeMove: { type: Function, default: null },
   beforePaste: { type: Function, default: null },
+  contextMenuItems: { type: [Function, Array], default: null },
 })
 
 const emit = defineEmits([
@@ -103,6 +112,8 @@ const emit = defineEmits([
   'export',
   'paste',
   'node-move',
+  'context-menu-action',
+  'config-change',
 ])
 
 const containerRef = ref(null)
@@ -111,6 +122,30 @@ const overviewRef = ref(null)
 const searchKeyword = ref('')
 const searchMatches = ref([])
 const searchCurrentIndex = ref(-1)
+const contextMenuRef = ref(null)
+const renderStats = ref(null)
+const internalReadonly = ref(props.readonly)
+const internalOptions = ref({ ...(props.options ?? {}) })
+const effectiveReadonly = computed(() => internalReadonly.value)
+const effectiveOptions = computed(() => ({
+  enableSearch: true,
+  enableOverview: true,
+  enableActiveBorder: false,
+  showGrid: true,
+  showPerformance: false,
+  hideTextDuringInteraction: false,
+  ...internalOptions.value,
+}))
+const effectiveTheme = computed(() => {
+  const baseTheme = props.theme || defaultTheme
+  return {
+    ...baseTheme,
+    grid: {
+      ...(baseTheme.grid || {}),
+      visible: effectiveOptions.value.showGrid !== false,
+    },
+  }
+})
 
 let ctx = null
 let resizeObserver = null
@@ -134,7 +169,12 @@ let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
 let activeViewportTween = null
 let viewportTweenFrameId = null
 let operationManager = null
-let clipboard = null
+let contextMenuDocumentListener = null
+let renderScheduler = null
+const contextMenuState = ref(null)
+
+const CONTEXT_MENU_WIDTH = 190
+const CONTEXT_MENU_MAX_HEIGHT = 360
 
 function currentSelectedIds() {
   if (props.selectedIds !== null) return props.selectedIds
@@ -145,18 +185,23 @@ function currentGroupStates() {
   return props.groupStates !== null ? props.groupStates : internalGroupStates
 }
 
+function syncConfigFromProps() {
+  internalReadonly.value = props.readonly
+  internalOptions.value = { ...(props.options ?? {}) }
+}
+
 function currentViewport() {
   return normalizeViewport(props.viewport ?? internalViewport, viewportOptions(props.options))
 }
 
-function applyViewport(nextViewport, { emitChange = true } = {}) {
+function applyViewport(nextViewport, { emitChange = true, render = true } = {}) {
   const next = normalizeViewport(nextViewport, viewportOptions(props.options))
   const previous = currentViewport()
   if (sameViewport(previous, next)) return false
   if (emitChange) emit('viewport-change', next)
   if (props.viewport !== null) return true
   internalViewport = next
-  renderCurrent(layout, next)
+  if (render) renderCurrent(layout, next)
   return true
 }
 
@@ -391,6 +436,36 @@ function scheduleDragShift(group, insertIndex, { reset = false } = {}) {
   dragState.shiftStartedAt = timestamp
 }
 
+function isHighFrequencyInteractionActive() {
+  return Boolean(
+    panState ||
+      marqueeState?.active,
+  )
+}
+
+function currentRenderQuality(renderViewport = currentViewport()) {
+  return resolveRenderQuality({
+    scale: renderViewport.scale,
+    interacting: effectiveOptions.value.hideTextDuringInteraction === true && isHighFrequencyInteractionActive(),
+  })
+}
+
+function scheduleRender(reason = 'render') {
+  if (!renderScheduler) {
+    renderCurrent()
+    return
+  }
+  renderScheduler.schedule(reason)
+}
+
+function flushScheduledRender() {
+  renderScheduler?.flush()
+}
+
+function cancelScheduledRender() {
+  renderScheduler?.cancel()
+}
+
 function renderCurrent(currentLayout = layout, renderViewport = currentViewport()) {
   if (!ctx || !currentLayout) return
   lastRenderedLayout = currentLayout
@@ -410,14 +485,14 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
             : null,
         }
       : null
-  renderScene(ctx, {
+  renderStats.value = renderScene(ctx, {
     layout: currentLayout,
     graph: props.graph,
     layoutDirection: props.layoutDirection,
     viewport: renderViewport,
     width: cssWidth,
     height: cssHeight,
-    theme: props.theme || defaultTheme,
+    theme: effectiveTheme.value,
     state: {
       selectedIds: relations.selectedIds,
       highlightedIds,
@@ -429,6 +504,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
       selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
       attachPreview,
     },
+    quality: currentRenderQuality(renderViewport),
     renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
   })
   overviewRef.value?.render({
@@ -436,7 +512,7 @@ function renderCurrent(currentLayout = layout, renderViewport = currentViewport(
     viewport: renderViewport,
     mainWidth: cssWidth,
     mainHeight: cssHeight,
-    theme: props.theme || defaultTheme,
+    theme: effectiveTheme.value,
   })
 }
 
@@ -525,7 +601,7 @@ function updateLayout({ animate = true, preserveAnchor = true } = {}) {
     direction: props.layoutDirection,
     viewportWidth: cssWidth,
     viewportHeight: cssHeight,
-    groupThreshold: props.options?.groupThreshold,
+    groupThreshold: effectiveOptions.value.groupThreshold,
     groupStates: new Map(Object.entries(currentGroupStates())),
   })
 
@@ -559,13 +635,156 @@ function isAdditiveSelection(event) {
   return event.shiftKey || event.metaKey || event.ctrlKey
 }
 
+function canvasElement() {
+  return (
+    canvasRef.value ??
+    containerRef.value?.querySelector('canvas') ??
+    document.querySelector('.minimap-canvas-container canvas') ??
+    null
+  )
+}
+
+function containerElement() {
+  return containerRef.value ?? document.querySelector('.minimap-canvas-container') ?? null
+}
+
 function screenPointFromEvent(event) {
-  const rect = canvasRef.value.getBoundingClientRect()
+  const canvas = canvasElement()
+  if (!canvas) return { x: event.clientX, y: event.clientY }
+  const rect = canvas.getBoundingClientRect()
   return { x: event.clientX - rect.left, y: event.clientY - rect.top }
 }
 
 function pointFromEvent(event) {
   return screenToWorld(screenPointFromEvent(event), currentViewport())
+}
+
+function clampContextMenuPosition(screenPoint, items) {
+  const itemCount = items.filter((item) => item.type !== 'separator').length
+  const separatorCount = items.filter((item) => item.type === 'separator').length
+  const estimatedHeight = Math.min(
+    CONTEXT_MENU_MAX_HEIGHT,
+    16 + itemCount * 30 + separatorCount * 8,
+  )
+  return {
+    x: Math.max(8, Math.min(screenPoint.x, cssWidth - CONTEXT_MENU_WIDTH - 8)),
+    y: Math.max(8, Math.min(screenPoint.y, cssHeight - estimatedHeight - 8)),
+  }
+}
+
+function closeContextMenu() {
+  contextMenuState.value = null
+  if (contextMenuDocumentListener) {
+    document.removeEventListener('pointerdown', contextMenuDocumentListener, true)
+    contextMenuDocumentListener = null
+  }
+}
+
+function handleContextMenuDocumentPointerDown(event) {
+  const menuEl = contextMenuRef.value
+  if (menuEl && menuEl.contains(event.target)) return
+  closeContextMenu()
+}
+
+function canPaste() {
+  return hasClipboard()
+}
+
+function groupForHit(hit) {
+  if (!hit || hit.type !== 'group' || !layout) return null
+  return layout.groups.find((group) => group.id === hit.id) ?? null
+}
+
+function contextFromHit(hit, event) {
+  const screenPoint = screenPointFromEvent(event)
+  const worldPoint = screenToWorld(screenPoint, currentViewport())
+  if (hit?.type === 'node') {
+    const node = props.graph.nodes.get(hit.id)
+    return {
+      targetType: 'node',
+      targetId: hit.id,
+      groupId: null,
+      screenPoint,
+      worldPoint,
+      selectedIds: currentSelectedIds(),
+      readonly: effectiveReadonly.value,
+      canPaste: canPaste(),
+      canUndo: canUndo(),
+      canRedo: canRedo(),
+      options: effectiveOptions.value,
+      hasToggleableGroup: !!node?.children?.length,
+    }
+  }
+  if (hit?.type === 'group') {
+    const group = groupForHit(hit)
+    return {
+      targetType: 'group',
+      targetId: group?.parentId ?? hit.childId ?? null,
+      groupId: hit.id,
+      screenPoint,
+      worldPoint,
+      selectedIds: currentSelectedIds(),
+      readonly: effectiveReadonly.value,
+      canPaste: canPaste(),
+      canUndo: canUndo(),
+      canRedo: canRedo(),
+      options: effectiveOptions.value,
+      hasToggleableGroup: !!group,
+    }
+  }
+  return {
+    targetType: 'canvas',
+    targetId: null,
+    groupId: null,
+    screenPoint,
+    worldPoint,
+    selectedIds: currentSelectedIds(),
+    readonly: effectiveReadonly.value,
+    canPaste: canPaste(),
+    canUndo: canUndo(),
+    canRedo: canRedo(),
+    options: effectiveOptions.value,
+    hasToggleableGroup: false,
+  }
+}
+
+function openContextMenu(event) {
+  if (!layout) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeContextMenu()
+  cancelPointerInteractions()
+  canvasElement()?.focus?.()
+  const hit = hitTest(layout, pointFromEvent(event))
+  const context = contextFromHit(hit, event)
+  const defaults = buildContextMenuItems(context)
+  const items = mergeContextMenuItems(context, defaults, props.contextMenuItems)
+  contextMenuState.value = {
+    context,
+    items,
+    position: clampContextMenuPosition(context.screenPoint, items),
+  }
+  if (!contextMenuDocumentListener) {
+    contextMenuDocumentListener = handleContextMenuDocumentPointerDown
+    document.addEventListener('pointerdown', contextMenuDocumentListener, true)
+  }
+}
+
+function targetIdsForContext(context) {
+  if (!context) return []
+  const targetId = context.targetType === 'group' ? context.groupId : context.targetId
+  if (!targetId) return []
+  const selected = currentSelectedIds()
+  return selected.includes(targetId) ? selected : [targetId]
+}
+
+function runWithTemporarySelection(ids, command) {
+  const previous = currentSelectedIds()
+  const shouldSwap = ids.length > 0 && !ids.every((id) => previous.includes(id))
+  if (shouldSwap) setSelected(ids)
+  const result = command()
+  if (shouldSwap) setSelected(previous)
+  return result
 }
 
 function ghostRectForPoint(worldPoint) {
@@ -699,6 +918,7 @@ function cancelMarquee() {
 }
 
 function cancelPointerInteractions() {
+  cancelScheduledRender()
   cancelDrag()
   cancelScrollbarDrag()
   cancelPan()
@@ -716,12 +936,14 @@ function clearScrollbarHover() {
 }
 
 function handlePointerDown(event) {
+  closeContextMenu()
   if (!layout) return
-  canvasRef.value.focus?.()
+  if (event.button !== 0) return
+  canvasElement()?.focus?.()
   const point = pointFromEvent(event)
   const scrollbarHit = hitScrollbarThumb(point)
   if (scrollbarHit) {
-    canvasRef.value.setPointerCapture?.(event.pointerId)
+    canvasElement()?.setPointerCapture?.(event.pointerId)
     updateScrollbarHover(scrollbarHit.group.id)
     scrollbarDragState = {
       groupId: scrollbarHit.group.id,
@@ -745,7 +967,7 @@ function handlePointerDown(event) {
     const nodeId = hit.type === 'group' ? hit.childId : hit.id
     const node = props.graph.nodes.get(nodeId)
     if (!node) return
-    canvasRef.value.setPointerCapture?.(event.pointerId)
+    canvasElement()?.setPointerCapture?.(event.pointerId)
     dragState = {
       nodeId,
       fromParentId: node.parentId,
@@ -773,7 +995,7 @@ function handlePointerDown(event) {
 
   if (!hit) {
     settleAnimation()
-    canvasRef.value.setPointerCapture?.(event.pointerId)
+    canvasElement()?.setPointerCapture?.(event.pointerId)
     if (event.metaKey || event.ctrlKey) {
       const startScreen = screenPointFromEvent(event)
       marqueeState = {
@@ -823,7 +1045,7 @@ function handlePointerMove(event) {
       height: screenPoint.y - marqueeState.startScreen.y,
     }
     marqueeState.active = true
-    renderCurrent()
+    scheduleRender('marquee')
     return
   }
 
@@ -833,7 +1055,8 @@ function handlePointerMove(event) {
       y: event.clientY - panState.startScreen.y,
     }
     panState.moved = panState.moved || delta.x !== 0 || delta.y !== 0
-    applyViewport(panViewportBy(panState.startViewport, delta, viewportOptions(props.options)))
+    applyViewport(panViewportBy(panState.startViewport, delta, viewportOptions(props.options)), { render: false })
+    scheduleRender('pan')
     return
   }
 
@@ -862,6 +1085,7 @@ function handlePointerMove(event) {
 
 function handlePointerUp() {
   if (marqueeState) {
+    flushScheduledRender()
     const ids = marqueeState.active ? idsInSelectionRect(layout, marqueeState.rect, currentViewport()) : []
     marqueeState = null
     setSelected(ids)
@@ -869,11 +1093,14 @@ function handlePointerUp() {
   }
 
   if (panState) {
+    flushScheduledRender()
     panState = null
+    renderCurrent()
     return
   }
 
   if (scrollbarDragState) {
+    flushScheduledRender()
     const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
     if (group) {
       updateGroupState(group.id, { scrollTop: group.scrollTop })
@@ -887,6 +1114,7 @@ function handlePointerUp() {
   if (!dragState) return
 
   if (dragState.dragging) {
+    flushScheduledRender()
     cancelAutoScrollLoop()
     cancelDragShiftLoop()
     cancelEdgePanLoop()
@@ -917,7 +1145,7 @@ function handlePointerUp() {
           },
         }
         const result = graphOperations().apply(operation, {
-          readonly: props.readonly,
+          readonly: effectiveReadonly.value,
           before: props.beforeGroupReorder,
         })
         if (result.applied) {
@@ -938,7 +1166,7 @@ function handlePointerUp() {
           payload: { nodeId: dragState.nodeId, toParentId: dragState.targetParentId, index },
         }
         const result = graphOperations().apply(operation, {
-          readonly: props.readonly,
+          readonly: effectiveReadonly.value,
           before: props.beforeNodeMove,
         })
         if (result.applied) {
@@ -974,6 +1202,7 @@ function handlePointerUp() {
 }
 
 function handleWheel(event) {
+  closeContextMenu()
   if (!layout) return
   if (dragState || scrollbarDragState || panState) return
   const viewport = currentViewport()
@@ -1002,6 +1231,11 @@ function handleWheel(event) {
 
 function handleKeyDown(event) {
   if (event.key === 'Escape') {
+    if (contextMenuState.value) {
+      event.preventDefault()
+      closeContextMenu()
+      return
+    }
     if (currentSelectedIds().length === 0) return
     event.preventDefault()
     setSelected([])
@@ -1083,7 +1317,7 @@ function handleDrop(event) {
     payload: { resource, parentId, index, id },
   }
   const result = graphOperations().apply(operation, {
-    readonly: props.readonly,
+    readonly: effectiveReadonly.value,
     before: props.beforeNodeDrop,
   })
   if (!result.applied) return
@@ -1214,6 +1448,51 @@ function handleOverviewNavigate(worldPoint) {
   applyViewport(centerViewportOn(worldPoint, currentViewport(), cssWidth, cssHeight))
 }
 
+function emitConfigChange(key, value, context) {
+  if (key === 'readonly') internalReadonly.value = value
+  else internalOptions.value = { ...internalOptions.value, [key]: value }
+  renderCurrent()
+  emit('config-change', { key, value, source: 'context-menu', context })
+}
+
+function executeContextMenuAction(action, context) {
+  if (action === 'copy') return runWithTemporarySelection(targetIdsForContext(context), copySelection)
+  if (action === 'delete') return runWithTemporarySelection(targetIdsForContext(context), deleteSelection)
+  if (action === 'paste-into-target') return pasteInto(context.targetType === 'group' ? context.targetId : context.targetId)
+  if (action === 'paste') return paste()
+  if (action === 'fit-to-screen') return fitToScreen()
+  if (action === 'center-selection') return centerOnSelection()
+  if (action === 'center-target' && context.targetId) return centerOnNode(context.targetId)
+  if (action === 'toggle-group' && context.groupId) {
+    const group = layout?.groups.find((item) => item.id === context.groupId)
+    if (!group) return
+    updateGroupState(context.groupId, { expanded: !group.expanded })
+    updateLayout()
+    return
+  }
+  if (action === 'toggle-search') return emitConfigChange('enableSearch', !effectiveOptions.value.enableSearch, context)
+  if (action === 'toggle-grid') return emitConfigChange('showGrid', !effectiveOptions.value.showGrid, context)
+  if (action === 'toggle-performance') return emitConfigChange('showPerformance', !effectiveOptions.value.showPerformance, context)
+  if (action === 'toggle-hide-text-during-interaction') {
+    return emitConfigChange(
+      'hideTextDuringInteraction',
+      !effectiveOptions.value.hideTextDuringInteraction,
+      context,
+    )
+  }
+  if (action === 'toggle-readonly') return emitConfigChange('readonly', !effectiveReadonly.value, context)
+}
+
+function runContextMenuItem(item) {
+  if (!contextMenuState.value || item.disabled) return
+  const context = contextMenuState.value.context
+  emit('context-menu-action', { action: item.action, item, context })
+  if (BUILT_IN_CONTEXT_MENU_ACTIONS.has(item.action)) {
+    executeContextMenuAction(item.action, context)
+  }
+  closeContextMenu()
+}
+
 function undo() {
   const result = graphOperations().undo()
   if (result.applied) {
@@ -1262,7 +1541,7 @@ function deleteSelection() {
   const expandedIds = selectedRealNodeIds()
   const operation = { type: 'delete-nodes', payload: { ids, expandedIds } }
   const result = graphOperations().apply(operation, {
-    readonly: props.readonly,
+    readonly: effectiveReadonly.value,
     before: props.beforeDelete,
   })
   if (!result.applied) return result
@@ -1291,8 +1570,9 @@ function copySelection() {
   if (expandedIds.length === 0) return unapplied('empty')
   if (props.beforeCopy && props.beforeCopy(payload) === false) return unapplied('blocked')
 
-  clipboard = captureSubtreeSnapshot(props.graph, expandedIds)
-  const capturedPayload = { ids, capturedIds: clipboard.nodes.map((node) => node.id) }
+  const snapshot = captureSubtreeSnapshot(props.graph, expandedIds)
+  setClipboard(snapshot)
+  const capturedPayload = { ids, capturedIds: snapshot.nodes.map((node) => node.id) }
   emit('copy', capturedPayload)
   return {
     applied: true,
@@ -1331,13 +1611,12 @@ function createPasteIdMap(snapshot) {
   return idMap
 }
 
-function paste() {
-  const targetParentId = pasteTargetId()
-  const snapshot = clipboard ?? { rootIds: [], nodes: [] }
+function pasteInto(targetParentId = pasteTargetId()) {
+  const snapshot = getClipboard() ?? { rootIds: [], nodes: [] }
   const idMap = createPasteIdMap(snapshot)
   const operation = { type: 'paste-nodes', payload: { targetParentId, snapshot, idMap } }
   const result = graphOperations().apply(operation, {
-    readonly: props.readonly,
+    readonly: effectiveReadonly.value,
     before: props.beforePaste,
   })
   if (!result.applied) return result
@@ -1352,6 +1631,10 @@ function paste() {
   return result
 }
 
+function paste() {
+  return pasteInto()
+}
+
 function exportGraph() {
   const graph = serializeGraph(props.graph)
   emit('export', { graph })
@@ -1359,7 +1642,7 @@ function exportGraph() {
 }
 
 function importGraph(data) {
-  if (props.readonly) {
+  if (effectiveReadonly.value) {
     return {
       applied: false,
       type: 'replace-graph',
@@ -1384,6 +1667,7 @@ function importGraph(data) {
   }
   const operation = { type: 'replace-graph', payload: { graph: parsed.graph } }
   const result = graphOperations().apply(operation, {
+    readonly: effectiveReadonly.value,
     before: props.beforeImport,
   })
   if (!result.applied) return result
@@ -1419,8 +1703,8 @@ defineExpose({
 })
 
 function syncCanvasSize() {
-  const container = containerRef.value
-  const canvas = canvasRef.value
+  const container = containerElement()
+  const canvas = canvasElement()
   if (!container || !canvas) return
   cssWidth = container.clientWidth
   cssHeight = container.clientHeight
@@ -1434,14 +1718,17 @@ function syncCanvasSize() {
 }
 
 onMounted(() => {
-  const canvas = canvasRef.value
+  const canvas = canvasElement()
+  const container = containerElement()
+  if (!canvas) return
   ctx = canvas.getContext('2d')
+  renderScheduler = createRenderScheduler({ render: () => renderCurrent() })
   syncCanvasSize()
   resizeObserver = new ResizeObserver(() => {
     syncCanvasSize()
     updateLayout({ animate: false, preserveAnchor: false })
   })
-  resizeObserver.observe(containerRef.value)
+  if (container) resizeObserver.observe(container)
   canvas.addEventListener('pointerdown', handlePointerDown)
   canvas.addEventListener('pointermove', handlePointerMove)
   canvas.addEventListener('pointerleave', clearScrollbarHover)
@@ -1450,13 +1737,16 @@ onMounted(() => {
   canvas.addEventListener('lostpointercapture', cancelPointerInteractions)
   canvas.addEventListener('keydown', handleKeyDown)
   canvas.addEventListener('wheel', handleWheel, { passive: false })
+  canvas.addEventListener('contextmenu', openContextMenu)
   canvas.addEventListener('dragover', handleDragOver)
   canvas.addEventListener('drop', handleDrop)
   updateLayout({ animate: false, preserveAnchor: false })
 })
 
 onUnmounted(() => {
-  const canvas = canvasRef.value
+  const canvas = canvasElement()
+  cancelScheduledRender()
+  renderScheduler = null
   cancelAnimation()
   cancelViewportTween()
   cancelPointerInteractions()
@@ -1469,16 +1759,19 @@ onUnmounted(() => {
     canvas.removeEventListener('lostpointercapture', cancelPointerInteractions)
     canvas.removeEventListener('keydown', handleKeyDown)
     canvas.removeEventListener('wheel', handleWheel)
+    canvas.removeEventListener('contextmenu', openContextMenu)
     canvas.removeEventListener('dragover', handleDragOver)
     canvas.removeEventListener('drop', handleDrop)
   }
   if (resizeObserver) resizeObserver.disconnect()
+  closeContextMenu()
 })
 
 watch(() => props.layoutDirection, () => updateLayout())
 watch(
   () => props.graph,
   () => {
+    closeContextMenu()
     operationManager = createGraphOperationManager(props.graph)
     updateLayout()
   },
@@ -1486,7 +1779,13 @@ watch(
 watch(() => props.selectedIds, () => renderCurrent())
 watch(() => props.groupStates, () => updateLayout())
 watch(() => props.viewport, () => renderCurrent())
-watch(() => props.options, () => updateLayout())
+watch(() => props.options, () => {
+  syncConfigFromProps()
+  closeContextMenu()
+  updateLayout()
+})
+watch(() => props.readonly, () => syncConfigFromProps())
+watch(() => props.contextMenuItems, () => closeContextMenu())
 </script>
 
 <template>
@@ -1515,10 +1814,10 @@ watch(() => props.options, () => updateLayout())
       </div>
       <canvas
         ref="canvasRef"
-        :class="{ 'is-active-border-enabled': options?.enableActiveBorder === true }"
+        :class="{ 'is-active-border-enabled': effectiveOptions.enableActiveBorder === true }"
         tabindex="0"
       ></canvas>
-      <div v-if="options?.enableSearch !== false" class="minimap-search">
+      <div v-if="effectiveOptions.enableSearch !== false" class="minimap-search">
         <input
           :value="searchKeyword"
           class="minimap-search-input"
@@ -1542,7 +1841,7 @@ watch(() => props.options, () => updateLayout())
           ›
         </button>
       </div>
-      <div v-if="options?.enableOverview !== false" class="minimap-overview-panel">
+      <div v-if="effectiveOptions.enableOverview !== false" class="minimap-overview-panel">
         <div class="minimap-overview-header">
           <span>MINIMAP</span>
           <span>拖入放置</span>
@@ -1552,6 +1851,39 @@ watch(() => props.options, () => updateLayout())
           class="minimap-overview"
           @navigate="handleOverviewNavigate"
         />
+      </div>
+      <div v-if="effectiveOptions.showPerformance" class="minimap-performance">
+        <span class="minimap-performance-label">性能</span>
+        <span class="minimap-performance-value">{{ renderStats ? `${renderStats.drawn}/${renderStats.total}` : '0/0' }}</span>
+        <span class="minimap-performance-value">{{ renderStats ? `${renderStats.culled} culled` : '0 culled' }}</span>
+        <span class="minimap-performance-value">{{ renderStats ? `${renderStats.durationMs.toFixed(1)}ms` : '0.0ms' }}</span>
+      </div>
+      <div
+        v-if="contextMenuState"
+        ref="contextMenuRef"
+        class="minimap-context-menu"
+        role="menu"
+        :style="{ left: `${contextMenuState.position.x}px`, top: `${contextMenuState.position.y}px` }"
+      >
+        <div v-for="item in contextMenuState.items" :key="item.id">
+          <div v-if="item.type === 'separator'" class="minimap-context-menu-separator"></div>
+          <button
+            v-else
+            class="minimap-context-menu-item"
+            :class="{ 'is-danger': item.danger, 'is-checked': item.checked }"
+            type="button"
+            role="menuitem"
+            :data-menu-id="item.id"
+            :aria-disabled="item.disabled ? 'true' : 'false'"
+            :disabled="item.disabled"
+            @click="runContextMenuItem(item)"
+          >
+            <span class="minimap-context-menu-check" aria-hidden="true">
+              {{ item.type === 'checkbox' ? (item.checked ? '✓' : '') : '' }}
+            </span>
+            <span class="minimap-context-menu-label">{{ item.label }}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1700,5 +2032,94 @@ watch(() => props.options, () => updateLayout())
 .minimap-overview canvas {
   display: block;
   cursor: pointer;
+}
+.minimap-performance {
+  position: absolute;
+  z-index: 4;
+  left: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: #b8c1cc;
+  background: rgba(18, 23, 29, 0.92);
+  border: 1px solid #303741;
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
+  font: 12px/1 system-ui, sans-serif;
+}
+.minimap-performance-label {
+  color: #7f8a99;
+  letter-spacing: 0;
+}
+.minimap-performance-value {
+  white-space: nowrap;
+}
+.minimap-context-menu {
+  position: absolute;
+  z-index: 8;
+  width: 232px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  color: #d8dee8;
+  background: rgba(17, 21, 27, 0.98);
+  border: 1px solid #303741;
+  border-radius: 8px;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
+  scrollbar-width: thin;
+  scrollbar-color: #2e3540 transparent;
+}
+.minimap-context-menu::-webkit-scrollbar {
+  width: 6px;
+}
+.minimap-context-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.minimap-context-menu::-webkit-scrollbar-thumb {
+  background-color: #2e3540;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.minimap-context-menu::-webkit-scrollbar-thumb:hover {
+  background-color: #3a4250;
+}
+.minimap-context-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  gap: 8px;
+  padding: 0 8px;
+  color: #cfd6df;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  text-align: left;
+  font: 13px/1 system-ui, sans-serif;
+}
+.minimap-context-menu-item:hover:not(:disabled) {
+  background: #232930;
+}
+.minimap-context-menu-item:disabled {
+  opacity: 0.38;
+}
+.minimap-context-menu-item.is-danger:not(:disabled) {
+  color: #ff8d8d;
+}
+.minimap-context-menu-check {
+  width: 14px;
+  color: #2bdd7f;
+  text-align: center;
+}
+.minimap-context-menu-label {
+  flex: 1;
+}
+.minimap-context-menu-separator {
+  height: 1px;
+  margin: 5px 4px;
+  background: #2a3038;
 }
 </style>
