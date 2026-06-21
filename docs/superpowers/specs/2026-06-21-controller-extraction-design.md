@@ -39,12 +39,11 @@ canvas 的 DOM 事件监听（`pointerdown`/`pointermove`/`pointerup`/`pointerle
 
 ### 切片顺序
 
-1. 根 controller + **core-controller**（本文档详细设计）—— 大家都依赖的地基。
-2. **selection-controller** —— 体量小但到处被引用，早抽出来简化后面。
-3. **edit-controller** —— 跟 DOM 耦合最少。
-4. **search-controller** —— 依赖 core + selection，到这一步都已就位。
-5. **context-menu-controller** —— 依赖 core/selection/edit 提供的能力标志位。
-6. **drag-controller** —— 最复杂，留到最后；完成后 `Minimap.vue` 里不再有任何指针事件处理逻辑，根 controller 的 DOM 回调全部指向真实 controller。
+6 个 controller 文件按复杂度分成 3 个实施切片。`core-controller` 有 2 个 rAF 循环（布局动画、viewport tween）+ DOM 挂载；`drag-controller` 有 3 个 rAF 循环 + 多阶段指针状态机，是最复杂的一块——这两个保持单独切片，分别放最前和最后。剩下的 `selection`/`edit`/`search`/`context-menu` 四个 controller 都没有 rAF 循环，逻辑基本是"同步算一下、调一个方法"，复杂度量级接近，而且彼此有自然的调用关系（search 调 selection 的 `select`，右键菜单的 `canUndo`/`canPaste` 来自 edit），打包成一个切片一起做，省得引入"先临时接 Vue 占位、再替换成真实 controller"的中间状态。
+
+1. **切片 1：根 controller + core-controller**（本文档详细设计）—— 大家都依赖的地基。
+2. **切片 2：selection-controller + edit-controller + search-controller + context-menu-controller** —— 四个文件一起建，一次 spec/plan/PR 周期。
+3. **切片 3：drag-controller** —— 最复杂，留到最后；完成后 `Minimap.vue` 里不再有任何指针事件处理逻辑，根 controller 的 DOM 回调全部指向真实 controller。
 
 每个切片独立 `npm test`/`npm run build` 通过；`test/minimap-shell.test.js`（挂载真实组件、派发真实 DOM 事件）作为贯穿全程的回归安全网，因为对外组件契约（props/emits/defineExpose）不变。
 

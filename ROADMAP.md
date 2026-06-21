@@ -51,13 +51,10 @@
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
 - **性能优化切片**：
   - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
-- **Controller 抽取切片**（`Minimap.vue` 已超 2000 行，目标是把编排/状态机逻辑迁到框架无关的 controller 模块，Vue 只保留 props/emits/模板绑定/生命周期挂载，方便以后换 React 或 Vue3；按依赖关系从地基到最复杂依次抽取）：
+- **Controller 抽取切片**（`Minimap.vue` 已超 2000 行，目标是把编排/状态机逻辑迁到框架无关的 controller 模块，Vue 只保留 props/emits/模板绑定/生命周期挂载，方便以后换 React 或 Vue3；6 个 controller 文件按复杂度合并成 3 个实施切片，core 和 drag 各有 rAF 循环/状态机单独做，剩下 4 个无循环的打包一起做；[design](docs/superpowers/specs/2026-06-21-controller-extraction-design.md)）：
   - [ ] 切片 1：根 controller + core-controller（canvas/resize/layout 状态/布局切换动画/viewport+tween/渲染调度降级）
-  - [ ] 切片 2：selection-controller（受控/非受控选中态）
-  - [ ] 切片 3：edit-controller（撤销/重做/剪贴板/复制/粘贴/删除/导入导出）
-  - [ ] 切片 4：search-controller（搜索/上一个/下一个/跳转）
-  - [ ] 切片 5：context-menu-controller（打开关闭/命中转 context/菜单项构建合并/动作执行）
-  - [ ] 切片 6：drag-controller（节点拖拽/滚动条拖拽/框选/空白平移/自动滚动/边缘平移/拖拽让位动画/资源拖放提交）
+  - [ ] 切片 2：selection-controller + edit-controller + search-controller + context-menu-controller（受控选中态/撤销重做剪贴板/搜索/右键菜单，四个文件一起做）
+  - [ ] 切片 3：drag-controller（节点拖拽/滚动条拖拽/框选/空白平移/自动滚动/边缘平移/拖拽让位动画/资源拖放提交）
 - **下一步**：推进 Controller 抽取切片 1（根 + core-controller），完成后依次推进切片 2-6；全部完成后再回到第五阶段切片 5/6，或继续性能优化后续切片（空间索引 / 静态层缓存 / 拖拽动态层合帧）。
 
 ## 目标
