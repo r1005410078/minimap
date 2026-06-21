@@ -232,6 +232,40 @@ The visual design should stay close to the existing dark workbench style:
 
 Rows must have stable dimensions and no layout shift on hover, selected, disabled, or focused states.
 
+## Implementation Slices
+
+Slice 1: pure resource-tree model and virtual window.
+
+- Add `resource-tree/model.js` for normalization, flattening, nested expansion, search filtering, and disabled row derivation.
+- Add `resource-tree/virtual-window.js` for fixed-height window calculation and fast-scroll overscan.
+- Cover 10000-row data with pure tests before touching Vue rendering.
+
+Slice 2: resource-tree selection model.
+
+- Add `resource-tree/selection.js` for click, Cmd/Ctrl toggle, Shift range, keyboard focus movement, and disabled row exclusion.
+- Keep folder focus and resource selection separate.
+- Cover mouse and keyboard transitions with pure tests.
+
+Slice 3: virtualized `ResourceTree.vue`.
+
+- Replace full DOM loops with fixed-height virtual rows.
+- Add nested folder expand/collapse, debounced search, fast-scroll overscan, stable row keys, selected/focused/disabled styles, and lazy drag payload construction.
+- Keep existing two-level resource data and single-resource drag behavior compatible.
+
+Slice 4: batch drop graph operation.
+
+- Add `drop-nodes` to `graph-operations.js`.
+- Preserve one undo/redo entry and one `change` emit for a batch.
+- Ensure created graph nodes store `data.resourceId`.
+- Keep legacy `drop-node` available, while resource drag uses `drop-nodes`.
+
+Slice 5: canvas and Minimap integration.
+
+- Pass `usedResourceIds` from `Minimap.vue` to `ResourceTree` when `options.disableUsedResources` is true.
+- Update `drag-controller` to parse `payload.resources`.
+- Emit compatible `node-drop` events with batch metadata.
+- Add integration tests for batch drag, disabled resources, and undo/redo.
+
 ## Testing Strategy
 
 Pure tests:
