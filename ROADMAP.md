@@ -14,9 +14,9 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：Controller 抽取切片 2 —— 见下方「Controller 抽取切片」（第五阶段切片 5/6 暂缓，等 controller 抽取完成后再回来做）
-- **当前阶段 Spec**：[docs/superpowers/specs/2026-06-21-controller-extraction-slice-2-design.md](docs/superpowers/specs/2026-06-21-controller-extraction-slice-2-design.md)
-- **当前阶段计划**：待计划产出后补充
+- **当前阶段**：Controller 抽取切片 3 —— drag-controller（第五阶段切片 5/6 暂缓，等 controller 抽取完成后再回来做）
+- **当前阶段 Spec**：待头脑风暴产出后补充
+- **当前阶段计划**：待头脑风暴产出后补充
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -53,9 +53,9 @@
   - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
 - **Controller 抽取切片**（`Minimap.vue` 已超 2000 行，目标是把编排/状态机逻辑迁到框架无关的 controller 模块，Vue 只保留 props/emits/模板绑定/生命周期挂载，方便以后换 React 或 Vue3；6 个 controller 文件按复杂度合并成 3 个实施切片，core 和 drag 各有 rAF 循环/状态机单独做，剩下 4 个无循环的打包一起做；[design](docs/superpowers/specs/2026-06-21-controller-extraction-design.md)）：
   - [x] 切片 1：根 controller + core-controller（canvas/resize/layout 状态/布局切换动画/viewport+tween/渲染调度降级；新增 `core-controller.js`/`minimap-controller.js` + 测试；`Minimap.vue` 改为创建并挂载 controller，`onMounted`/`onUnmounted`/`defineExpose` 的相机方法全部转发给 controller，拖拽/选择/搜索/撤销重做/右键菜单逻辑本切片不动；分组滚动条拖拽预览保留原有"先直接改本地、松手才提交"行为，未跟着表头展开/滚轮一起改成 `controller.scrollGroup`；[design](docs/superpowers/specs/2026-06-21-controller-extraction-design.md)，[plan](docs/superpowers/plans/2026-06-21-controller-extraction-slice-1.md)，subagent-driven-development 4 个任务全部 spec+quality 通过（含一轮修复：`setGroupExpanded` 的 id 嗅探 hack 还原成计划的简单形式、共享测试 helper `stubAnimationFrame` 还原原语义），`npm test` 392 全过，`npm run build` 通过，dev server 真实浏览器手动验收通过（初始渲染、平移、滚轮缩放、搜索跳转+分组展开滚动均正常，控制台无报错））
-  - [ ] 切片 2：selection-controller + edit-controller + search-controller + context-menu-controller（受控选中态/撤销重做剪贴板/搜索/右键菜单，四个文件一起做）
+  - [x] 切片 2：selection-controller + edit-controller + search-controller + context-menu-controller（受控选中态/撤销重做剪贴板/搜索/右键菜单，四个文件一起做；`edit-controller` 拥有 `operationManager` 单例并暴露 `applyOperation`/供切片 3 drag-controller 复用同一条撤销栈，本切片里 `Minimap.vue` 尚未迁移的拖拽换位/跨父级移动/资源拖入也改接这个方法；`context-menu-controller` 自己管理菜单开关时的 document 外部点击监听；[design](docs/superpowers/specs/2026-06-21-controller-extraction-slice-2-design.md)，[plan](docs/superpowers/plans/2026-06-21-controller-extraction-slice-2.md)，`npm test` 全过，`npm run build` 通过）
   - [ ] 切片 3：drag-controller（节点拖拽/滚动条拖拽/框选/空白平移/自动滚动/边缘平移/拖拽让位动画/资源拖放提交）
-- **下一步**：推进 Controller 抽取切片 2（selection + edit + search + context-menu controller），完成后推进切片 3（drag-controller）；全部完成后再回到第五阶段切片 5/6，或继续性能优化后续切片（空间索引 / 静态层缓存 / 拖拽动态层合帧）。
+- **下一步**：推进 Controller 抽取切片 3（drag-controller，节点拖拽/滚动条拖拽/框选/空白平移/自动滚动/边缘平移/拖拽让位动画/资源拖放提交；完成后 `Minimap.vue` 里不再有任何指针事件处理逻辑，`emitChange` 本地函数也可以删掉，根 controller 的 DOM 回调全部指向真实 controller）；全部完成后再回到第五阶段切片 5/6，或继续性能优化后续切片（空间索引 / 静态层缓存 / 拖拽动态层合帧）。
 
 ## 目标
 
