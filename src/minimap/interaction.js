@@ -5,6 +5,8 @@
 
 import { GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from './layout.js'
 
+const SCROLLBAR_WIDTH = 8
+
 function containsPoint(rect, point) {
   return (
     point.x >= rect.x &&
@@ -350,4 +352,32 @@ export function edgePanVelocity(screenPoint, containerWidth, containerHeight, ed
     x: axisVelocity(screenPoint.x, containerWidth),
     y: axisVelocity(screenPoint.y, containerHeight),
   }
+}
+
+export function scrollbarMetrics(group) {
+  const trackHeight = group.height - GROUP.header
+  const thumbHeight = (group.height / group.contentHeight) * trackHeight
+  const maxScroll = Math.max(0, group.contentHeight - group.height)
+  const maxThumbOffset = Math.max(1, trackHeight - thumbHeight)
+  const thumbOffset = maxScroll > 0 ? (group.scrollTop / maxScroll) * maxThumbOffset : 0
+  return {
+    trackX: group.x + group.width - SCROLLBAR_WIDTH,
+    trackY: group.y + GROUP.header,
+    trackHeight,
+    thumbHeight,
+    thumbY: group.y + GROUP.header + thumbOffset,
+    maxScroll,
+    maxThumbOffset,
+  }
+}
+
+export function hitScrollbarThumb(layout, point) {
+  for (const group of layout.groups) {
+    if (!group.overflowY) continue
+    const metrics = scrollbarMetrics(group)
+    const withinX = point.x >= metrics.trackX && point.x <= metrics.trackX + SCROLLBAR_WIDTH
+    const withinY = point.y >= metrics.thumbY && point.y <= metrics.thumbY + metrics.thumbHeight
+    if (withinX && withinY) return { group, metrics }
+  }
+  return null
 }

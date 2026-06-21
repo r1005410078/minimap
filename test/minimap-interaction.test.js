@@ -11,6 +11,8 @@ import {
   groupInsertIndexToParentIndex,
   resolveDropTarget,
   edgePanVelocity,
+  scrollbarMetrics,
+  hitScrollbarThumb,
 } from '../src/minimap/interaction.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
@@ -522,4 +524,64 @@ test('edgePanVelocity scales toward maxSpeed at the very edge', () => {
   const nearEdge = edgePanVelocity({ x: 20, y: 300 }, 800, 600, 24, 12)
   assert.ok(Math.abs(atEdge.x) > Math.abs(nearEdge.x))
   assert.ok(Math.abs(atEdge.x) <= 12)
+})
+
+function scrollableGroup(overrides = {}) {
+  return {
+    id: 'g1',
+    x: 100,
+    y: 50,
+    width: 200,
+    height: 150,
+    contentHeight: 400,
+    scrollTop: 0,
+    overflowY: true,
+    ...overrides,
+  }
+}
+
+test('scrollbarMetrics computes the track and thumb rect from group geometry', () => {
+  const group = scrollableGroup()
+
+  const metrics = scrollbarMetrics(group)
+
+  assert.equal(metrics.trackX, 292) // x + width - SCROLLBAR_WIDTH(8) = 100+200-8
+  assert.equal(metrics.trackY, 78) // y + GROUP.header(28)
+  assert.equal(metrics.trackHeight, 122) // height - GROUP.header
+  assert.equal(metrics.maxScroll, 250) // contentHeight - height
+  assert.ok(Math.abs(metrics.thumbHeight - 45.75) < 0.001) // (height/contentHeight)*trackHeight
+  assert.ok(Math.abs(metrics.maxThumbOffset - 76.25) < 0.001) // trackHeight - thumbHeight
+  assert.equal(metrics.thumbY, 78) // scrollTop 0 -> no offset
+})
+
+test('scrollbarMetrics offsets the thumb down as scrollTop increases', () => {
+  const group = scrollableGroup({ scrollTop: 125 }) // half of maxScroll(250)
+
+  const metrics = scrollbarMetrics(group)
+
+  assert.ok(Math.abs(metrics.thumbY - (78 + metrics.maxThumbOffset / 2)) < 0.001)
+})
+
+test('hitScrollbarThumb finds the group whose thumb rect contains the point', () => {
+  const group = scrollableGroup()
+  const layout = { groups: [group] }
+  const metrics = scrollbarMetrics(group)
+  const point = { x: metrics.trackX + 1, y: metrics.thumbY + 1 }
+
+  const hit = hitScrollbarThumb(layout, point)
+
+  assert.equal(hit.group, group)
+  assert.deepEqual(hit.metrics, metrics)
+})
+
+test('hitScrollbarThumb returns null for a point outside every track, and skips non-overflowing groups', () => {
+  const overflowing = scrollableGroup({ id: 'g1' })
+  const notOverflowing = scrollableGroup({ id: 'g2', overflowY: false })
+  const layout = { groups: [notOverflowing, overflowing] }
+
+  assert.equal(hitScrollbarThumb(layout, { x: 0, y: 0 }), null)
+
+  const metrics = scrollbarMetrics(overflowing)
+  const hit = hitScrollbarThumb(layout, { x: metrics.trackX + 1, y: metrics.thumbY + 1 })
+  assert.equal(hit.group, overflowing)
 })
