@@ -18,7 +18,7 @@
 
 ## 范围内
 
-- 新建 `src/minimap/render/spatial-index.js` + `test/minimap-spatial-index.test.js`。
+- 新建 `src/minimap/interaction/spatial-index.js` + `test/minimap-spatial-index.test.js`（按 [architecture.md](../../architecture.md) 的分层放在交互几何层：它没有渲染/Vue 依赖，唯一的两个调用方 `hitTest`/`idsInSelectionRect` 都在 `interaction/` 里，不属于 `render/` 负责的 canvas 绘制）。
 - 修改 `src/minimap/interaction/interaction.js`：`hitTest` 内部改用空间索引查询。
 - 修改 `src/minimap/interaction/selection.js`：`idsInSelectionRect`/`visibleSelectableItems` 改成先查询世界坐标空间索引、再展开命中分组的子项。
 - 修改 `src/minimap/coords/coords.js`：新增 `screenRectToWorld(rect, viewport)`，是已有 `screenToWorld(point, viewport)` 的矩形版本，供 `idsInSelectionRect` 把屏幕坐标的框选矩形一次性转换成世界坐标。
