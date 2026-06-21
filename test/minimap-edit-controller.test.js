@@ -52,7 +52,6 @@ test('copySelection expands a selected collapsed-group id into its real child id
   const result = controller.copySelection()
 
   assert.equal(result.applied, true)
-  assert.deepEqual(result.operation.payload.expandedIds, ['cluster-1', 'cluster-2'])
   assert.deepEqual(emitted.copy[0].capturedIds.sort(), ['cluster-1', 'cluster-2'].sort())
 })
 
@@ -191,7 +190,7 @@ test('pasteInto inserts the clipboard snapshot under the target parent, updates 
   assert.ok(graph.nodes.get('grid-tie').children.includes(pastedId))
 })
 
-test('paste() defaults the target to the parent of the first selected id', () => {
+test('paste() defaults the target to the selected id itself when it is not a collapsed group', () => {
   clearClipboard()
   const graph = createDemoGraph()
   const { deps: copyDeps } = createDeps(graph, { getSelectedIds: () => ['feeder-1'] })
@@ -203,7 +202,7 @@ test('paste() defaults the target to the parent of the first selected id', () =>
   const result = controller.paste()
 
   assert.equal(result.applied, true)
-  assert.equal(result.operation.payload.targetParentId, 'grid-tie')
+  assert.equal(result.operation.payload.targetParentId, 'feeder-2')
 })
 
 test('exportGraph serializes the graph and emits export', () => {

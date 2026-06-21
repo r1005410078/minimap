@@ -103,11 +103,7 @@ export function createEditController(deps) {
 
     const snapshot = captureSubtreeSnapshot(graph, expandedIds)
     setClipboard(snapshot)
-    const capturedPayload = {
-      ids,
-      expandedIds,
-      capturedIds: snapshot.nodes.map((node) => node.id),
-    }
+    const capturedPayload = { ids, capturedIds: snapshot.nodes.map((node) => node.id) }
     deps.emitCopy(capturedPayload)
     return {
       applied: true,
@@ -122,14 +118,11 @@ export function createEditController(deps) {
 
   function pasteTargetId() {
     const id = deps.getSelectedIds()[0] ?? null
-    if (!id) return id
     const layout = deps.getLayout()
-    if (layout) {
-      const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
-      const group = groupsById.get(id)
-      return group ? group.parentId : id
-    }
-    return deps.getGraph().nodes.get(id)?.parentId ?? id
+    if (!id || !layout) return id
+    const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
+    const group = groupsById.get(id)
+    return group ? group.parentId : id
   }
 
   function nextPasteId(sourceId, usedIds) {
