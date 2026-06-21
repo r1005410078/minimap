@@ -12,8 +12,7 @@ const contexts = stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 const LAYOUT_OPTS = { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 }
 
@@ -105,7 +104,7 @@ test('clicking a group header toggles expanded and does not emit select', () => 
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const headerPoint = { x: group.x + group.width / 2, y: group.y + GROUP.header / 2 }
   dispatchPointerDown(wrapper, headerPoint)
@@ -119,7 +118,7 @@ test('clicking a child item inside a group without dragging selects the child', 
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const itemPoint = firstItemCenter(group)
   dispatchPointerDown(wrapper, itemPoint)
@@ -133,7 +132,7 @@ test('clicking blank space inside a group box selects the group itself', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const bodyPoint = { x: group.x + 2, y: group.y + GROUP.header + 2 }
   dispatchPointerDown(wrapper, bodyPoint)
@@ -146,7 +145,7 @@ test('a small movement after pressing on an item does not trigger reorder', () =
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const heap = graph.nodes.get('heap-1')
   const childrenBefore = [...heap.children]
 
@@ -165,7 +164,7 @@ test('dragging an item past the threshold reorders the group children in the gra
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const heap = graph.nodes.get('heap-1')
 
   const firstItemPoint = firstItemCenter(group)
@@ -194,7 +193,7 @@ test('readonly prevents dragging a group item from reordering graph children', (
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph, readonly: true } })
+  const wrapper = mountMinimap( { propsData: { graph, readonly: true } })
   const heap = graph.nodes.get('heap-1')
   const before = heap.children.slice()
 
@@ -217,7 +216,7 @@ test('beforeGroupReorder can block group item reordering', () => {
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
   const calls = []
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph,
       beforeGroupReorder(payload) {
@@ -251,7 +250,7 @@ test('dragging near the bottom edge of an overflowing group auto-scrolls it', ()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
   assert.equal(group.overflowY, true)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   const firstItemPoint = firstItemCenter(group)
@@ -273,7 +272,7 @@ test('auto-scroll restarts when the pointer returns to an edge after leaving it'
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   const firstItemPoint = firstItemCenter(group)
@@ -299,7 +298,7 @@ test('releasing after auto-scroll reorders using the scrolled insertion index', 
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const heap = graph.nodes.get('heap-1')
 
   const firstItemPoint = firstItemCenter(group)
@@ -320,7 +319,7 @@ test('pointercancel cancels an active group drag without selecting or reordering
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const heap = graph.nodes.get('heap-1')
   const childrenBefore = [...heap.children]
   const cancelledBefore = frames.cancelled.length
@@ -344,7 +343,7 @@ test('lost pointer capture cancels an active group drag without selecting or reo
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const heap = graph.nodes.get('heap-1')
   const childrenBefore = [...heap.children]
 
@@ -366,7 +365,7 @@ test('scrolling the wheel inside an overflowing group shifts the visible window 
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   const insidePoint = { x: group.x + group.width / 2, y: group.y + group.height / 2 }
@@ -387,7 +386,7 @@ test('dragging the scrollbar thumb scrolls an overflowing group', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const start = scrollbarThumbCenter(group)
   const end = scrollbarThumbCenterAtBottom(group)
@@ -406,7 +405,7 @@ test('controlled groupStates does not internally persist wheel scrolling', () =>
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, groupStates: { [group.id]: { scrollTop: 0 } } },
   })
   const ctx = contexts.at(-1)
@@ -426,7 +425,7 @@ test('wheel at a scroll boundary does not offset content', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   const insidePoint = { x: group.x + group.width / 2, y: group.y + group.height / 2 }
@@ -443,7 +442,7 @@ test('pointercancel during scrollbar drag at a boundary does not leave content o
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   const start = scrollbarThumbCenter(group)
@@ -462,7 +461,7 @@ test('hovering over the scrollbar thumb redraws it with the hover color', () => 
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   dispatchPointerMove(wrapper, scrollbarThumbCenter(group))
@@ -479,7 +478,7 @@ test('controlled groupStates resets scrollbar drag changes on pointercancel', ()
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, groupStates: { [group.id]: { scrollTop: 0 } } },
   })
   const ctx = contexts.at(-1)
@@ -502,7 +501,7 @@ test('uncontrolled scrollbar drag cancel restores scroll and clears hover', () =
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
 
   const start = scrollbarThumbCenter(group)
@@ -523,7 +522,7 @@ test('groupStates prop puts the component in controlled mode', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, groupStates: { [group.id]: { expanded: false } } },
   })
 
@@ -539,7 +538,7 @@ test('groupStates prop puts the component in controlled mode', () => {
 
 test('options.groupThreshold is passed through to the layout engine', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, options: { groupThreshold: 2 } } })
+  const wrapper = mountMinimap( { propsData: { graph, options: { groupThreshold: 2 } } })
   const ctx = contexts.at(-1)
 
   const labels = ctx.methodsOf('fillText').map((c) => c.args[0])
@@ -552,7 +551,7 @@ test('dropping a resource onto a selected child inside a group splits it out of 
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const itemPoint = firstItemCenter(group)
   dispatchPointerDown(wrapper, itemPoint)

@@ -11,8 +11,7 @@ const contexts = stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 function callsSinceLastClear(ctx) {
   const lastClear = ctx.calls.map((call) => call.method).lastIndexOf('clearRect')
@@ -106,7 +105,7 @@ function scrollbarThumbCenter(group) {
 test('viewport prop renders the graph with the supplied transform', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 100, y: 50, scale: 2 } } })
+  const wrapper = mountMinimap( { propsData: { graph, viewport: { x: 100, y: 50, scale: 2 } } })
   const ctx = contexts.at(-1)
   const rect = renderedRectForLabel(ctx, 'Grid Tie')
   const world = layout.nodes.get('grid-tie')
@@ -120,7 +119,7 @@ test('viewport prop renders the graph with the supplied transform', () => {
 
 test('changing viewport prop re-renders without recomputing graph data', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const wrapper = mountMinimap( { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
   const ctx = contexts.at(-1)
   const before = renderedRectForLabel(ctx, 'Grid Tie')
   const scheduledFrameCount = frames.scheduled.length
@@ -140,7 +139,7 @@ test('changing viewport prop re-renders without recomputing graph data', async (
 
 test('wheel zoom emits viewport-change and keeps the cursor world point stable', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const point = { x: 300, y: 240 }
 
   const event = dispatchWheel(wrapper, point, -200)
@@ -155,7 +154,7 @@ test('wheel zoom emits viewport-change and keeps the cursor world point stable',
 
 test('wheel zoom clamps scale using options bounds', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, options: { minScale: 0.75, maxScale: 1.2, zoomSensitivity: 0.01 } },
   })
 
@@ -169,7 +168,7 @@ test('wheel zoom clamps scale using options bounds', () => {
 test('wheel inside an overflowing group scrolls the group instead of zooming the canvas', () => {
   const graph = createDemoGraph()
   const { x, y } = groupCenterForParent('heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchWheel(wrapper, { x, y }, 200)
 
@@ -180,7 +179,7 @@ test('wheel inside an overflowing group scrolls the group instead of zooming the
 
 test('controlled viewport wheel zoom emits but does not persist without prop update', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const wrapper = mountMinimap( { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
   const ctx = contexts.at(-1)
   const before = renderedRectForLabel(ctx, 'Grid Tie')
 
@@ -195,7 +194,7 @@ test('controlled viewport wheel zoom emits but does not persist without prop upd
 test('wheel during active scrollbar drag does not emit viewport-change', () => {
   const graph = createDemoGraph()
   const group = groupForParent('heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchPointerDown(wrapper, scrollbarThumbCenter(group))
   dispatchWheel(wrapper, { x: 20, y: 20 }, -200)
@@ -207,7 +206,7 @@ test('wheel during active scrollbar drag does not emit viewport-change', () => {
 test('wheel during active group item drag does not emit viewport-change', () => {
   const graph = createDemoGraph()
   const group = groupForParent('heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const start = firstItemCenter(group)
 
   dispatchPointerDown(wrapper, start)
@@ -220,7 +219,7 @@ test('wheel during active group item drag does not emit viewport-change', () => 
 
 test('dragging blank space pans the viewport and emits viewport-change', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
   dispatchPointerMove(wrapper, { x: -9900, y: -10040 })
@@ -233,7 +232,7 @@ test('dragging blank space pans the viewport and emits viewport-change', () => {
 
 test('controlled viewport pan emits but does not persist without prop update', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const wrapper = mountMinimap( { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
   const ctx = contexts.at(-1)
   const before = renderedRectForLabel(ctx, 'Grid Tie')
 
@@ -249,7 +248,7 @@ test('controlled viewport pan emits but does not persist without prop update', (
 
 test('panning preserves custom viewport scale bounds', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, viewport: { x: 0, y: 0, scale: 5 }, options: { minScale: 0.1, maxScale: 10 } },
   })
 
@@ -263,7 +262,7 @@ test('panning preserves custom viewport scale bounds', () => {
 
 test('pointercancel stops an active blank pan', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchPointerDown(wrapper, { x: -10000, y: -10000 })
   dispatchPointerMove(wrapper, { x: -9950, y: -9950 })
@@ -277,7 +276,7 @@ test('pointercancel stops an active blank pan', () => {
 
 test('wheel zoom settles active layout animation before applying viewport', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, layoutDirection: 'horizontal' } })
+  const wrapper = mountMinimap( { propsData: { graph, layoutDirection: 'horizontal' } })
 
   await wrapper.setProps({ layoutDirection: 'vertical' })
   await wrapper.vm.$nextTick()
@@ -295,7 +294,7 @@ test('wheel zoom settles active layout animation before applying viewport', asyn
 
 test('blank pan settles active layout animation before applying viewport', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, layoutDirection: 'horizontal' } })
+  const wrapper = mountMinimap( { propsData: { graph, layoutDirection: 'horizontal' } })
 
   await wrapper.setProps({ layoutDirection: 'vertical' })
   await wrapper.vm.$nextTick()
@@ -317,7 +316,7 @@ test('dragging from a node does not pan the viewport in phase 3', () => {
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
   const point = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchPointerDown(wrapper, point)
   dispatchPointerMove(wrapper, { x: point.x + 80, y: point.y + 20 })

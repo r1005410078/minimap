@@ -10,8 +10,7 @@ stubElementSize(800, 600)
 stubCanvasContext()
 stubResizeObserver()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 function dispatchPointerDown(wrapper, point) {
   const canvasEl = wrapper.find('canvas').element
@@ -43,7 +42,7 @@ function nodeCenter(layout, nodeId) {
 
 test('dropping with no selection adds a child under graph.rootIds[0]', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const sizeBefore = graph.nodes.size
 
   dispatchDrop(wrapper, { id: 'solar-array', label: 'Solar Array' }, { x: 0, y: -100000 })
@@ -68,7 +67,7 @@ test('dropping with no selection adds a child under graph.rootIds[0]', () => {
 test('dropping onto a plain node adds the resource as that node child', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const targetPoint = nodeCenter(layout, 'feeder-2')
 
   dispatchDrop(wrapper, { id: 'battery-bank', label: 'Battery Bank' }, targetPoint)
@@ -86,7 +85,7 @@ test('dropping onto a plain node adds the resource as that node child', () => {
 test('dropping onto a plain node takes precedence over the current selection', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
-  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['grid-tie'] } })
+  const wrapper = mountMinimap( { propsData: { graph, selectedIds: ['grid-tie'] } })
   const targetPoint = nodeCenter(layout, 'feeder-2')
 
   dispatchDrop(wrapper, { id: 'pcs-device', label: 'PCS Device' }, targetPoint)
@@ -101,7 +100,7 @@ test('dropping onto a plain node takes precedence over the current selection', (
 test('dropping with a selection adds a child under the selected node, at the dropped position', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const gridTieRect = layout.nodes.get('grid-tie')
   const gridTiePoint = {
@@ -129,7 +128,7 @@ test('dropping with a selection adds a child under the selected node, at the dro
 
 test('dropping onto a folded group appends the new node at the end', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['heap-1'] } })
+  const wrapper = mountMinimap( { propsData: { graph, selectedIds: ['heap-1'] } })
   const heap = graph.nodes.get('heap-1')
   const sizeBefore = heap.children.length
 
@@ -144,7 +143,7 @@ test('dropping onto a folded group appends the new node at the end', () => {
 
 test('readonly prevents dropping a resource into the graph', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, readonly: true } })
+  const wrapper = mountMinimap( { propsData: { graph, readonly: true } })
   const beforeSize = graph.nodes.size
   const beforeChildren = graph.nodes.get('energy-root').children.slice()
 
@@ -160,7 +159,7 @@ test('readonly prevents dropping a resource into the graph', () => {
 test('beforeNodeDrop can block the default drop mutation', () => {
   const graph = createDemoGraph()
   const calls = []
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph,
       beforeNodeDrop(payload) {

@@ -9,6 +9,7 @@ import {
   clampScale,
   fitViewportToBounds,
   centerViewportOn,
+  centerViewportOnBounds,
   tweenViewport,
 } from '../coords/viewport.js'
 import { createLayoutTransition, layoutAt, resolveAnchorCenter } from '../graph/layout-transition.js'
@@ -209,7 +210,17 @@ export function createCoreController(deps) {
 
     const startLayout = lastRenderedLayout || settledLayout || layout
     const startViewport = lastRenderedViewport || getViewport()
-    const nextViewport = targetViewportFor(startLayout, nextLayout, preserveAnchor)
+    let nextViewport = targetViewportFor(startLayout, nextLayout, preserveAnchor)
+    const isInitialLayout = !settledLayout && !lastRenderedLayout
+    if (isInitialLayout && !isViewportControlled() && !currentOptions().disableInitialCenter) {
+      nextViewport = centerViewportOnBounds(
+        nextLayout.bounds,
+        cssWidth,
+        cssHeight,
+        1,
+        viewportOptions(currentOptions()),
+      )
+    }
     const canAnimate = animate && typeof requestAnimationFrame === 'function' && typeof cancelAnimationFrame === 'function'
 
     cancelAnimation()

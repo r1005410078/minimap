@@ -5,6 +5,7 @@ import { easeOutCubic } from '../src/minimap/graph/layout-transition.js'
 import {
   DEFAULT_VIEWPORT,
   centerViewportOn,
+  centerViewportOnBounds,
   clampScale,
   fitViewportToBounds,
   normalizeViewport,
@@ -122,4 +123,15 @@ test('fitViewportToBounds falls back to DEFAULT_VIEWPORT for degenerate bounds',
 test('centerViewportOn pans to put worldPoint at screen center and preserves scale', () => {
   const result = centerViewportOn({ x: 50, y: 30 }, { x: 10, y: 20, scale: 2 }, 800, 600)
   assert.deepEqual(result, { x: 300, y: 240, scale: 2 })
+})
+
+test('centerViewportOnBounds centers layout bounds at a fixed scale', () => {
+  const bounds = { minX: 100, maxX: 300, minY: 50, maxY: 250 }
+  const result = centerViewportOnBounds(bounds, 800, 600, 1, null)
+  assert.deepEqual(result, centerViewportOn({ x: 200, y: 150 }, { x: 0, y: 0, scale: 1 }, 800, 600))
+})
+
+test('centerViewportOnBounds falls back to DEFAULT_VIEWPORT for degenerate bounds', () => {
+  const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+  assert.deepEqual(centerViewportOnBounds(bounds, 800, 600, 1, null), DEFAULT_VIEWPORT)
 })

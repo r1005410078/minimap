@@ -12,8 +12,7 @@ const contexts = stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 const LAYOUT_OPTS = { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 }
 
@@ -77,7 +76,7 @@ function nodePoint(layout, nodeId, offset = {}) {
 test('dragging a plain node onto a non-sibling plain node makes it the new parent', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const to = nodeCenter(layout, 'cluster-25')
@@ -100,10 +99,38 @@ test('dragging a plain node onto a non-sibling plain node makes it the new paren
   wrapper.destroy()
 })
 
+test('multi-selected nodes drag together and the ghost shows the selected count', async () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mountMinimap( { propsData: { graph } })
+
+  wrapper.vm.select(['feeder-1', 'feeder-2', 'feeder-3'])
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodeCenter(layout, 'cluster-25')
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  await wrapper.vm.$nextTick()
+
+  const ctx = contexts.at(-1)
+  assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === '3'))
+
+  dispatchPointerUp(wrapper, to)
+
+  for (const id of ['feeder-1', 'feeder-2', 'feeder-3']) {
+    assert.equal(graph.nodes.get(id).parentId, 'cluster-25')
+  }
+  assert.equal(wrapper.emitted('node-move').length, 1)
+  assert.deepEqual(wrapper.emitted('node-move')[0][0].nodeIds, ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'move-nodes')
+
+  wrapper.destroy()
+})
+
 test('dragging a sibling onto the upper half of another sibling inserts before it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-3')
   const to = nodePoint(layout, 'feeder-2', { y: 2 })
@@ -123,7 +150,7 @@ test('dragging a sibling onto the upper half of another sibling inserts before i
 test('dragging a sibling onto the lower half of another sibling inserts after it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const feeder2 = layout.nodes.get('feeder-2')
@@ -145,7 +172,7 @@ test('vertical layout sibling reorder uses left and right halves of the target n
   const graph = createDemoGraph()
   const verticalOpts = { ...LAYOUT_OPTS, direction: 'vertical' }
   const layout = computeLayout(graph, verticalOpts)
-  const wrapper = mount(Minimap, { propsData: { graph, layoutDirection: 'vertical' } })
+  const wrapper = mountMinimap( { propsData: { graph, layoutDirection: 'vertical' } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const feeder2 = layout.nodes.get('feeder-2')
@@ -167,7 +194,7 @@ test('dragging a node into a different group than its origin moves it under that
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const targetGroup = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const to = firstItemCenter(targetGroup)
@@ -186,7 +213,7 @@ test('dragging a node into a different group than its origin moves it under that
 test('dragging an ungrouped child onto its own real parent reorders within that parent', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const to = nodeCenter(layout, 'grid-tie')
@@ -210,7 +237,7 @@ test('dragging an ungrouped child onto its own real parent reorders within that 
 test('dragging a node onto its own descendant does not move it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'grid-tie')
   const to = nodeCenter(layout, 'feeder-1')
@@ -228,7 +255,7 @@ test('dragging a node onto its own descendant does not move it', () => {
 test('readonly and beforeNodeMove block cross-parent moves', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const readonlyWrapper = mount(Minimap, { propsData: { graph, readonly: true } })
+  const readonlyWrapper = mountMinimap( { propsData: { graph, readonly: true } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const to = nodeCenter(layout, 'feeder-2')
@@ -241,7 +268,7 @@ test('readonly and beforeNodeMove block cross-parent moves', () => {
   readonlyWrapper.destroy()
 
   const blockedGraph = createDemoGraph()
-  const blockedWrapper = mount(Minimap, {
+  const blockedWrapper = mountMinimap( {
     propsData: { graph: blockedGraph, beforeNodeMove: () => false },
   })
   const blockedFrom = nodeCenter(layout, 'feeder-1')
@@ -258,7 +285,7 @@ test('readonly and beforeNodeMove block cross-parent moves', () => {
 test('blocked cross-parent moves clear the plain-node drop target highlight', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, beforeNodeMove: () => false },
   })
 
@@ -277,7 +304,7 @@ test('blocked cross-parent moves clear the plain-node drop target highlight', ()
 test('clicking a plain node without moving still selects it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const point = nodeCenter(layout, 'feeder-1')
   dispatchPointerDown(wrapper, point)
@@ -330,7 +357,7 @@ function attachLineDrawn(ctx, theme) {
 test('plain node drop target shows an attach preview and can be dropped on', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const to = nodeCenter(layout, 'cluster-25')
@@ -358,7 +385,7 @@ test('plain node drop target shows an attach preview and can be dropped on', () 
 test('dragging an already-selected node shows the live attach preview, not the stale selection relation', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   // feeder-1 is selected before the drag starts (e.g. from an earlier click), so
   // buildSelectionRelations would normally highlight its parent (grid-tie) and dim
@@ -386,7 +413,7 @@ test('dragging an already-selected node shows the live attach preview, not the s
 test('dragging near the canvas edge pans the viewport', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   dispatchPointerDown(wrapper, from)
@@ -408,7 +435,7 @@ test('dragging near the canvas edge pans the viewport', () => {
 test('dragging near an offset canvas edge uses canvas-local coordinates for edge pan', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const canvasEl = wrapper.find('canvas').element
   const offset = { left: 360, top: 24 }
   canvasEl.getBoundingClientRect = () => ({
@@ -437,7 +464,7 @@ test('dragging near an offset canvas edge uses canvas-local coordinates for edge
 test('dragging a sibling into the gap between two other siblings shows an insert preview and inserts it between them', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const feeder2 = layout.nodes.get('feeder-2')
@@ -461,7 +488,7 @@ test('dragging a sibling into the gap between two other siblings shows an insert
 test('dragging a sibling onto the leading edge of the first remaining sibling inserts before it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-2')
   const to = nodePoint(layout, 'feeder-1', { y: 2 })
@@ -478,7 +505,7 @@ test('dragging a sibling onto the leading edge of the first remaining sibling in
 test('dragging a sibling onto the trailing edge of the last remaining sibling inserts after it', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-2')
   const feeder3 = layout.nodes.get('feeder-3')
@@ -496,7 +523,7 @@ test('dragging a sibling onto the trailing edge of the last remaining sibling in
 test('dragging a sibling onto the middle of another sibling shows an attach preview, not a highlight', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = nodeCenter(layout, 'feeder-1')
   const to = nodeCenter(layout, 'feeder-2')
@@ -521,7 +548,7 @@ test('dragging a node within a group does not draw an attach preview connector l
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const targetGroup = layout.groups.find((g) => g.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const from = itemCenterAt(targetGroup, 0)
   const to = itemCenterAt(targetGroup, 1)

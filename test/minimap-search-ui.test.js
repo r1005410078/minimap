@@ -12,8 +12,7 @@ stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 function settle() {
   frames.runNext(0)
@@ -26,7 +25,7 @@ function referenceLayout() {
 
 test('search jumps to and selects the first match', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const result = wrapper.vm.search('feeder')
   settle()
@@ -41,7 +40,7 @@ test('search jumps to and selects the first match', () => {
 
 test('search reveals a grouped child scrolled out of a collapsed group', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.search('cluster-24')
   settle()
@@ -58,7 +57,7 @@ test('search reveals a grouped child scrolled out of a collapsed group', () => {
 
 test('search with empty keyword does not jump or select, emits empty matches', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const result = wrapper.vm.search('')
   settle()
@@ -71,7 +70,7 @@ test('search with empty keyword does not jump or select, emits empty matches', (
 
 test('search with no matches emits empty matches without jumping', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const result = wrapper.vm.search('zzz-nope')
   settle()
@@ -83,7 +82,7 @@ test('search with no matches emits empty matches without jumping', () => {
 
 test('searchNext/searchPrevious cycle through matches and wrap around', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.search('feeder')
   settle()
@@ -109,7 +108,7 @@ test('searchNext/searchPrevious cycle through matches and wrap around', () => {
 
 test('searchNext/searchPrevious are no-ops without prior matches', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.searchNext()
   wrapper.vm.searchPrevious()
@@ -122,7 +121,7 @@ test('searchNext/searchPrevious are no-ops without prior matches', () => {
 
 test('search box renders by default and reflects match count', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   await wrapper.find('.minimap-search-input').setValue('feeder')
   settle()
@@ -134,7 +133,7 @@ test('search box renders by default and reflects match count', async () => {
 
 test('Enter key in the search input advances to the next match', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   await wrapper.find('.minimap-search-input').setValue('feeder')
   settle()
@@ -149,7 +148,7 @@ test('Enter key in the search input advances to the next match', async () => {
 
 test('next/previous buttons are disabled with no matches and enabled once there are', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   assert.equal(wrapper.find('.minimap-search-prev').attributes('disabled'), 'disabled')
   assert.equal(wrapper.find('.minimap-search-next').attributes('disabled'), 'disabled')
@@ -165,7 +164,7 @@ test('next/previous buttons are disabled with no matches and enabled once there 
 
 test('clicking the next button advances the result and re-centers', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   await wrapper.find('.minimap-search-input').setValue('feeder')
   settle()
@@ -178,7 +177,7 @@ test('clicking the next button advances the result and re-centers', async () => 
 
 test('options.enableSearch false hides the search box but methods still work', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, options: { enableSearch: false } } })
+  const wrapper = mountMinimap( { propsData: { graph, options: { enableSearch: false } } })
 
   assert.equal(wrapper.find('.minimap-search').exists(), false)
   wrapper.vm.search('feeder')
@@ -189,7 +188,7 @@ test('options.enableSearch false hides the search box but methods still work', (
 
 test('controlled selectedIds: search only emits select', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: [] } })
+  const wrapper = mountMinimap( { propsData: { graph, selectedIds: [] } })
 
   wrapper.vm.search('feeder')
   settle()
@@ -200,7 +199,7 @@ test('controlled selectedIds: search only emits select', () => {
 
 test('controlled viewport: search only emits viewport-change, never mutates rendered viewport', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const wrapper = mountMinimap( { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
 
   wrapper.vm.search('feeder')
   settle()
@@ -212,7 +211,7 @@ test('controlled viewport: search only emits viewport-change, never mutates rend
 
 test('controlled groupStates: search emits the scrollTop patch but targets the unrevealed position', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, groupStates: { 'heap-1::g0': { scrollTop: 0 } } },
   })
 

@@ -47,13 +47,54 @@ export function applySelectionSet(currentIds, ids, mode = 'replace') {
 }
 
 function visibleSelectableItems(layout) {
-  const items = [...layout.visibleItems]
+  const items = layout.visibleItems.filter((item) => item.type === 'node')
   for (const group of layout.groups) {
     for (const child of visibleGroupChildren(group)) {
       items.push({ ...child.rect, id: child.id, type: 'node' })
     }
   }
   return items
+}
+
+export function stripRedundantGroupSelection(selectedIds, layout) {
+  const selected = new Set(selectedIds)
+  for (const group of layout.groups) {
+    if (selected.has(group.id) && group.children.some((childId) => selected.has(childId))) {
+      selected.delete(group.id)
+    }
+  }
+  return [...selected]
+}
+
+export function expandSelectedNodeIds(selectedIds, layout) {
+  if (!layout) return [...new Set(selectedIds)]
+  const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
+  const selected = new Set(selectedIds)
+  const ids = []
+  for (const id of selectedIds) {
+    const group = groupsById.get(id)
+    if (group) {
+      const anyChildSelected = group.children.some((childId) => selected.has(childId))
+      if (!anyChildSelected) ids.push(...group.children)
+      continue
+    }
+    ids.push(id)
+  }
+  return [...new Set(ids)]
+}
+
+/** 多选拖动时实际参与拖动的节点 id；点击未选中节点时只拖该节点。 */
+export function resolveDragNodeIds(primaryId, selectedIds, graph, layout) {
+  const groupsById = new Map(layout?.groups?.map((group) => [group.id, group]) ?? [])
+  const nodeIds = selectedIds.filter((id) => graph.nodes.has(id) && !groupsById.has(id))
+  if (nodeIds.length <= 1 || !nodeIds.includes(primaryId)) return [primaryId]
+
+  const selectedSet = new Set(nodeIds)
+  const parentId = graph.nodes.get(primaryId)?.parentId ?? null
+  if (parentId && nodeIds.every((id) => graph.nodes.get(id)?.parentId === parentId)) {
+    return graph.nodes.get(parentId).children.filter((id) => selectedSet.has(id))
+  }
+  return nodeIds
 }
 
 export function idsInSelectionRect(layout, screenRect, viewport) {
@@ -89,7 +130,7 @@ function edgeTouchesSelected(edge, relatedBoxes) {
 }
 
 export function buildSelectionRelations(graph, layout, selectedIds) {
-  const selected = new Set(selectedIds)
+  const selected = new Set(stripRedundantGroupSelection(selectedIds, layout))
   const highlightedIds = new Set()
   const highlightedEdgeIds = new Set()
   const dimmedIds = new Set()

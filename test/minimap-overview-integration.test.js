@@ -13,8 +13,7 @@ const contexts = stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 const Overview = (await import('../src/minimap/components/Overview.vue')).default
 
 function settle() {
@@ -36,7 +35,7 @@ function overviewCtxFor() {
 
 test('navigating from the overview pans the main viewport and preserves scale', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   settle()
 
   wrapper.findComponent(Overview).vm.$emit('navigate', { x: 123, y: 456 })
@@ -49,7 +48,7 @@ test('navigating from the overview pans the main viewport and preserves scale', 
 
 test('controlled viewport: navigating from the overview only emits, never mutates the rendered viewport', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const wrapper = mountMinimap( { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
   settle()
 
   wrapper.findComponent(Overview).vm.$emit('navigate', { x: 123, y: 456 })
@@ -62,7 +61,7 @@ test('controlled viewport: navigating from the overview only emits, never mutate
 
 test('renderCurrent feeds the overview the live layout/viewport so its frame tracks setViewport', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   settle()
   const ctx = overviewCtxFor()
 
@@ -79,7 +78,7 @@ test('renderCurrent feeds the overview the live layout/viewport so its frame tra
 
 test('options.enableOverview false hides the overview', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, options: { enableOverview: false } } })
+  const wrapper = mountMinimap( { propsData: { graph, options: { enableOverview: false } } })
   settle()
 
   assert.equal(wrapper.findComponent(Overview).exists(), false)
@@ -88,7 +87,7 @@ test('options.enableOverview false hides the overview', () => {
 
 test('options.enableOverview defaults to true', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   settle()
 
   assert.equal(wrapper.findComponent(Overview).exists(), true)

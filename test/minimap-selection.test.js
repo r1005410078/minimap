@@ -6,8 +6,11 @@ import {
   applySelectionClick,
   applySelectionSet,
   buildSelectionRelations,
+  expandSelectedNodeIds,
   idsInSelectionRect,
   intersectsRect,
+  resolveDragNodeIds,
+  stripRedundantGroupSelection,
 } from '../src/minimap/interaction/selection.js'
 
 test('applySelectionClick replaces selection without modifier keys', () => {
@@ -25,7 +28,7 @@ test('intersectsRect handles reversed drag rectangles', () => {
   assert.equal(intersectsRect(rect, { x: 20, y: 20, width: 20, height: 20 }), false)
 })
 
-test('idsInSelectionRect returns visible nodes and groups intersecting the marquee', () => {
+test('idsInSelectionRect returns visible nodes intersecting the marquee but not group containers', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
@@ -43,7 +46,59 @@ test('idsInSelectionRect returns visible nodes and groups intersecting the marqu
   )
 
   assert.ok(ids.includes('grid-tie'))
-  assert.ok(ids.includes(heapGroup.id))
+  assert.equal(ids.includes(heapGroup.id), false)
+  assert.ok(heapGroup.children.some((childId) => ids.includes(childId)))
+})
+
+test('stripRedundantGroupSelection removes a group id when its children are also selected', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+
+  assert.deepEqual(
+    stripRedundantGroupSelection([heapGroup.id, 'cluster-1', 'cluster-2'], layout).sort(),
+    ['cluster-1', 'cluster-2'],
+  )
+  assert.deepEqual(stripRedundantGroupSelection([heapGroup.id], layout), [heapGroup.id])
+})
+
+test('expandSelectedNodeIds expands a lone group id but keeps individually selected children', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+
+  assert.deepEqual(expandSelectedNodeIds(['cluster-1', 'cluster-2'], layout).sort(), ['cluster-1', 'cluster-2'])
+  assert.deepEqual(
+    expandSelectedNodeIds([heapGroup.id, 'cluster-1', 'cluster-2'], layout).sort(),
+    ['cluster-1', 'cluster-2'],
+  )
+  assert.deepEqual(
+    expandSelectedNodeIds([heapGroup.id], layout).sort(),
+    [...heapGroup.children].sort(),
+  )
+})
+
+test('buildSelectionRelations does not keep group chrome selected when individual children are selected', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+  const relations = buildSelectionRelations(graph, layout, [heapGroup.id, heapGroup.children[0], heapGroup.children[1]])
+
+  assert.equal(relations.selectedIds.has(heapGroup.id), false)
+  assert.equal(relations.selectedIds.has(heapGroup.children[0]), true)
+  assert.equal(relations.selectedIds.has(heapGroup.children[1]), true)
+})
+
+test('resolveDragNodeIds returns all selected siblings when dragging one of them', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+
+  assert.deepEqual(
+    resolveDragNodeIds('feeder-2', ['feeder-1', 'feeder-2', 'feeder-3'], graph, layout),
+    ['feeder-1', 'feeder-2', 'feeder-3'],
+  )
+  assert.deepEqual(resolveDragNodeIds('feeder-2', ['feeder-2'], graph, layout), ['feeder-2'])
+  assert.deepEqual(resolveDragNodeIds('feeder-2', ['grid-tie', 'feeder-2'], graph, layout), ['feeder-2'])
 })
 
 test('buildSelectionRelations marks parents, children, and tree edges as related', () => {

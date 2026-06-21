@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { installDomEnv } from './helpers/dom-env.js'
 import { createDemoGraph } from '../src/minimap/graph/graph.js'
-import { computeLayout } from '../src/minimap/graph/layout.js'
+import { computeLayout, childRectInGroup } from '../src/minimap/graph/layout.js'
 import { clearClipboard, setClipboard } from '../src/minimap/edit/clipboard.js'
 import { createContextMenuController } from '../src/minimap/controllers/context-menu-controller.js'
 
@@ -41,6 +41,7 @@ function createDeps(layout, overrides = {}) {
     emitConfigChange: [],
     emitContextMenuAction: [],
     states: [],
+    setSelected: [],
   }
   let selectedIds = []
   const canvas = fakeCanvasEl()
@@ -52,7 +53,7 @@ function createDeps(layout, overrides = {}) {
     getCssSize: () => ({ width: 1200, height: 760 }),
     setGroupExpanded: (id, expanded) => calls.setGroupExpanded.push({ id, expanded }),
     getSelectedIds: () => selectedIds,
-    setSelected: (ids) => { selectedIds = ids },
+    setSelected: (ids) => { selectedIds = ids; calls.setSelected.push(ids) },
     getReadonly: () => false,
     getOptions: () => ({ enableSearch: true, showGrid: true, showPerformance: false, hideTextDuringInteraction: false }),
     canUndo: () => false,
@@ -141,6 +142,46 @@ test('open on a collapsed group header builds a group context', () => {
 
   assert.equal(calls.states.at(-1).context.targetType, 'group')
   assert.equal(calls.states.at(-1).context.groupId, group.id)
+})
+
+test('open on an expanded group child builds a node context for that child only', () => {
+  const layout = demoLayout()
+  const group = layout.groups.find((item) => item.parentId === 'heap-1')
+  const childRect = childRectInGroup(group, 'cluster-1')
+  const { deps, calls } = createDeps(layout)
+  const controller = createContextMenuController(deps)
+  const event = {
+    clientX: childRect.x + childRect.width / 2,
+    clientY: childRect.y + childRect.height / 2,
+    preventDefault: () => {},
+    stopPropagation: () => {},
+  }
+
+  controller.open(event)
+
+  assert.equal(calls.states.at(-1).context.targetType, 'node')
+  assert.equal(calls.states.at(-1).context.targetId, 'cluster-1')
+  assert.equal(calls.states.at(-1).context.groupId, group.id)
+})
+
+test('delete from an expanded group child targets only that child', () => {
+  const layout = demoLayout()
+  const group = layout.groups.find((item) => item.parentId === 'heap-1')
+  const childRect = childRectInGroup(group, 'cluster-1')
+  const { deps, calls } = createDeps(layout)
+  const controller = createContextMenuController(deps)
+  controller.open({
+    clientX: childRect.x + childRect.width / 2,
+    clientY: childRect.y + childRect.height / 2,
+    preventDefault: () => {},
+    stopPropagation: () => {},
+  })
+  const item = { id: 'delete', action: 'delete', disabled: false }
+
+  controller.runItem(item)
+
+  assert.equal(calls.deleteSelection, 1)
+  assert.deepEqual(calls.setSelected[0], ['cluster-1'])
 })
 
 test('close publishes null state and removes the outside-click listener', () => {
@@ -272,5 +313,51 @@ test('isOpen reflects whether the menu is currently open', () => {
   assert.equal(controller.isOpen(), true)
 
   controller.close()
+  assert.equal(controller.isOpen(), false)
+})
+
+function pointerEvent(type, { x, y, button = 0, pointerId = 1 }) {
+  return { type, clientX: x, clientY: y, button, pointerId }
+}
+
+test('right-click opens on pointerup after a complete press and release', () => {
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(layout)
+  const controller = createContextMenuController(deps)
+  const center = rectCenter(layout.nodes.get('feeder-1'))
+
+  controller.handlePointerDown(pointerEvent('pointerdown', { x: center.x, y: center.y, button: 2, pointerId: 7 }))
+  assert.equal(controller.isOpen(), false)
+
+  controller.handlePointerUp(pointerEvent('pointerup', { x: center.x, y: center.y, button: 2, pointerId: 7 }))
+
+  assert.equal(controller.isOpen(), true)
+  assert.equal(calls.states.at(-1).context.targetType, 'node')
+  assert.equal(calls.states.at(-1).context.targetId, 'feeder-1')
+})
+
+test('right-click does not open when pointer moves beyond the drag threshold before release', () => {
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(layout)
+  const controller = createContextMenuController(deps)
+  const center = rectCenter(layout.nodes.get('feeder-1'))
+
+  controller.handlePointerDown(pointerEvent('pointerdown', { x: center.x, y: center.y, button: 2, pointerId: 8 }))
+  controller.handlePointerMove(pointerEvent('pointermove', { x: center.x + 10, y: center.y, pointerId: 8 }))
+  controller.handlePointerUp(pointerEvent('pointerup', { x: center.x + 10, y: center.y, button: 2, pointerId: 8 }))
+
+  assert.equal(controller.isOpen(), false)
+  assert.equal(calls.states.length, 0)
+})
+
+test('right-click pointerdown closes an open menu before the next pointerup opens a new one', () => {
+  const layout = demoLayout()
+  const { deps } = createDeps(layout)
+  const controller = createContextMenuController(deps)
+
+  controller.open({ clientX: 100, clientY: 100, preventDefault: () => {}, stopPropagation: () => {} })
+  assert.equal(controller.isOpen(), true)
+
+  controller.handlePointerDown(pointerEvent('pointerdown', { x: 200, y: 200, button: 2, pointerId: 9 }))
   assert.equal(controller.isOpen(), false)
 })

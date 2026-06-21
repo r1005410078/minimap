@@ -8,6 +8,15 @@ export function buildVirtualOrder(children, childId, insertIndex) {
   return order
 }
 
+export function buildVirtualOrderMulti(children, dragNodeIds, insertIndex) {
+  const dragSet = new Set(dragNodeIds)
+  const block = children.filter((id) => dragSet.has(id))
+  const rest = children.filter((id) => !dragSet.has(id))
+  const order = [...rest]
+  order.splice(insertIndex, 0, ...block)
+  return order
+}
+
 export function childWorldRectsById(group, order) {
   const columns = Math.max(1, group.columns)
   const rects = {}

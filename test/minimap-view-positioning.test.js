@@ -4,7 +4,7 @@ import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubAnimationFrame, stubCanvasContext, stubResizeObserver } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph/graph.js'
 import { computeLayout, childRectInGroup, scrollTopToReveal } from '../src/minimap/graph/layout.js'
-import { centerViewportOn, fitViewportToBounds } from '../src/minimap/coords/viewport.js'
+import { centerViewportOn, centerViewportOnBounds, fitViewportToBounds } from '../src/minimap/coords/viewport.js'
 
 installDomEnv()
 stubElementSize(800, 600)
@@ -12,8 +12,7 @@ const contexts = stubCanvasContext()
 stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 function settle() {
   frames.runNext(0)
@@ -37,9 +36,18 @@ function renderedRectForLabel(ctx, label) {
   return { x, y, width, height }
 }
 
+test('initial mount centers the graph at scale 1 in uncontrolled mode', () => {
+  const graph = createDemoGraph()
+  const wrapper = mountMinimap({ propsData: { graph, options: { disableInitialCenter: false } } })
+  const expected = centerViewportOnBounds(referenceLayout().bounds, 800, 600, 1, null)
+  assert.deepEqual(wrapper.vm.getViewport(), expected)
+  assert.equal(wrapper.vm.getViewport().scale, 1)
+  wrapper.destroy()
+})
+
 test('fitToScreen fits the demo graph bounds into the viewport with padding', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.fitToScreen()
   settle()
@@ -51,7 +59,7 @@ test('fitToScreen fits the demo graph bounds into the viewport with padding', ()
 
 test('fitToScreen on an empty graph is a no-op', () => {
   const graph = { version: 1, nodes: new Map(), rootIds: [], edges: [] }
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.fitToScreen()
   settle()
@@ -63,7 +71,7 @@ test('fitToScreen on an empty graph is a no-op', () => {
 
 test('centerOnNode centers a plain node and preserves current scale', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.centerOnNode('feeder-1')
   settle()
@@ -76,7 +84,7 @@ test('centerOnNode centers a plain node and preserves current scale', () => {
 
 test('centerOnNode centers a group box by its chrome rect', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.centerOnNode('heap-1::g0')
   settle()
@@ -89,7 +97,7 @@ test('centerOnNode centers a group box by its chrome rect', () => {
 
 test('centerOnNode scrolls a collapsed group to reveal a hidden child without expanding it', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.centerOnNode('cluster-24')
   settle()
@@ -108,7 +116,7 @@ test('centerOnNode scrolls a collapsed group to reveal a hidden child without ex
 
 test('centerOnNode on an unknown id is a no-op', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.centerOnNode('does-not-exist')
   settle()
@@ -120,7 +128,7 @@ test('centerOnNode on an unknown id is a no-op', () => {
 
 test('centerOnSelection centers the true bounding box of mixed selections and preserves scale', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
   wrapper.vm.setViewport({ x: 0, y: 0, scale: 2.5 })
   wrapper.vm.select(['feeder-1', 'heap-1::g0'])
 
@@ -141,7 +149,7 @@ test('centerOnSelection centers the true bounding box of mixed selections and pr
 
 test('centerOnSelection with an empty selection is a no-op', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.centerOnSelection()
   settle()
@@ -153,7 +161,7 @@ test('centerOnSelection with an empty selection is a no-op', () => {
 
 test('zoomTo without a center keeps the current screen center fixed', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
   wrapper.vm.setViewport({ x: 50, y: 20, scale: 1 })
 
   wrapper.vm.zoomTo(2)
@@ -165,7 +173,7 @@ test('zoomTo without a center keeps the current screen center fixed', () => {
 
 test('zoomTo with an explicit world point keeps that point at its current screen position', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
   wrapper.vm.setViewport({ x: 50, y: 20, scale: 1 })
 
   wrapper.vm.zoomTo(2, { x: 10, y: 10 })
@@ -177,7 +185,7 @@ test('zoomTo with an explicit world point keeps that point at its current screen
 
 test('zoomTo clamps scale to options bounds', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, options: { minScale: 0.25, maxScale: 3 } } })
+  const wrapper = mountMinimap({ propsData: { graph, options: { minScale: 0.25, maxScale: 3 } } })
   wrapper.vm.setViewport({ x: 50, y: 20, scale: 1 })
 
   wrapper.vm.zoomTo(10, { x: 10, y: 10 })
@@ -189,7 +197,7 @@ test('zoomTo clamps scale to options bounds', () => {
 
 test('setViewport applies immediately without scheduling an animation frame', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
   const scheduledBefore = frames.scheduled.length
 
   wrapper.vm.setViewport({ x: 12, y: 34, scale: 1.5 })
@@ -201,7 +209,7 @@ test('setViewport applies immediately without scheduling an animation frame', ()
 
 test('select supports replace/add/remove/toggle modes and clearSelection empties it', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
 
   wrapper.vm.select(['feeder-1'])
   assert.deepEqual(wrapper.emitted('select').at(-1)[0], ['feeder-1'])
@@ -222,7 +230,7 @@ test('select supports replace/add/remove/toggle modes and clearSelection empties
 
 test('controlled viewport mode: centerOnNode only emits, never mutates the rendered scene', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
+  const wrapper = mountMinimap({ propsData: { graph, viewport: { x: 0, y: 0, scale: 1 } } })
   const ctx = contexts.at(-1)
   const before = renderedRectForLabel(ctx, 'Feeder 1')
 
@@ -237,7 +245,7 @@ test('controlled viewport mode: centerOnNode only emits, never mutates the rende
 
 test('controlled groupStates: centerOnNode emits the scrollTop patch but targets the unrevealed position', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap({
     propsData: { graph, groupStates: { 'heap-1::g0': { scrollTop: 0 } } },
   })
 
@@ -260,7 +268,7 @@ test('controlled groupStates: centerOnNode emits the scrollTop patch but targets
 
 test('calling a navigation method mid-pan cancels the pan interaction', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap({ propsData: { graph } })
   const canvasEl = wrapper.find('canvas').element
   canvasEl.dispatchEvent(
     new PointerEvent('pointerdown', { clientX: -10000, clientY: -10000, pointerId: 1, bubbles: true }),

@@ -430,6 +430,30 @@ function drawAttachPreviewLine(ctx, parentBox, previewBox, mainAxis, theme) {
   ctx.setLineDash([])
 }
 
+function drawDragCountBadge(ctx, rect, count, theme) {
+  if (count <= 1) return
+  const badgeRadius = 10
+  const x = rect.x + rect.width - 4
+  const y = rect.y + 4
+  ctx.fillStyle = theme.node?.selectedStroke ?? defaultTheme.node.selectedStroke
+  ctx.beginPath()
+  ctx.arc(x, y, badgeRadius, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 11px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(count), x, y + 0.5)
+}
+
+function draggingChildIdSet(nodeDrag) {
+  if (!nodeDrag) return new Set()
+  if (Array.isArray(nodeDrag.draggingChildIds) && nodeDrag.draggingChildIds.length > 0) {
+    return new Set(nodeDrag.draggingChildIds)
+  }
+  return nodeDrag.draggingChildId ? new Set([nodeDrag.draggingChildId]) : new Set()
+}
+
 function drawSelectionRect(ctx, rect, theme) {
   const selection = { ...defaultTheme.node, ...(theme.node || {}) }
   const previousAlpha = ctx.globalAlpha ?? 1
@@ -459,7 +483,7 @@ function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, 
     if (!node) continue
     const worldRect = dragContext?.childRectsById?.[child.id] ?? child.rect
     const childRect = worldRectToScreen(worldRect, viewport)
-    if (child.id === dragContext?.draggingChildId) {
+    if (dragContext && draggingChildIdSet(dragContext).has(child.id)) {
       drawDropSlot(ctx, childRect, theme, dragContext.dropSlotOpacity ?? 1)
       continue
     }
@@ -478,6 +502,7 @@ function drawNodeDragGhost(ctx, graph, nodeDrag, theme, renderers, viewport, sel
   ctx.globalAlpha = 0.85
   if (renderers.node) renderers.node(ctx, { node, rect: nodeDrag.ghostRect, state: itemState, theme, viewport })
   else drawNode(ctx, node, nodeDrag.ghostRect, itemState, theme, viewport.scale)
+  drawDragCountBadge(ctx, nodeDrag.ghostRect, nodeDrag.ghostCount ?? 1, theme)
   ctx.globalAlpha = previousAlpha
 }
 
@@ -585,7 +610,7 @@ export function renderScene(ctx, scene) {
 
   for (const { item, screen } of items) {
     if (item.type !== 'node') continue
-    if (state.groupDrag?.draggingChildId === item.id) continue
+    if (draggingChildIdSet(state.groupDrag).has(item.id)) continue
     const node = graph.nodes.get(item.id)
     const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })

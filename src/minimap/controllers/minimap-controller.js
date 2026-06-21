@@ -4,6 +4,7 @@ import { createEditController } from './edit-controller.js'
 import { createSearchController } from './search-controller.js'
 import { createContextMenuController } from './context-menu-controller.js'
 import { createDragController } from './drag-controller.js'
+import { isModKey } from '../interaction/interaction.js'
 
 export function createMinimapController(deps) {
   // selection 的 renderCurrent 依赖通过闭包延迟引用 core，core 的 getInteractionRenderState
@@ -84,14 +85,27 @@ export function createMinimapController(deps) {
       edit.deleteSelection()
       return
     }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+    if (isModKey(event) && event.key.toLowerCase() === 'c') {
       event.preventDefault()
       edit.copySelection()
       return
     }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+    if (isModKey(event) && event.key.toLowerCase() === 'v') {
       event.preventDefault()
       edit.paste()
+      return
+    }
+    if (isModKey(event) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+      event.preventDefault()
+      edit.undo()
+      return
+    }
+    if (
+      isModKey(event) &&
+      ((event.key.toLowerCase() === 'z' && event.shiftKey) || event.key.toLowerCase() === 'y')
+    ) {
+      event.preventDefault()
+      edit.redo()
     }
   }
 
@@ -153,6 +167,7 @@ export function createMinimapController(deps) {
     applyOperation: edit.applyOperation,
     emitChangeIfApplied: edit.emitChangeIfApplied,
     closeContextMenu: contextMenu.close,
+    cancelContextMenuPending: contextMenu.cancelPending,
     emitNodeDrop: deps.emitNodeDrop,
     emitGroupReorder: deps.emitGroupReorder,
     emitNodeMove: deps.emitNodeMove,
@@ -173,17 +188,46 @@ export function createMinimapController(deps) {
   }
 
   const DIRECT_EVENT_BINDINGS = [
-    ['pointerdown', () => drag.onPointerDown],
-    ['pointermove', () => drag.onPointerMove],
-    ['pointerup', () => drag.onPointerUp],
+    ['pointerdown', () => handlePointerDown],
+    ['pointermove', () => handlePointerMove],
+    ['pointerup', () => handlePointerUp],
     ['pointerleave', () => drag.onPointerLeave],
-    ['pointercancel', () => drag.onPointerCancel],
-    ['lostpointercapture', () => drag.onLostPointerCapture],
+    ['pointercancel', () => handlePointerCancel],
+    ['lostpointercapture', () => handleLostPointerCapture],
     ['dragover', () => drag.onDragOver],
     ['drop', () => drag.onDrop],
     ['keydown', () => handleKeyDown],
-    ['contextmenu', () => contextMenu.open],
+    ['contextmenu', () => contextMenu.suppressContextMenu],
   ]
+
+  function handlePointerDown(event) {
+    drag.onPointerDown(event)
+    contextMenu.handlePointerDown(event)
+  }
+
+  function handlePointerMove(event) {
+    drag.onPointerMove(event)
+    contextMenu.handlePointerMove(event)
+  }
+
+  function handlePointerUp(event) {
+    drag.onPointerUp(event)
+    if (event.button === 2 && drag.consumeMarqueeGesture()) {
+      contextMenu.cancelPending()
+      return
+    }
+    contextMenu.handlePointerUp(event)
+  }
+
+  function handlePointerCancel(event) {
+    contextMenu.cancelPending()
+    drag.onPointerCancel(event)
+  }
+
+  function handleLostPointerCapture(event) {
+    contextMenu.cancelPending()
+    drag.onLostPointerCapture(event)
+  }
 
   function mount(canvas, container) {
     canvasEl = canvas

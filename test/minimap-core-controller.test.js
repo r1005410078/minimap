@@ -23,7 +23,7 @@ function createDeps(overrides = {}) {
   return {
     getGraph: () => createDemoGraph(),
     getLayoutDirection: () => 'horizontal',
-    getOptions: () => ({}),
+    getOptions: () => ({ disableInitialCenter: true }),
     getTheme: () => defaultTheme,
     getRenderers: () => ({}),
     getViewportProp: () => null,

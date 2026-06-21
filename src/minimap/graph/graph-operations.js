@@ -90,6 +90,29 @@ function applyReorderGroupChild(graph, operation) {
   })
 }
 
+function applyReorderGroupChildren(graph, operation) {
+  const { parentId, childIds, index } = operation.payload
+  const parent = graph.nodes.get(parentId)
+  if (!parent || !Array.isArray(childIds) || childIds.length === 0) return blockedResult(graph, operation, 'invalid')
+
+  const dragSet = new Set(childIds)
+  const block = parent.children.filter((id) => dragSet.has(id))
+  if (block.length === 0) return blockedResult(graph, operation, 'invalid')
+
+  const before = cloneGraphData(graph)
+  const remaining = parent.children.filter((id) => !dragSet.has(id))
+  const insertIndex = clampIndex(index, remaining.length)
+  parent.children = [...remaining.slice(0, insertIndex), ...block, ...remaining.slice(insertIndex)]
+
+  return result({
+    applied: true,
+    type: operation.type,
+    operation: { ...operation, payload: { ...operation.payload, index: insertIndex, childIds: block } },
+    inverse: { type: 'replace-graph', payload: { graph: before } },
+    graph,
+  })
+}
+
 function cloneGraphData(graph) {
   const data = serializeGraph(graph)
   return {
@@ -219,30 +242,64 @@ function isNodeOrDescendant(graph, nodeId, candidateId) {
 }
 
 function applyMoveNode(graph, operation) {
-  const { nodeId, toParentId, index } = operation.payload
-  const node = nodeId ? graph.nodes.get(nodeId) : null
+  const applied = applyMoveNodes(graph, {
+    type: 'move-nodes',
+    payload: {
+      nodeIds: [operation.payload.nodeId],
+      toParentId: operation.payload.toParentId,
+      index: operation.payload.index,
+    },
+  })
+  if (!applied.applied) return blockedResult(graph, operation, applied.reason)
+  return {
+    ...applied,
+    type: 'move-node',
+    operation: {
+      type: 'move-node',
+      payload: {
+        nodeId: operation.payload.nodeId,
+        toParentId: operation.payload.toParentId,
+        index: applied.operation.payload.index,
+      },
+    },
+  }
+}
+
+function applyMoveNodes(graph, operation) {
+  const { nodeIds, toParentId, index } = operation.payload
   const target = toParentId ? graph.nodes.get(toParentId) : null
-  if (!node || !target) return blockedResult(graph, operation, 'invalid')
-  if (isNodeOrDescendant(graph, nodeId, toParentId)) return blockedResult(graph, operation, 'invalid')
+  if (!target || !Array.isArray(nodeIds) || nodeIds.length === 0) return blockedResult(graph, operation, 'invalid')
+
+  for (const nodeId of nodeIds) {
+    if (!graph.nodes.get(nodeId)) return blockedResult(graph, operation, 'invalid')
+    if (isNodeOrDescendant(graph, nodeId, toParentId)) return blockedResult(graph, operation, 'invalid')
+  }
 
   const before = cloneGraphData(graph)
+  const orderedIds = nodeIds.filter((id, i, arr) => arr.indexOf(id) === i)
 
-  if (node.parentId) {
-    const oldParent = graph.nodes.get(node.parentId)
-    oldParent.children = oldParent.children.filter((id) => id !== nodeId)
-  } else {
-    graph.rootIds = graph.rootIds.filter((id) => id !== nodeId)
+  for (const nodeId of orderedIds) {
+    const node = graph.nodes.get(nodeId)
+    if (node.parentId) {
+      const oldParent = graph.nodes.get(node.parentId)
+      oldParent.children = oldParent.children.filter((id) => id !== nodeId)
+    } else {
+      graph.rootIds = graph.rootIds.filter((id) => id !== nodeId)
+    }
   }
 
   const insertIndex = clampIndex(index, target.children.length)
   target.children = [...target.children]
-  target.children.splice(insertIndex, 0, nodeId)
-  node.parentId = toParentId
+  for (let offset = 0; offset < orderedIds.length; offset += 1) {
+    const nodeId = orderedIds[offset]
+    target.children.splice(insertIndex + offset, 0, nodeId)
+    graph.nodes.get(nodeId).parentId = toParentId
+  }
 
   return result({
     applied: true,
     type: operation.type,
-    operation: { ...operation, payload: { ...operation.payload, index: insertIndex } },
+    operation: { ...operation, payload: { ...operation.payload, index: insertIndex, nodeIds: orderedIds } },
     inverse: { type: 'replace-graph', payload: { graph: before } },
     graph,
   })
@@ -268,8 +325,10 @@ function applyOperation(graph, operation) {
   if (operation.type === 'drop-node') return applyDropNode(graph, operation)
   if (operation.type === 'remove-dropped-node') return applyRemoveDroppedNode(graph, operation)
   if (operation.type === 'reorder-group-child') return applyReorderGroupChild(graph, operation)
+  if (operation.type === 'reorder-group-children') return applyReorderGroupChildren(graph, operation)
   if (operation.type === 'delete-nodes') return applyDeleteNodes(graph, operation)
   if (operation.type === 'move-node') return applyMoveNode(graph, operation)
+  if (operation.type === 'move-nodes') return applyMoveNodes(graph, operation)
   if (operation.type === 'paste-nodes') return applyPasteNodes(graph, operation)
   if (operation.type === 'replace-graph') return applyReplaceGraph(graph, operation)
   return blockedResult(graph, operation, 'invalid')

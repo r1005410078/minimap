@@ -34,7 +34,7 @@ function createDeps(overrides = {}) {
   return {
     getGraph: () => graph,
     getLayoutDirection: () => 'horizontal',
-    getOptions: () => ({}),
+    getOptions: () => ({ disableInitialCenter: true }),
     getTheme: () => defaultTheme,
     getRenderers: () => ({}),
     getViewportProp: () => null,
@@ -165,20 +165,96 @@ test('search methods forward to the real search-controller and jump using the re
   controller.destroy()
 })
 
-test('the canvas contextmenu DOM event dispatches directly to the context-menu-controller, not through deps', () => {
+test('right-click pointerdown and pointerup dispatch to the context-menu-controller, not through deps', () => {
   const menuStates = []
   const controller = createMinimapController(createDeps({ onMenuStateChange: (state) => menuStates.push(state) }))
   const { canvas, container } = createElements()
   controller.mount(canvas, container)
 
-  const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: -500, clientY: -500 })
-  canvas.dispatchEvent(event)
+  canvas.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 120,
+    clientY: 140,
+    button: 2,
+    pointerId: 3,
+    pointerType: 'mouse',
+  }))
+  assert.equal(menuStates.at(-1), undefined)
+
+  canvas.dispatchEvent(new PointerEvent('pointerup', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 120,
+    clientY: 140,
+    button: 2,
+    pointerId: 3,
+    pointerType: 'mouse',
+  }))
 
   assert.ok(menuStates.at(-1))
   assert.equal(menuStates.at(-1).context.targetType, 'canvas')
 
   controller.runContextMenuItem({ id: 'fit-to-screen', action: 'fit-to-screen', disabled: false })
   assert.equal(menuStates.at(-1), null)
+
+  controller.destroy()
+})
+
+test('contextmenu alone is suppressed and does not open the menu', () => {
+  const menuStates = []
+  const controller = createMinimapController(createDeps({ onMenuStateChange: (state) => menuStates.push(state) }))
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+
+  const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 140 })
+  canvas.dispatchEvent(event)
+
+  assert.equal(menuStates.length, 0)
+  assert.equal(event.defaultPrevented, true)
+
+  controller.destroy()
+})
+
+test('right-drag on blank canvas marquee-selects nodes and does not open the context menu', () => {
+  const menuStates = []
+  const deps = createDeps({ onMenuStateChange: (state) => menuStates.push(state) })
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const layout = computeLayout(deps.getGraph(), LAYOUT_OPTS)
+  const start = { x: 380, y: -10 }
+  const end = { x: 540, y: 170 }
+
+  canvas.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    clientX: start.x,
+    clientY: start.y,
+    button: 2,
+    pointerId: 5,
+    pointerType: 'mouse',
+  }))
+  canvas.dispatchEvent(new PointerEvent('pointermove', {
+    bubbles: true,
+    cancelable: true,
+    clientX: end.x,
+    clientY: end.y,
+    pointerId: 5,
+    pointerType: 'mouse',
+  }))
+  canvas.dispatchEvent(new PointerEvent('pointerup', {
+    bubbles: true,
+    cancelable: true,
+    clientX: end.x,
+    clientY: end.y,
+    button: 2,
+    pointerId: 5,
+    pointerType: 'mouse',
+  }))
+
+  assert.deepEqual(controller.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(menuStates.length, 0)
 
   controller.destroy()
 })
@@ -229,6 +305,47 @@ test('keydown Escape dispatches to the real keydown handler and clears the selec
   canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
 
   assert.deepEqual(controller.getSelectedIds(), [])
+
+  controller.destroy()
+})
+
+test('keydown Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z undo and redo edits', () => {
+  const deps = createDeps()
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const graph = deps.getGraph()
+
+  controller.setSelected(['grid-tie'])
+  controller.deleteSelection()
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }))
+  assert.equal(graph.nodes.has('grid-tie'), true)
+
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, shiftKey: true, bubbles: true, cancelable: true }))
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', metaKey: true, bubbles: true, cancelable: true }))
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  controller.destroy()
+})
+
+test('keydown Ctrl+Z undo works when metaKey is not set', () => {
+  const deps = createDeps()
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const graph = deps.getGraph()
+
+  controller.setSelected(['grid-tie'])
+  controller.deleteSelection()
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  assert.equal(graph.nodes.has('grid-tie'), true)
 
   controller.destroy()
 })

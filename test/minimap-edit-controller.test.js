@@ -55,6 +55,23 @@ test('copySelection expands a selected collapsed-group id into its real child id
   assert.deepEqual(emitted.copy[0].capturedIds.sort(), ['cluster-1', 'cluster-2'].sort())
 })
 
+test('deleteSelection removes only individually selected children inside a merged group', () => {
+  const graph = createDemoGraph()
+  const heapGroup = { id: 'heap-1::g0', parentId: 'heap-1', children: ['cluster-1', 'cluster-2', 'cluster-3'] }
+  const { deps, setLayout } = createDeps(graph, {
+    getSelectedIds: () => [heapGroup.id, 'cluster-1', 'cluster-2'],
+  })
+  setLayout({ groups: [heapGroup] })
+  const controller = createEditController(deps)
+
+  const result = controller.deleteSelection()
+
+  assert.equal(result.applied, true)
+  assert.equal(graph.nodes.has('cluster-1'), false)
+  assert.equal(graph.nodes.has('cluster-2'), false)
+  assert.equal(graph.nodes.has('cluster-3'), true)
+})
+
 test('deleteSelection blocked by readonly leaves the graph untouched', () => {
   const graph = createDemoGraph()
   const { deps, layoutCalls } = createDeps(graph, { getReadonly: () => true, getSelectedIds: () => ['feeder-1'] })

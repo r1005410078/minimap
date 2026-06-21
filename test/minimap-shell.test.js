@@ -4,7 +4,7 @@ import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph/graph.js'
 import { clearClipboard } from '../src/minimap/edit/clipboard.js'
-import { computeLayout, keepAnchorStable } from '../src/minimap/graph/layout.js'
+import { computeLayout, keepAnchorStable, childRectInGroup } from '../src/minimap/graph/layout.js'
 import { easeOutCubic } from '../src/minimap/graph/layout-transition.js'
 import { resolveEdges } from '../src/minimap/render/renderer.js'
 import { defaultTheme } from '../src/minimap/render/theme.js'
@@ -15,16 +15,14 @@ const contexts = stubCanvasContext()
 const observers = stubResizeObserver()
 const frames = stubAnimationFrame()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
-test('renders the dark workbench toolbar shell without removing canvas, search, or overview', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+test('renders canvas shell with search, overview, and bottom controls', () => {
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
 
-  assert.equal(wrapper.find('.minimap-toolbar').exists(), true)
-  assert.equal(wrapper.findAll('.minimap-toolbar-button').length >= 9, true)
-  assert.equal(wrapper.find('.minimap-toolbar-button[aria-label="撤销"]').exists(), true)
-  assert.equal(wrapper.find('.minimap-toolbar-button[aria-label="撤销"]').attributes('disabled'), undefined)
+  assert.equal(wrapper.find('.minimap-toolbar').exists(), false)
+  assert.equal(wrapper.find('.minimap-bottom-controls').exists(), true)
+  assert.equal(wrapper.find('.minimap-control-button[aria-label="撤销"]').exists(), true)
   assert.equal(wrapper.find('canvas').attributes('tabindex'), '0')
   assert.equal(wrapper.find('.minimap-search').exists(), true)
   assert.equal(wrapper.find('.minimap-overview-panel').exists(), true)
@@ -33,7 +31,7 @@ test('renders the dark workbench toolbar shell without removing canvas, search, 
 })
 
 test('search and overview options still hide their panels in the polished shell', () => {
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph: createDemoGraph(),
       options: { enableSearch: false, enableOverview: false },
@@ -42,17 +40,17 @@ test('search and overview options still hide their panels in the polished shell'
 
   assert.equal(wrapper.find('.minimap-search').exists(), false)
   assert.equal(wrapper.find('.minimap-overview-panel').exists(), false)
-  assert.equal(wrapper.find('.minimap-toolbar').exists(), true)
+  assert.equal(wrapper.find('.minimap-bottom-controls').exists(), true)
 
   wrapper.destroy()
 })
 
 test('active canvas border is opt-in and disabled by default', () => {
-  const defaultWrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const defaultWrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   assert.equal(defaultWrapper.find('canvas').classes().includes('is-active-border-enabled'), false)
   defaultWrapper.destroy()
 
-  const enabledWrapper = mount(Minimap, {
+  const enabledWrapper = mountMinimap( {
     propsData: { graph: createDemoGraph(), options: { enableActiveBorder: true } },
   })
   assert.equal(enabledWrapper.find('canvas').classes().includes('is-active-border-enabled'), true)
@@ -70,6 +68,24 @@ function dispatchDrop(wrapper, payload, point) {
 
 function dispatchContextMenu(wrapper, point) {
   const canvasEl = wrapper.find('canvas').element
+  canvasEl.dispatchEvent(new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    clientX: point.x,
+    clientY: point.y,
+    button: 2,
+    pointerId: 11,
+    pointerType: 'mouse',
+  }))
+  canvasEl.dispatchEvent(new PointerEvent('pointerup', {
+    bubbles: true,
+    cancelable: true,
+    clientX: point.x,
+    clientY: point.y,
+    button: 2,
+    pointerId: 11,
+    pointerType: 'mouse',
+  }))
   const evt = new MouseEvent('contextmenu', {
     bubbles: true,
     cancelable: true,
@@ -187,7 +203,7 @@ function assertRectApprox(actual, expected, tolerance = 0.001) {
 }
 
 test('mounting draws the initial graph onto the canvas', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const ctx = contexts.at(-1)
   assert.ok(ctx.calls.some((call) => call.method === 'clearRect'))
   assert.ok(ctx.calls.some((call) => call.method === 'fillRect'))
@@ -195,7 +211,7 @@ test('mounting draws the initial graph onto the canvas', () => {
 })
 
 test('a ResizeObserver callback re-syncs canvas size and re-renders', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const ctx = contexts.at(-1)
   const callsBefore = ctx.calls.length
   observers.at(-1).trigger()
@@ -208,16 +224,16 @@ test('changing layoutDirection animates through requestAnimationFrame', async ()
   const graph = createDemoGraph()
   const horizontalLayout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const verticalLayout = computeLayout(graph, { direction: 'vertical', viewportWidth: 800, viewportHeight: 600 })
-  const startViewport = { x: 0, y: 0, scale: 1 }
+  const wrapper = mountMinimap( {
+    propsData: { graph, layoutDirection: 'horizontal' },
+  })
+  const startViewport = wrapper.vm.getViewport()
   const targetViewport = keepAnchorStable(
     startViewport,
     centerOf(horizontalLayout.nodes.get('energy-root')),
     centerOf(verticalLayout.nodes.get('energy-root')),
   )
   const progress = easeOutCubic(0.5)
-  const wrapper = mount(Minimap, {
-    propsData: { graph, layoutDirection: 'horizontal' },
-  })
   const ctx = contexts.at(-1)
   const callsBefore = ctx.calls.length
   const baseline = frames.scheduled.length
@@ -247,7 +263,7 @@ test('replacing graph prop animates through requestAnimationFrame', async () => 
   const nextGraph = createDemoGraph()
   nextGraph.nodes.set('aux-root', { id: 'aux-root', label: 'Aux Root', parentId: 'energy-root', children: [] })
   nextGraph.nodes.get('energy-root').children.push('aux-root')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const scheduledBefore = frames.scheduled.length
   const ctx = contexts.at(-1)
   const callsBefore = ctx.calls.length
@@ -264,7 +280,7 @@ test('replacing graph prop animates through requestAnimationFrame', async () => 
 
 test('completed layout animation does not schedule another frame', async () => {
   flushAnimationFrames()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph: createDemoGraph(), layoutDirection: 'horizontal' },
   })
   const baseline = frames.scheduled.length
@@ -280,7 +296,7 @@ test('completed layout animation does not schedule another frame', async () => {
 })
 
 test('resize re-renders without starting a layout animation', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const scheduledBefore = frames.scheduled.length
   const ctx = contexts.at(-1)
   const callsBefore = ctx.calls.length
@@ -293,7 +309,7 @@ test('resize re-renders without starting a layout animation', () => {
 })
 
 test('blank canvas pan coalesces repeated pointer moves into one render frame', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const ctx = contexts.at(-1)
   dispatchPointer(wrapper, 'pointerdown', { x: 780, y: 580 })
   const callsAfterDown = ctx.calls.length
@@ -311,25 +327,25 @@ test('blank canvas pan coalesces repeated pointer moves into one render frame', 
 })
 
 test('marquee pointerup flushes a scheduled selection render immediately', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const ctx = contexts.at(-1)
 
-  dispatchPointer(wrapper, 'pointerdown', { x: 780, y: 580 }, { ctrlKey: true })
+  dispatchPointer(wrapper, 'pointerdown', { x: 780, y: 580 }, { metaKey: true })
   const callsAfterDown = ctx.calls.length
   const frameBaseline = frames.scheduled.length
-  dispatchPointer(wrapper, 'pointermove', { x: 720, y: 530 }, { ctrlKey: true })
+  dispatchPointer(wrapper, 'pointermove', { x: 720, y: 530 }, { metaKey: true })
 
   assert.equal(frames.scheduled.length, frameBaseline + 1)
   assert.equal(ctx.calls.length, callsAfterDown)
 
-  dispatchPointer(wrapper, 'pointerup', { x: 720, y: 530 }, { ctrlKey: true })
+  dispatchPointer(wrapper, 'pointerup', { x: 720, y: 530 }, { metaKey: true })
 
   assert.ok(ctx.calls.length > callsAfterDown)
   wrapper.destroy()
 })
 
 test('pan text hiding is opt-in through options', () => {
-  const defaultWrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const defaultWrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const defaultCtx = contexts.at(-1)
   const defaultFrameBaseline = frames.scheduled.length
   dispatchPointer(defaultWrapper, 'pointerdown', { x: 780, y: 580 })
@@ -342,7 +358,7 @@ test('pan text hiding is opt-in through options', () => {
   )
   defaultWrapper.destroy()
 
-  const enabledWrapper = mount(Minimap, {
+  const enabledWrapper = mountMinimap( {
     propsData: {
       graph: createDemoGraph(),
       options: { hideTextDuringInteraction: true },
@@ -362,7 +378,7 @@ test('pan text hiding is opt-in through options', () => {
 })
 
 test('new layout changes cancel the previous animation frame', async () => {
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph: createDemoGraph(), layoutDirection: 'horizontal' },
   })
 
@@ -378,7 +394,7 @@ test('new layout changes cancel the previous animation frame', async () => {
 })
 
 test('unmounting cancels an active layout animation frame', async () => {
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph: createDemoGraph(), layoutDirection: 'horizontal' },
   })
 
@@ -396,20 +412,20 @@ test('selected anchor contributes a compensated viewport during layout animation
   const graph = createDemoGraph()
   const horizontalLayout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const verticalLayout = computeLayout(graph, { direction: 'vertical', viewportWidth: 800, viewportHeight: 600 })
-  const startViewport = { x: 0, y: 0, scale: 1 }
-  const targetViewport = keepAnchorStable(
-    startViewport,
-    centerOf(horizontalLayout.nodes.get('heap-1')),
-    centerOf(verticalLayout.nodes.get('heap-1')),
-  )
-  const progress = easeOutCubic(0.5)
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph,
       layoutDirection: 'horizontal',
       selectedIds: ['heap-1'],
     },
   })
+  const startViewport = wrapper.vm.getViewport()
+  const targetViewport = keepAnchorStable(
+    startViewport,
+    centerOf(horizontalLayout.nodes.get('heap-1')),
+    centerOf(verticalLayout.nodes.get('heap-1')),
+  )
+  const progress = easeOutCubic(0.5)
   const ctx = contexts.at(-1)
   const baseline = frames.scheduled.length
 
@@ -444,7 +460,7 @@ test('selected anchor contributes a compensated viewport during layout animation
 
 test('drop during layout animation settles before computing insertion index', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph,
       layoutDirection: 'horizontal',
@@ -466,7 +482,7 @@ test('drop during layout animation settles before computing insertion index', as
 })
 
 test('unmounting disconnects the ResizeObserver', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const observer = observers.at(-1)
   wrapper.destroy()
   assert.equal(observer.disconnected, true)
@@ -474,7 +490,7 @@ test('unmounting disconnects the ResizeObserver', () => {
 
 test('nodeRenderer prop replaces default node drawing', () => {
   let calls = 0
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph: createDemoGraph(), nodeRenderer: () => { calls++ } },
   })
   const ctx = contexts.at(-1)
@@ -488,7 +504,7 @@ test('nodeRenderer prop replaces default node drawing', () => {
 
 test('groupRenderer prop replaces default group drawing', () => {
   let calls = 0
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph: createDemoGraph(), groupRenderer: () => { calls++ } },
   })
   const ctx = contexts.at(-1)
@@ -507,7 +523,7 @@ test('edgeRenderer prop replaces default edge drawing', () => {
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const expectedEdgeCount = resolveEdges(graph, layout).length
   const payloads = []
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: { graph, edgeRenderer: (_ctx, payload) => payloads.push(payload) },
   })
   assert.equal(payloads.length, expectedEdgeCount)
@@ -515,7 +531,7 @@ test('edgeRenderer prop replaces default edge drawing', () => {
 })
 
 test('renderer props default to null and do not affect default drawing', () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   const ctx = contexts.at(-1)
   assert.ok(ctx.calls.some((call) => call.method === 'fillText' && call.args[0] === 'Energy Root'))
   wrapper.destroy()
@@ -523,7 +539,7 @@ test('renderer props default to null and do not affect default drawing', () => {
 
 test('undo and redo exposed methods restore a dropped node', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const beforeSize = graph.nodes.size
 
   const canvasEl = wrapper.find('canvas').element
@@ -562,7 +578,7 @@ test('undo and redo exposed methods restore a dropped node', async () => {
 
 test('undo and redo are empty no-ops when history stacks are empty', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   assert.equal(wrapper.vm.canUndo(), false)
   assert.equal(wrapper.vm.canRedo(), false)
@@ -580,7 +596,7 @@ function dispatchKey(wrapper, key, options = {}) {
 
 test('deleteSelection deletes selected nodes, emits events, and supports undo', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.select(['grid-tie'])
   const result = wrapper.vm.deleteSelection()
@@ -599,7 +615,7 @@ test('deleteSelection deletes selected nodes, emits events, and supports undo', 
 
 test('copySelection captures a clipboard snapshot without mutating the graph', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const beforeSize = graph.nodes.size
 
   wrapper.vm.select(['grid-tie'])
@@ -615,7 +631,7 @@ test('copySelection captures a clipboard snapshot without mutating the graph', (
 
 test('paste inserts the clipboard snapshot as a child of the selected node and supports undo', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.select(['feeder-1'])
   wrapper.vm.copySelection()
@@ -636,7 +652,7 @@ test('paste inserts the clipboard snapshot as a child of the selected node and s
 
 test('pasting the same clipboard twice produces two independent copies', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.select(['feeder-1'])
   wrapper.vm.copySelection()
@@ -655,7 +671,7 @@ test('pasting the same clipboard twice produces two independent copies', () => {
 
 test('paste targets the real parent node when the selection is a group box', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.select(['feeder-1'])
   wrapper.vm.copySelection()
@@ -672,7 +688,7 @@ test('paste targets the real parent node when the selection is a group box', () 
 test('paste returns empty when there is no selection or no clipboard content', () => {
   clearClipboard()
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   assert.equal(wrapper.vm.paste().reason, 'empty')
 
@@ -683,7 +699,7 @@ test('paste returns empty when there is no selection or no clipboard content', (
 
 test('exportGraph returns JSON-safe data and does not enter history', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const exported = wrapper.vm.exportGraph()
 
@@ -697,7 +713,7 @@ test('exportGraph returns JSON-safe data and does not enter history', () => {
 
 test('importGraph replaces graph contents and supports undo', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   const data = {
     version: 1,
     nodes: [{ id: 'new-root', label: 'New Root', parentId: null, children: [] }],
@@ -720,7 +736,7 @@ test('importGraph replaces graph contents and supports undo', () => {
 
 test('invalid importGraph returns a failed result without emitting change', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const result = wrapper.vm.importGraph({ version: 999, nodes: [], rootIds: [] })
 
@@ -733,7 +749,7 @@ test('invalid importGraph returns a failed result without emitting change', () =
 
 test('readonly and before hooks block delete paste and import methods, but not copy', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph,
       readonly: true,
@@ -752,7 +768,7 @@ test('readonly and before hooks block delete paste and import methods, but not c
   wrapper.destroy()
 
   const blockedGraph = createDemoGraph()
-  const blocked = mount(Minimap, {
+  const blocked = mountMinimap( {
     propsData: {
       graph: blockedGraph,
       beforeDelete: () => false,
@@ -773,7 +789,7 @@ test('readonly and before hooks block delete paste and import methods, but not c
 
 test('keyboard Delete Backspace Cmd/Ctrl+C and Cmd/Ctrl+V trigger edit commands', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.select(['grid-tie'])
   dispatchKey(wrapper, 'Delete')
@@ -795,35 +811,46 @@ test('keyboard Delete Backspace Cmd/Ctrl+C and Cmd/Ctrl+V trigger edit commands'
   const pastedId = wrapper.emitted('paste')[0][0].pastedIds[0]
   assert.equal(graph.nodes.get('cluster-25').children.includes(pastedId), true)
 
+  wrapper.vm.select(['grid-tie'])
+  dispatchKey(wrapper, 'Delete')
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
+  dispatchKey(wrapper, 'z', { metaKey: true })
+  assert.equal(graph.nodes.has('grid-tie'), true)
+
+  dispatchKey(wrapper, 'z', { metaKey: true, shiftKey: true })
+  assert.equal(graph.nodes.has('grid-tie'), false)
+
   wrapper.destroy()
 })
 
-function toolbarButton(wrapper, label) {
-  return wrapper.find(`.minimap-toolbar-button[aria-label="${label}"]`)
+function bottomControlButton(wrapper, label) {
+  return wrapper.find(`.minimap-control-button[aria-label="${label}"]`)
 }
 
-test('toolbar undo redo delete copy and paste buttons call real edit commands', async () => {
+test('bottom history controls and edit methods call real edit commands', async () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   wrapper.vm.select(['feeder-1'])
-  await toolbarButton(wrapper, '复制').trigger('click')
+  wrapper.vm.copySelection()
   assert.equal(wrapper.emitted('copy').length, 1)
 
   wrapper.vm.select(['cluster-25'])
-  await toolbarButton(wrapper, '粘贴').trigger('click')
+  wrapper.vm.paste()
   assert.equal(wrapper.emitted('paste').length, 1)
   const pastedId = wrapper.emitted('paste')[0][0].pastedIds[0]
   assert.equal(graph.nodes.get('cluster-25').children.includes(pastedId), true)
 
   wrapper.vm.select([pastedId])
-  await toolbarButton(wrapper, '删除').trigger('click')
+  wrapper.vm.deleteSelection()
   assert.equal(graph.nodes.has(pastedId), false)
+  await wrapper.vm.$nextTick()
 
-  await toolbarButton(wrapper, '撤销').trigger('click')
+  await bottomControlButton(wrapper, '撤销').trigger('click')
   assert.equal(graph.nodes.has(pastedId), true)
 
-  await toolbarButton(wrapper, '重做').trigger('click')
+  await bottomControlButton(wrapper, '重做').trigger('click')
   assert.equal(graph.nodes.has(pastedId), false)
 
   wrapper.destroy()
@@ -839,7 +866,7 @@ async function clickContextMenuItem(wrapper, id) {
 }
 
 test('right-clicking a node opens the node context menu with common canvas actions', async () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   flushAnimationFrames()
   const ctx = contexts.at(-1)
   const rootRect = renderedRectForLabel(ctx, 'Energy Root')
@@ -859,7 +886,7 @@ test('right-clicking a node opens the node context menu with common canvas actio
 })
 
 test('right-clicking blank canvas opens only common canvas actions and closes on Escape', async () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   await openContextMenu(wrapper, { x: 760, y: 560 })
 
   const labels = wrapper.findAll('.minimap-context-menu-item').wrappers.map((item) => item.text())
@@ -875,7 +902,7 @@ test('right-clicking blank canvas opens only common canvas actions and closes on
 })
 
 test('context menu position is clamped inside the canvas container', async () => {
-  const wrapper = mount(Minimap, { propsData: { graph: createDemoGraph() } })
+  const wrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   await openContextMenu(wrapper, { x: 795, y: 595 })
 
   const style = wrapper.find('.minimap-context-menu').attributes('style')
@@ -889,7 +916,7 @@ test('context menu position is clamped inside the canvas container', async () =>
 test('context menu copy, paste, delete and config actions reuse existing commands', async () => {
   const graph = createDemoGraph()
 
-  const copyWrapper = mount(Minimap, { propsData: { graph } })
+  const copyWrapper = mountMinimap( { propsData: { graph } })
   const ctx = contexts.at(-1)
   const feederRect = renderedRectForLabel(ctx, 'Feeder 2')
   await openContextMenu(copyWrapper, centerOf(feederRect))
@@ -898,7 +925,7 @@ test('context menu copy, paste, delete and config actions reuse existing command
   copyWrapper.destroy()
 
   const pasteGraph = createDemoGraph()
-  const pasteWrapper = mount(Minimap, { propsData: { graph: pasteGraph } })
+  const pasteWrapper = mountMinimap( { propsData: { graph: pasteGraph } })
   pasteWrapper.vm.select(['cluster-25'])
   await openContextMenu(pasteWrapper, { x: 760, y: 560 })
   await clickContextMenuItem(pasteWrapper, 'paste')
@@ -906,7 +933,7 @@ test('context menu copy, paste, delete and config actions reuse existing command
   pasteWrapper.destroy()
 
   const deleteGraph = createDemoGraph()
-  const deleteWrapper = mount(Minimap, { propsData: { graph: deleteGraph } })
+  const deleteWrapper = mountMinimap( { propsData: { graph: deleteGraph } })
   const deleteCtx = contexts.at(-1)
   const deleteRect = renderedRectForLabel(deleteCtx, 'Feeder 3')
   await openContextMenu(deleteWrapper, centerOf(deleteRect))
@@ -914,7 +941,21 @@ test('context menu copy, paste, delete and config actions reuse existing command
   assert.equal(deleteGraph.nodes.has('feeder-3'), false)
   deleteWrapper.destroy()
 
-  const configWrapper = mount(Minimap, {
+  const groupDeleteGraph = createDemoGraph()
+  const groupLayout = computeLayout(groupDeleteGraph, { viewportWidth: 800, viewportHeight: 600 })
+  const heapGroup = groupLayout.groups.find((item) => item.parentId === 'heap-1')
+  const clusterRect = childRectInGroup(heapGroup, 'cluster-3')
+  const siblingsBefore = groupDeleteGraph.nodes.get('heap-1').children.length
+  const groupDeleteWrapper = mountMinimap({ propsData: { graph: groupDeleteGraph } })
+  await openContextMenu(groupDeleteWrapper, centerOf(clusterRect))
+  await clickContextMenuItem(groupDeleteWrapper, 'delete')
+  assert.equal(groupDeleteGraph.nodes.has('cluster-3'), false)
+  assert.equal(groupDeleteGraph.nodes.get('heap-1').children.includes('cluster-3'), false)
+  assert.equal(groupDeleteGraph.nodes.get('heap-1').children.length, siblingsBefore - 1)
+  assert.equal(groupDeleteGraph.nodes.has('cluster-1'), true)
+  groupDeleteWrapper.destroy()
+
+  const configWrapper = mountMinimap( {
     propsData: {
       graph: createDemoGraph(),
       options: { enableSearch: true, showGrid: true, showPerformance: false },
@@ -951,7 +992,7 @@ test('context menu copy, paste, delete and config actions reuse existing command
 })
 
 test('contextMenuItems can hide defaults and append custom actions', async () => {
-  const wrapper = mount(Minimap, {
+  const wrapper = mountMinimap( {
     propsData: {
       graph: createDemoGraph(),
       contextMenuItems: (context, defaults) =>

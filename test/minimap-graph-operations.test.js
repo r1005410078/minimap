@@ -452,6 +452,26 @@ test('move-node moves a node and its subtree to a new parent and can undo redo',
   assert.equal(graph.nodes.get('grid-tie').parentId, 'cluster-25')
 })
 
+test('move-nodes moves multiple siblings together and preserves their order', () => {
+  const graph = createDemoGraph()
+  const manager = createGraphOperationManager(graph)
+
+  const result = manager.apply({
+    type: 'move-nodes',
+    payload: { nodeIds: ['feeder-1', 'feeder-2', 'feeder-3'], toParentId: 'cluster-25', index: 0 },
+  })
+
+  assert.equal(result.applied, true)
+  assert.deepEqual(graph.nodes.get('cluster-25').children.slice(0, 3), ['feeder-1', 'feeder-2', 'feeder-3'])
+  for (const id of ['feeder-1', 'feeder-2', 'feeder-3']) {
+    assert.equal(graph.nodes.get(id).parentId, 'cluster-25')
+    assert.equal(graph.nodes.get('grid-tie').children.includes(id), false)
+  }
+
+  manager.undo()
+  assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-1', 'feeder-2', 'feeder-3'])
+})
+
 test('move-node removes a moved root from rootIds', () => {
   const graph = createDemoGraph()
   graph.rootIds.push('standalone')

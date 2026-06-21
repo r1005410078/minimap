@@ -7,6 +7,7 @@ import {
   findInsertionIndex,
   groupGridIndexAt,
   exceedsDragThreshold,
+  isModKey,
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
   resolveDropTarget,
@@ -15,12 +16,13 @@ import {
 } from '../interaction/interaction.js'
 import {
   buildVirtualOrder,
+  buildVirtualOrderMulti,
   childWorldRectsById,
   currentShiftRects,
   dragShiftEasedProgress,
   dragShiftProgress,
 } from '../interaction/drag-transition.js'
-import { applySelectionClick, idsInSelectionRect, normalizeRect } from '../interaction/selection.js'
+import { applySelectionClick, idsInSelectionRect, normalizeRect, resolveDragNodeIds } from '../interaction/selection.js'
 
 const DRAG_SHIFT_DURATION_MS = 150
 
@@ -44,6 +46,14 @@ export function createDragController(deps) {
     return group && dragState?.ghostWorldPoint && groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y) !== 0
   }
 
+  function dragNodeIds() {
+    return dragState?.dragNodeIds ?? []
+  }
+
+  function isMultiDrag() {
+    return dragNodeIds().length > 1
+  }
+
   function getInteractionRenderState() {
     const timestamp = now()
     if (!dragState || !dragState.dragging) {
@@ -58,18 +68,24 @@ export function createDragController(deps) {
     }
     const layout = deps.getLayout()
     const group = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
+    const ids = dragNodeIds()
     let groupDrag
     if (!group) {
       groupDrag = {
         groupId: null,
         order: null,
         draggingChildId: dragState.nodeId,
+        draggingChildIds: ids,
+        ghostCount: ids.length,
         ghostRect: dragState.ghostScreenRect,
         childRectsById: null,
         dropSlotOpacity: 1,
       }
     } else {
-      const order = buildVirtualOrder(group.children, dragState.nodeId, dragState.insertIndex)
+      const orderBuilder = isMultiDrag() ? buildVirtualOrderMulti : buildVirtualOrder
+      const order = isMultiDrag()
+        ? orderBuilder(group.children, ids, dragState.insertIndex)
+        : orderBuilder(group.children, dragState.nodeId, dragState.insertIndex)
       const autoScrolling = shouldAutoScroll(group)
       const childRectsById =
         !autoScrolling &&
@@ -82,7 +98,16 @@ export function createDragController(deps) {
         autoScrolling || dragState.slotFadeStartedAt == null
           ? 1
           : dragShiftEasedProgress(dragState.slotFadeStartedAt, DRAG_SHIFT_DURATION_MS, timestamp)
-      groupDrag = { groupId: group.id, order, draggingChildId: dragState.nodeId, ghostRect: dragState.ghostScreenRect, childRectsById, dropSlotOpacity }
+      groupDrag = {
+        groupId: group.id,
+        order,
+        draggingChildId: dragState.nodeId,
+        draggingChildIds: ids,
+        ghostCount: ids.length,
+        ghostRect: dragState.ghostScreenRect,
+        childRectsById,
+        dropSlotOpacity,
+      }
     }
     return {
       dragging: true,
@@ -143,6 +168,7 @@ export function createDragController(deps) {
     const previousIndex = dragState.insertIndex
 
     const activeGroup = previousGroupId ? layout.groups.find((g) => g.id === previousGroupId) : null
+    const excluded = dragNodeIds()
     const target =
       activeGroup && withinGroupBody(activeGroup, worldPoint)
         ? {
@@ -150,7 +176,7 @@ export function createDragController(deps) {
             parentId: activeGroup.parentId,
             group: activeGroup,
             insertIndex: groupGridIndexAt(
-              { ...activeGroup, children: activeGroup.children.filter((id) => id !== dragState.nodeId) },
+              { ...activeGroup, children: activeGroup.children.filter((id) => !excluded.includes(id)) },
               worldPoint,
             ),
             previewRect: null,
@@ -162,6 +188,7 @@ export function createDragController(deps) {
             dragState.nodeId,
             deps.getLayoutDirection(),
             deps.getViewport().scale,
+            excluded,
           )
 
     if (!target.valid) {
@@ -210,14 +237,16 @@ export function createDragController(deps) {
             timestamp,
           )
         : childWorldRectsById(group, group.children)
-    const toOrder = buildVirtualOrder(group.children, dragState.nodeId, insertIndex)
+    const toOrder = isMultiDrag()
+      ? buildVirtualOrderMulti(group.children, dragNodeIds(), insertIndex)
+      : buildVirtualOrder(group.children, dragState.nodeId, insertIndex)
     dragState.shiftFromById = fromById
     dragState.shiftToById = childWorldRectsById(group, toOrder)
     dragState.shiftStartedAt = timestamp
   }
 
   function isAdditiveSelection(event) {
-    return event.shiftKey || event.metaKey || event.ctrlKey
+    return event.shiftKey || isModKey(event)
   }
 
   function ghostRectForPoint(worldPoint) {
@@ -327,10 +356,12 @@ export function createDragController(deps) {
 
   function cancelPointerInteractions() {
     deps.cancelScheduledRender()
+    const hadMarquee = Boolean(marqueeState?.active)
     cancelDrag()
     cancelScrollbarDrag()
     cancelPan()
     cancelMarquee()
+    if (hadMarquee) deps.renderCurrent()
   }
 
   function updateScrollbarHover(groupId) {
@@ -343,13 +374,43 @@ export function createDragController(deps) {
     updateScrollbarHover(null)
   }
 
+  function startMarquee(event) {
+    deps.settleAnimation()
+    deps.getCanvasEl()?.setPointerCapture?.(event.pointerId)
+    const startScreen = deps.screenPointFromClient(event.clientX, event.clientY)
+    marqueeState = {
+      pointerId: event.pointerId,
+      startScreen,
+      rect: { x: startScreen.x, y: startScreen.y, width: 0, height: 0 },
+      active: false,
+    }
+    deps.renderCurrent()
+  }
+
+  let consumedMarqueeGesture = false
+
+  function consumeMarqueeGesture() {
+    const value = consumedMarqueeGesture
+    consumedMarqueeGesture = false
+    return value
+  }
+
   function handlePointerDown(event) {
     deps.closeContextMenu()
     const layout = deps.getLayout()
     if (!layout) return
-    if (event.button !== 0) return
+    const isPrimary = event.button === 0
+    const isSecondary = event.button === 2
+    if (!isPrimary && !isSecondary) return
     deps.getCanvasEl()?.focus?.()
     const point = deps.pointFromClient(event.clientX, event.clientY)
+
+    if (isSecondary) {
+      const hit = hitTest(layout, point)
+      if (!hit) startMarquee(event)
+      return
+    }
+
     const scrollbarHit = hitScrollbarThumb(layout, point)
     if (scrollbarHit) {
       deps.getCanvasEl()?.setPointerCapture?.(event.pointerId)
@@ -378,6 +439,7 @@ export function createDragController(deps) {
       deps.getCanvasEl()?.setPointerCapture?.(event.pointerId)
       dragState = {
         nodeId,
+        dragNodeIds: resolveDragNodeIds(nodeId, deps.getSelectedIds(), deps.getGraph(), layout),
         fromParentId: node.parentId,
         additive: isAdditiveSelection(event),
         startScreen: deps.screenPointFromClient(event.clientX, event.clientY),
@@ -404,15 +466,8 @@ export function createDragController(deps) {
     if (!hit) {
       deps.settleAnimation()
       deps.getCanvasEl()?.setPointerCapture?.(event.pointerId)
-      if (event.metaKey || event.ctrlKey) {
-        const startScreen = deps.screenPointFromClient(event.clientX, event.clientY)
-        marqueeState = {
-          pointerId: event.pointerId,
-          startScreen,
-          rect: { x: startScreen.x, y: startScreen.y, width: 0, height: 0 },
-          active: false,
-        }
-        deps.renderCurrent()
+      if (isModKey(event)) {
+        startMarquee(event)
         return
       }
       deps.setSelected([])
@@ -450,7 +505,10 @@ export function createDragController(deps) {
         width: screenPoint.x - marqueeState.startScreen.x,
         height: screenPoint.y - marqueeState.startScreen.y,
       }
-      marqueeState.active = true
+      if (!marqueeState.active) {
+        marqueeState.active = true
+        deps.cancelContextMenuPending?.()
+      }
       deps.scheduleRender('marquee')
       return
     }
@@ -492,9 +550,13 @@ export function createDragController(deps) {
   function handlePointerUp() {
     if (marqueeState) {
       deps.flushScheduledRender()
-      const ids = marqueeState.active ? idsInSelectionRect(deps.getLayout(), marqueeState.rect, deps.getViewport()) : []
+      consumedMarqueeGesture = marqueeState.active
+      if (marqueeState.active) {
+        const ids = idsInSelectionRect(deps.getLayout(), marqueeState.rect, deps.getViewport())
+        deps.setSelected(ids)
+      }
       marqueeState = null
-      deps.setSelected(ids)
+      deps.renderCurrent()
       return
     }
 
@@ -536,40 +598,63 @@ export function createDragController(deps) {
           : dragState.targetParentId === dragState.fromParentId
             ? dragState.insertIndex ?? parent.children.length
             : parent.children.length
+        const ids = dragNodeIds()
+        const graph = deps.getGraph()
+        const sameParentReorder =
+          dragState.targetParentId === dragState.fromParentId &&
+          ids.every((id) => graph.nodes.get(id)?.parentId === dragState.fromParentId)
 
-        if (dragState.targetParentId === dragState.fromParentId) {
-          const operation = {
-            type: 'reorder-group-child',
-            payload: {
-              groupId: dragState.targetGroupId,
-              parentId: dragState.targetParentId,
-              childId: dragState.nodeId,
-              index,
-            },
-          }
+        if (sameParentReorder) {
+          const operation = ids.length > 1
+            ? {
+              type: 'reorder-group-children',
+              payload: {
+                groupId: dragState.targetGroupId,
+                parentId: dragState.targetParentId,
+                childIds: ids,
+                index,
+              },
+            }
+            : {
+              type: 'reorder-group-child',
+              payload: {
+                groupId: dragState.targetGroupId,
+                parentId: dragState.targetParentId,
+                childId: dragState.nodeId,
+                index,
+              },
+            }
           const result = deps.applyOperation(operation, { before: deps.getBeforeGroupReorder() })
           if (result.applied) {
             if (targetGroup) groupScrollPatch = { groupId: targetGroup.id, scrollTop: targetGroup.scrollTop }
             updateLayoutAfterDrag = true
-            groupReorderPayload = {
-              groupId: dragState.targetGroupId,
-              childId: dragState.nodeId,
-              index: result.operation.payload.index,
-            }
+            groupReorderPayload = ids.length > 1
+              ? { groupId: dragState.targetGroupId, childIds: ids, index: result.operation.payload.index }
+              : {
+                groupId: dragState.targetGroupId,
+                childId: dragState.nodeId,
+                index: result.operation.payload.index,
+              }
             changeResult = result
           } else {
             renderAfterDrag = true
           }
         } else {
-          const operation = {
-            type: 'move-node',
-            payload: { nodeId: dragState.nodeId, toParentId: dragState.targetParentId, index },
-          }
+          const operation = ids.length > 1
+            ? {
+              type: 'move-nodes',
+              payload: { nodeIds: ids, toParentId: dragState.targetParentId, index },
+            }
+            : {
+              type: 'move-node',
+              payload: { nodeId: dragState.nodeId, toParentId: dragState.targetParentId, index },
+            }
           const result = deps.applyOperation(operation, { before: deps.getBeforeNodeMove() })
           if (result.applied) {
             updateLayoutAfterDrag = true
             nodeMovePayload = {
               nodeId: dragState.nodeId,
+              nodeIds: ids,
               fromParentId: dragState.fromParentId,
               toParentId: dragState.targetParentId,
               index: result.operation.payload.index,
@@ -687,5 +772,6 @@ export function createDragController(deps) {
     onDrop: handleDrop,
     cancelPointerInteractions,
     getInteractionRenderState,
+    consumeMarqueeGesture,
   }
 }

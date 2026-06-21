@@ -101,3 +101,24 @@ export function centerViewportOn(worldPoint, viewport, viewportWidth, viewportHe
     scale: viewport.scale,
   }
 }
+
+/** 将布局 bounds 的中心对齐到视口中心，缩放固定为给定值（默认 1）。 */
+export function centerViewportOnBounds(bounds, viewportWidth, viewportHeight, scale = 1, options = null) {
+  const degenerate =
+    !Number.isFinite(bounds?.minX) ||
+    !Number.isFinite(bounds?.maxX) ||
+    !Number.isFinite(bounds?.minY) ||
+    !Number.isFinite(bounds?.maxY)
+  const clampedScale = clampScale(scale, options)
+  if (degenerate) {
+    return { ...DEFAULT_VIEWPORT, scale: clampedScale }
+  }
+  const centerX = (bounds.minX + bounds.maxX) / 2
+  const centerY = (bounds.minY + bounds.maxY) / 2
+  return centerViewportOn(
+    { x: centerX, y: centerY },
+    { ...DEFAULT_VIEWPORT, scale: clampedScale },
+    viewportWidth,
+    viewportHeight,
+  )
+}

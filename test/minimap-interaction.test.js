@@ -13,6 +13,7 @@ import {
   edgePanVelocity,
   scrollbarMetrics,
   hitScrollbarThumb,
+  isModKey,
 } from '../src/minimap/interaction/interaction.js'
 
 const VIEWPORT = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 760 }
@@ -584,4 +585,21 @@ test('hitScrollbarThumb returns null for a point outside every track, and skips 
   const metrics = scrollbarMetrics(overflowing)
   const hit = hitScrollbarThumb(layout, { x: metrics.trackX + 1, y: metrics.thumbY + 1 })
   assert.equal(hit.group, overflowing)
+})
+
+test('isModKey treats Meta as the primary modifier on macOS and Ctrl on other platforms', () => {
+  assert.equal(isModKey({ metaKey: true, ctrlKey: false }), true)
+  assert.equal(isModKey({ metaKey: false, ctrlKey: true }), true)
+  assert.equal(isModKey({ metaKey: false, ctrlKey: false, shiftKey: true }), false)
+})
+
+test('isModKey falls back to getModifierState when key flags are missing', () => {
+  const event = {
+    metaKey: false,
+    ctrlKey: false,
+    getModifierState(type) {
+      return type === 'Meta'
+    },
+  }
+  assert.equal(isModKey(event), true)
 })

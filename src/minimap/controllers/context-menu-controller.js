@@ -1,4 +1,4 @@
-import { hitTest } from '../interaction/interaction.js'
+import { hitTest, exceedsDragThreshold } from '../interaction/interaction.js'
 import { hasClipboard } from '../edit/clipboard.js'
 import { BUILT_IN_CONTEXT_MENU_ACTIONS, buildContextMenuItems, mergeContextMenuItems } from '../edit/context-menu.js'
 
@@ -8,6 +8,8 @@ const CONTEXT_MENU_MAX_HEIGHT = 360
 export function createContextMenuController(deps) {
   let state = null
   let documentListener = null
+  /** @type {{ pointerId: number, startScreen: { x: number, y: number } } | null} */
+  let pendingRightClick = null
 
   function groupForHit(hit) {
     const layout = deps.getLayout()
@@ -34,6 +36,15 @@ export function createContextMenuController(deps) {
     }
     if (hit?.type === 'group') {
       const group = groupForHit(hit)
+      if (hit.zone === 'item' && hit.childId) {
+        return {
+          ...base,
+          targetType: 'node',
+          targetId: hit.childId,
+          groupId: hit.id,
+          hasToggleableGroup: false,
+        }
+      }
       return {
         ...base,
         targetType: 'group',
@@ -60,13 +71,43 @@ export function createContextMenuController(deps) {
     deps.onMenuStateChange(state)
   }
 
+  function cancelPending() {
+    pendingRightClick = null
+  }
+
   function close() {
     state = null
     publish()
+    cancelPending()
     if (documentListener) {
       document.removeEventListener('pointerdown', documentListener, true)
       documentListener = null
     }
+  }
+
+  function handlePointerDown(event) {
+    if (event.button !== 2) return
+    close()
+    pendingRightClick = {
+      pointerId: event.pointerId,
+      startScreen: deps.screenPointFromClient(event.clientX, event.clientY),
+    }
+  }
+
+  function handlePointerMove(event) {
+    if (!pendingRightClick || event.pointerId !== pendingRightClick.pointerId) return
+    const currentScreen = deps.screenPointFromClient(event.clientX, event.clientY)
+    if (exceedsDragThreshold(pendingRightClick.startScreen, currentScreen)) cancelPending()
+  }
+
+  function handlePointerUp(event) {
+    if (event.button !== 2 || !pendingRightClick || event.pointerId !== pendingRightClick.pointerId) return
+    cancelPending()
+    open(event)
+  }
+
+  function suppressContextMenu(event) {
+    event.preventDefault()
   }
 
   function open(event) {
@@ -141,5 +182,15 @@ export function createContextMenuController(deps) {
     close()
   }
 
-  return { open, close, runItem, isOpen: () => state !== null }
+  return {
+    open,
+    close,
+    runItem,
+    isOpen: () => state !== null,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    cancelPending,
+    suppressContextMenu,
+  }
 }

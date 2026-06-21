@@ -12,7 +12,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `Minimap.vue` | 根组件壳。创建并挂载 `minimap-controller`，绑定工具栏/搜索框/右键菜单/性能面板，`methods` 暴露相机/选中/编辑/搜索方法供 `$refs` 调用 |
+| `Minimap.vue` | 根组件壳。创建并挂载 `minimap-controller`，绑定搜索框/左下缩放历史/右键菜单/性能面板，`methods` 暴露相机/选中/编辑/搜索方法供 `$refs` 调用 |
 | `Overview.vue` | 小地图子组件。命令式 `render(scene)`，自有 canvas + DPR，点击 emit `navigate` |
 | `ResourceTree.vue` | 资源树。展示可拖拽资源，原生 drag and drop 发起拖入 |
 

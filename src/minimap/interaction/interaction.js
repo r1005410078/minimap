@@ -127,6 +127,16 @@ export function exceedsDragThreshold(startScreenPoint, currentScreenPoint, thres
   return Math.hypot(currentScreenPoint.x - startScreenPoint.x, currentScreenPoint.y - startScreenPoint.y) > thresholdPx
 }
 
+/** macOS 为 ⌘（Meta），Windows/Linux 为 Ctrl。 */
+export function isModKey(event) {
+  if (!event) return false
+  if (event.metaKey || event.ctrlKey) return true
+  if (typeof event.getModifierState === 'function') {
+    return event.getModifierState('Meta') || event.getModifierState('Control')
+  }
+  return false
+}
+
 // 指针（世界坐标 y）靠近分组框上/下边缘 edgeZone 范围内时，返回这一帧应叠加到
 // scrollTop 上的增量，越靠边缘越接近 maxSpeed；不可滚动或不在热区时返回 0。
 export function groupAutoScrollSpeed(group, pointerWorldY, edgeZone = 24, maxSpeed = 8) {
@@ -289,7 +299,16 @@ function attachPreviewRect(graph, layout, draggedNodeId, targetParentId, directi
 // 命中同父兄弟普通节点中间区域、或命中非兄弟普通节点时，该节点本身就是新的目标父节点，
 // 不计算插入下标（追加到末尾，嵌套变成子节点）；
 // 命中分组框 header、命中空白、或目标是被拖节点自己/其后代时，返回 invalid。
-export function resolveDropTarget(graph, layout, point, draggedNodeId, direction = 'horizontal', viewportScale = 1) {
+export function resolveDropTarget(
+  graph,
+  layout,
+  point,
+  draggedNodeId,
+  direction = 'horizontal',
+  viewportScale = 1,
+  excludeNodeIds = null,
+) {
+  const excluded = new Set(excludeNodeIds ?? [draggedNodeId])
   const edgeThresholdWorld = EDGE_THRESHOLD_SCREEN_PX / viewportScale
 
   const gapHit = siblingGapHitAt(graph, layout, point, draggedNodeId, direction)
@@ -311,7 +330,7 @@ export function resolveDropTarget(graph, layout, point, draggedNodeId, direction
     if (!group) return { valid: false }
     const parentId = group.parentId
     if (isNodeOrDescendant(graph, draggedNodeId, parentId)) return { valid: false }
-    const restGroup = { ...group, children: group.children.filter((id) => id !== draggedNodeId) }
+    const restGroup = { ...group, children: group.children.filter((id) => !excluded.has(id)) }
     const insertIndex = groupGridIndexAt(restGroup, point)
     return { valid: true, parentId, group, insertIndex, previewRect: null }
   }

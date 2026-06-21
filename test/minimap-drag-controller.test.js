@@ -117,6 +117,43 @@ test('dragging a sibling into the gap between two other siblings reorders it wit
   assert.deepEqual(calls.updateLayout, [undefined])
 })
 
+test('multi-selected siblings move together on cross-parent drag', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const selectedIds = ['feeder-1', 'feeder-2', 'feeder-3']
+  const clusterRect = layout.nodes.get('cluster-25')
+  const to = { x: clusterRect.x + clusterRect.width / 2, y: clusterRect.y + clusterRect.height / 2 }
+  const { deps, calls } = createDeps(graph, layout, { getSelectedIds: () => selectedIds })
+  const drag = createDragController(deps)
+
+  drag.onPointerDown(downEvent({ x: 460, y: 20 }))
+  drag.onPointerMove(moveEvent(to))
+  drag.onPointerUp(moveEvent(to))
+
+  for (const id of selectedIds) {
+    assert.equal(graph.nodes.get(id).parentId, 'cluster-25')
+    assert.equal(graph.nodes.get('grid-tie').children.includes(id), false)
+  }
+  assert.equal(calls.emitNodeMove.length, 1)
+  assert.deepEqual(calls.emitNodeMove[0].nodeIds, selectedIds)
+  assert.equal(calls.change[0].type, 'move-nodes')
+})
+
+test('getInteractionRenderState exposes ghostCount when multiple nodes are dragged', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const selectedIds = ['feeder-1', 'feeder-2', 'feeder-3']
+  const { deps } = createDeps(graph, layout, { getSelectedIds: () => selectedIds })
+  const drag = createDragController(deps)
+
+  drag.onPointerDown(downEvent({ x: 460, y: 20 }))
+  drag.onPointerMove(moveEvent({ x: 500, y: 80 }))
+
+  const state = drag.getInteractionRenderState()
+  assert.equal(state.groupDrag.ghostCount, 3)
+  assert.deepEqual(state.groupDrag.draggingChildIds, selectedIds)
+})
+
 test('dragging a node onto a node in a different subtree moves it as a new child appended at the end', () => {
   const graph = createDemoGraph()
   const layout = demoLayout()
@@ -132,7 +169,13 @@ test('dragging a node onto a node in a different subtree moves it as a new child
   assert.equal(graph.nodes.get('grid-tie').children.includes('feeder-1'), false)
   assert.deepEqual(graph.nodes.get('energy-root').children, ['grid-tie', 'heap-1', 'cluster-25', 'feeder-1'])
   assert.equal(calls.emitNodeMove.length, 1)
-  assert.deepEqual(calls.emitNodeMove[0], { nodeId: 'feeder-1', fromParentId: 'grid-tie', toParentId: 'energy-root', index: 3 })
+  assert.deepEqual(calls.emitNodeMove[0], {
+    nodeId: 'feeder-1',
+    nodeIds: ['feeder-1'],
+    fromParentId: 'grid-tie',
+    toParentId: 'energy-root',
+    index: 3,
+  })
   assert.equal(calls.change.length, 1)
 })
 
@@ -222,6 +265,40 @@ test('Ctrl/Cmd-drag on blank canvas marquee-selects the nodes inside the rect on
   drag.onPointerUp(moveEvent(end, { metaKey: true }))
 
   assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+})
+
+test('right-drag on blank canvas marquee-selects the nodes inside the rect on release', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  const start = { x: 380, y: -10 }
+  const end = { x: 540, y: 170 }
+
+  drag.onPointerDown(downEvent(start, { button: 2 }))
+  drag.onPointerMove(moveEvent(end))
+  drag.onPointerUp(moveEvent(end))
+
+  assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(drag.consumeMarqueeGesture(), true)
+})
+
+test('right-drag marquee cancels a pending context menu when the selection rect becomes active', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  let cancelPendingCalls = 0
+  const { deps } = createDeps(graph, layout, {
+    cancelContextMenuPending: () => { cancelPendingCalls += 1 },
+  })
+  const drag = createDragController(deps)
+  const start = { x: 380, y: -10 }
+  const end = { x: 540, y: 170 }
+
+  drag.onPointerDown(downEvent(start, { button: 2 }))
+  drag.onPointerMove(moveEvent(end))
+  drag.onPointerUp(moveEvent(end))
+
+  assert.equal(cancelPendingCalls, 1)
 })
 
 test('blank canvas pan applies the total displacement from the pointer-down viewport, not cumulative per-frame deltas', () => {
@@ -373,6 +450,23 @@ test('getInteractionRenderState reflects an in-progress marquee selection rect',
   assert.equal(state.dragging, false)
   assert.equal(state.interacting, true)
   assert.deepEqual(state.selectionRect, { x: 950, y: 700, width: 50, height: 40 })
+})
+
+test('marquee pointerup clears the selection rect from interaction render state', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+
+  drag.onPointerDown(downEvent({ x: 950, y: 700 }, { metaKey: true }))
+  drag.onPointerMove(moveEvent({ x: 1000, y: 740 }, { metaKey: true }))
+  assert.ok(drag.getInteractionRenderState().selectionRect)
+
+  const rendersBeforeUp = calls.renderCurrent
+  drag.onPointerUp(moveEvent({ x: 1000, y: 740 }, { metaKey: true }))
+
+  assert.equal(drag.getInteractionRenderState().selectionRect, null)
+  assert.ok(calls.renderCurrent > rendersBeforeUp)
 })
 
 test('getInteractionRenderState reports dragging true with a groupDrag descriptor while a plain-sibling drag is in progress', () => {

@@ -11,8 +11,7 @@ stubElementSize(800, 600)
 const contexts = stubCanvasContext()
 stubResizeObserver()
 
-const { mount } = await import('@vue/test-utils')
-const Minimap = (await import('../src/minimap/components/Minimap.vue')).default
+const { mountMinimap } = await import('./helpers/mount-minimap.js')
 
 function dispatchPointerDown(wrapper, point, options = {}) {
   const canvasEl = wrapper.find('canvas').element
@@ -101,7 +100,7 @@ test('clicking a node selects it (uncontrolled) and highlights it on the next re
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const rect = layout.nodes.get('grid-tie')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
   dispatchPointerDown(wrapper, point)
@@ -116,7 +115,7 @@ test('clicking blank space clears the selection', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const rect = layout.nodes.get('grid-tie')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   dispatchPointerDown(wrapper, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
 
   dispatchPointerDown(wrapper, { x: -100000, y: -100000 })
@@ -131,7 +130,7 @@ test('modifier clicking adds and toggles multiple selections', () => {
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
   const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const gridPoint = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }
   const groupPoint = { x: heapGroup.x + heapGroup.width / 2, y: heapGroup.y + heapGroup.height / 2 }
@@ -152,7 +151,7 @@ test('Escape clears the current selection', () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   const point = { x: grid.x + grid.width / 2, y: grid.y + grid.height / 2 }
   dispatchPointerDown(wrapper, point)
@@ -169,7 +168,7 @@ test('Cmd/Ctrl dragging blank space selects visible items inside the marquee', (
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
   const grid = layout.nodes.get('grid-tie')
   const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchPointerDown(wrapper, { x: 150, y: 50 }, { ctrlKey: true })
   dispatchPointerMove(wrapper, { x: heapGroup.x + heapGroup.width + 20, y: heapGroup.y + 60 }, { ctrlKey: true })
@@ -177,14 +176,15 @@ test('Cmd/Ctrl dragging blank space selects visible items inside the marquee', (
 
   const latest = wrapper.emitted('select').at(-1)[0]
   assert.ok(latest.includes('grid-tie'))
-  assert.ok(latest.includes(heapGroup.id))
+  assert.equal(latest.includes(heapGroup.id), false)
+  assert.ok(heapGroup.children.some((childId) => latest.includes(childId)))
   assert.equal(wrapper.emitted('viewport-change'), undefined)
   wrapper.destroy()
 })
 
 test('Cmd/Ctrl marquee starts at the mouse position even when the canvas is offset', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
   setCanvasRect(wrapper, { left: 80, top: 40, width: 800, height: 600 })
 
   dispatchPointerDown(wrapper, { x: 180, y: 140 }, { metaKey: true })
@@ -197,7 +197,7 @@ test('Cmd/Ctrl marquee starts at the mouse position even when the canvas is offs
 
 test('Cmd/Ctrl dragging blank space over empty area clears selection', () => {
   const graph = createDemoGraph()
-  const wrapper = mount(Minimap, { propsData: { graph } })
+  const wrapper = mountMinimap( { propsData: { graph } })
 
   dispatchPointerDown(wrapper, { x: 10, y: 10 }, { ctrlKey: true })
   dispatchPointerMove(wrapper, { x: 20, y: 20 }, { ctrlKey: true })
@@ -210,7 +210,7 @@ test('Cmd/Ctrl dragging blank space over empty area clears selection', () => {
 test('selectedIds prop puts the component in controlled mode', async () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
-  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['grid-tie'] } })
+  const wrapper = mountMinimap( { propsData: { graph, selectedIds: ['grid-tie'] } })
   assert.deepEqual(selectedLabels(contexts.at(-1), defaultTheme), ['Grid Tie'])
 
   const rootRect = layout.nodes.get('energy-root')
@@ -231,7 +231,7 @@ test('selectedIds prop puts the component in controlled mode', async () => {
 test('clicking while controlled does not leak into a later uncontrolled render', async () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
-  const wrapper = mount(Minimap, { propsData: { graph, selectedIds: ['grid-tie'] } })
+  const wrapper = mountMinimap( { propsData: { graph, selectedIds: ['grid-tie'] } })
 
   const rootRect = layout.nodes.get('energy-root')
   dispatchPointerDown(wrapper, { x: rootRect.x + rootRect.width / 2, y: rootRect.y + rootRect.height / 2 })

@@ -1,3 +1,4 @@
+import { expandSelectedNodeIds } from '../interaction/selection.js'
 import { createGraphOperationManager, captureSubtreeSnapshot } from '../graph/graph-operations.js'
 import { getClipboard, setClipboard } from '../edit/clipboard.js'
 import { deserializeGraph, serializeGraph } from '../graph/graph-serialization.js'
@@ -51,16 +52,7 @@ export function createEditController(deps) {
   }
 
   function selectedRealNodeIds() {
-    const layout = deps.getLayout()
-    if (!layout) return deps.getSelectedIds()
-    const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
-    const ids = []
-    for (const id of deps.getSelectedIds()) {
-      const group = groupsById.get(id)
-      if (group) ids.push(...group.children)
-      else ids.push(id)
-    }
-    return [...new Set(ids)]
+    return expandSelectedNodeIds(deps.getSelectedIds(), deps.getLayout())
   }
 
   function selectionAfterDeleting(deletedIds) {

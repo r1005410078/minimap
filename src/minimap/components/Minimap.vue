@@ -2,26 +2,6 @@
   <div class="minimap">
     <ResourceTree class="minimap-resources" :resources="resources" />
     <div ref="containerRef" class="minimap-canvas-container">
-      <div class="minimap-toolbar" aria-label="画布工具栏">
-        <button class="minimap-toolbar-button is-primary" type="button" aria-label="返回">◀</button>
-        <span class="minimap-toolbar-separator"></span>
-        <button class="minimap-toolbar-button" type="button" aria-label="撤销" @click="controller.undo">↶</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="重做" @click="controller.redo">↷</button>
-        <span class="minimap-toolbar-separator"></span>
-        <button class="minimap-toolbar-button" type="button" aria-label="选择">□</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="复制" @click="controller.copySelection">⌘</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="粘贴" @click="controller.paste">⎘</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="删除" @click="controller.deleteSelection">⌫</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="框选">▣</button>
-        <span class="minimap-toolbar-separator"></span>
-        <button class="minimap-toolbar-button" type="button" aria-label="定位">◎</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="缩小">⊖</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="放大">⊕</button>
-        <span class="minimap-toolbar-spacer"></span>
-        <button class="minimap-toolbar-button" type="button" aria-label="展开">↗</button>
-        <button class="minimap-toolbar-button is-accent" type="button" aria-label="列表">▦</button>
-        <button class="minimap-toolbar-button" type="button" aria-label="信息">ⓘ</button>
-      </div>
       <canvas
         ref="canvasRef"
         :class="{ 'is-active-border-enabled': effectiveOptions.enableActiveBorder === true }"
@@ -51,6 +31,57 @@
           ›
         </button>
       </div>
+      <div class="minimap-canvas-footer-left">
+        <div v-if="effectiveOptions.showPerformance" class="minimap-performance">
+          <span class="minimap-performance-label">性能</span>
+          <span class="minimap-performance-value">{{ renderStats ? `${renderStats.drawn}/${renderStats.total}` : '0/0' }}</span>
+          <span class="minimap-performance-value">{{ renderStats ? `${renderStats.culled} culled` : '0 culled' }}</span>
+          <span class="minimap-performance-value">{{ renderStats ? `${renderStats.durationMs.toFixed(1)}ms` : '0.0ms' }}</span>
+        </div>
+        <div class="minimap-bottom-controls" aria-label="缩放与历史">
+          <div class="minimap-control-pod minimap-zoom-pod">
+            <button
+              class="minimap-control-button"
+              type="button"
+              aria-label="缩小"
+              :disabled="zoomOutDisabled"
+              @click="handleZoomOut"
+            >
+              −
+            </button>
+            <span class="minimap-zoom-label" aria-live="polite">{{ viewportScaleLabel }}</span>
+            <button
+              class="minimap-control-button"
+              type="button"
+              aria-label="放大"
+              :disabled="zoomInDisabled"
+              @click="handleZoomIn"
+            >
+              +
+            </button>
+          </div>
+          <div class="minimap-control-pod minimap-history-pod">
+            <button
+              class="minimap-control-button"
+              type="button"
+              aria-label="撤销"
+              :disabled="!historyCanUndo"
+              @click="handleUndo"
+            >
+              ↶
+            </button>
+            <button
+              class="minimap-control-button"
+              type="button"
+              aria-label="重做"
+              :disabled="!historyCanRedo"
+              @click="handleRedo"
+            >
+              ↷
+            </button>
+          </div>
+        </div>
+      </div>
       <div v-if="effectiveOptions.enableOverview !== false" class="minimap-overview-panel">
         <div class="minimap-overview-header">
           <span>MINIMAP</span>
@@ -61,12 +92,6 @@
           class="minimap-overview"
           @navigate="handleOverviewNavigate"
         />
-      </div>
-      <div v-if="effectiveOptions.showPerformance" class="minimap-performance">
-        <span class="minimap-performance-label">性能</span>
-        <span class="minimap-performance-value">{{ renderStats ? `${renderStats.drawn}/${renderStats.total}` : '0/0' }}</span>
-        <span class="minimap-performance-value">{{ renderStats ? `${renderStats.culled} culled` : '0 culled' }}</span>
-        <span class="minimap-performance-value">{{ renderStats ? `${renderStats.durationMs.toFixed(1)}ms` : '0.0ms' }}</span>
       </div>
       <div
         v-if="contextMenuState"
@@ -158,6 +183,7 @@
  * @property {boolean} [showGrid=true] 是否绘制背景网格。
  * @property {boolean} [showPerformance=false] 是否显示左下角绘制性能 HUD。
  * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
+ * @property {boolean} [disableInitialCenter=false] 为 `true` 时首次布局不自动居中（测试用）。
  */
 
 /**
@@ -262,7 +288,7 @@
  * Minimap 根 Vue 组件（Options API）。
  *
  * 职责边界：
- * - **本组件**：props/emits 声明、DOM 模板（资源树 / 工具栏 / 搜索 / Overview / 右键菜单）、
+ * - **本组件**：props/emits 声明、DOM 模板（资源树 / 搜索 / 左下缩放历史 / Overview / 右键菜单）、
  *   生命周期挂载与卸载、将调用转发给 `minimap-controller`。
  * - **controller 层**：指针事件、拖拽状态机、布局动画、Canvas 绘制调度、undo/redo。
  *
@@ -281,7 +307,7 @@
  */
 import { createMinimapController } from '../controllers/minimap-controller.js'
 import { defaultTheme } from '../render/theme.js'
-import { centerViewportOn } from '../coords/viewport.js'
+import { centerViewportOn, clampScale, viewportOptions } from '../coords/viewport.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
@@ -406,10 +432,32 @@ export default {
       internalOptions: { ...(this.options ?? {}) },
       /** @type {ContextMenuState|null} 右键菜单可见性与项列表；`null` 时菜单 DOM 不渲染。 */
       contextMenuState: null,
+      /** @type {number} 当前视口缩放倍率，供右下角缩放控件展示。 */
+      viewportScale: 1,
+      /** @type {boolean} 撤销栈是否非空。 */
+      historyCanUndo: false,
+      /** @type {boolean} 重做栈是否非空。 */
+      historyCanRedo: false,
     }
   },
 
   computed: {
+    /** @returns {string} 缩放百分比标签，如 `100%`。 */
+    viewportScaleLabel() {
+      return `${Math.round(this.viewportScale * 100)}%`
+    },
+
+    /** @returns {boolean} 已达最小缩放时禁用缩小按钮。 */
+    zoomOutDisabled() {
+      const opts = viewportOptions(this.effectiveOptions)
+      return clampScale(this.viewportScale / 1.1, opts) === this.viewportScale
+    },
+
+    /** @returns {boolean} 已达最大缩放时禁用放大按钮。 */
+    zoomInDisabled() {
+      const opts = viewportOptions(this.effectiveOptions)
+      return clampScale(this.viewportScale * 1.1, opts) === this.viewportScale
+    },
     /** @returns {boolean} 合并 prop 与内部 toggled 后的有效只读标志。 */
     effectiveReadonly() {
       return this.internalReadonly
@@ -426,6 +474,7 @@ export default {
         showGrid: true,
         showPerformance: false,
         hideTextDuringInteraction: false,
+        disableInitialCenter: false,
         ...this.internalOptions,
       }
     },
@@ -474,6 +523,7 @@ export default {
     /** 受控视口变化 → 重绘（不重复 emit `viewport-change`）。 */
     viewport() {
       this.controller.renderCurrent()
+      this.syncViewportChrome()
     },
 
     /** options prop 变化 → 同步内部副本、关闭菜单并重布局（网格可见性等可能变化）。 */
@@ -505,6 +555,7 @@ export default {
   /** 绑定 canvas / 容器 DOM，注册 ResizeObserver 与指针监听器，并触发首次绘制。 */
   mounted() {
     this.controller.mount(this.$refs.canvasRef, this.$refs.containerRef)
+    this.syncChromeState()
   },
 
   /**
@@ -532,6 +583,51 @@ export default {
     handleOverviewNavigate(worldPoint) {
       const { width, height } = this.controller.getCssSize()
       this.controller.applyViewport(centerViewportOn(worldPoint, this.controller.getViewport(), width, height))
+    },
+
+    /** 同步右下角缩放/历史控件所需的响应式快照。 */
+    syncChromeState() {
+      this.syncViewportChrome()
+      this.syncHistoryChrome()
+    },
+
+    /** 从 controller 读取当前视口缩放倍率。 */
+    syncViewportChrome() {
+      if (!this.controller) return
+      this.viewportScale = this.controller.getViewport().scale
+    },
+
+    /** 从 controller 读取 undo/redo 可用性。 */
+    syncHistoryChrome() {
+      if (!this.controller) return
+      this.historyCanUndo = this.controller.canUndo()
+      this.historyCanRedo = this.controller.canRedo()
+    },
+
+    /** 以画布中心为锚点缩小一级（÷1.1 步进，受 minScale 限制）。 */
+    handleZoomOut() {
+      const opts = viewportOptions(this.effectiveOptions)
+      const next = clampScale(this.controller.getViewport().scale / 1.1, opts)
+      this.controller.zoomTo(next)
+    },
+
+    /** 以画布中心为锚点放大一级（×1.1 步进，受 maxScale 限制）。 */
+    handleZoomIn() {
+      const opts = viewportOptions(this.effectiveOptions)
+      const next = clampScale(this.controller.getViewport().scale * 1.1, opts)
+      this.controller.zoomTo(next)
+    },
+
+    /** 撤销一步编辑并刷新历史按钮状态。 */
+    handleUndo() {
+      this.controller.undo()
+      this.syncHistoryChrome()
+    },
+
+    /** 重做一步编辑并刷新历史按钮状态。 */
+    handleRedo() {
+      this.controller.redo()
+      this.syncHistoryChrome()
     },
 
     /**
@@ -621,12 +717,16 @@ export default {
 
     /** @returns {void} 撤销上一步图编辑（若可 undo）。 */
     undo() {
-      return this.controller.undo()
+      const result = this.controller.undo()
+      this.syncHistoryChrome()
+      return result
     },
 
     /** @returns {void} 重做上一步撤销（若可 redo）。 */
     redo() {
-      return this.controller.redo()
+      const result = this.controller.redo()
+      this.syncHistoryChrome()
+      return result
     },
 
     /** @returns {boolean} 是否可撤销。 */
@@ -641,7 +741,9 @@ export default {
 
     /** @returns {void} 删除当前选中（只读或 `beforeDelete` 拦截时 no-op）。 */
     deleteSelection() {
-      return this.controller.deleteSelection()
+      const result = this.controller.deleteSelection()
+      this.syncHistoryChrome()
+      return result
     },
 
     /** @returns {void} 复制当前选中到内部剪贴板。 */
@@ -651,7 +753,9 @@ export default {
 
     /** @returns {void} 从内部剪贴板粘贴（只读或 `beforePaste` 拦截时 no-op）。 */
     paste() {
-      return this.controller.paste()
+      const result = this.controller.paste()
+      this.syncHistoryChrome()
+      return result
     },
 
     /** @returns {Graph} 导出当前图 JSON 可序列化快照。 */
@@ -694,7 +798,10 @@ export default {
         emitPaste: (payload) => this.$emit('paste', payload),
         emitImport: (payload) => this.$emit('import', payload),
         emitExport: (payload) => this.$emit('export', payload),
-        emitChange: (payload) => this.$emit('change', payload),
+        emitChange: (payload) => {
+          this.$emit('change', payload)
+          this.syncHistoryChrome()
+        },
         emitSearch: (payload) => this.$emit('search', payload),
         onSearchStateChange: ({ keyword, matches, currentIndex }) => {
           this.searchKeyword = keyword
@@ -706,7 +813,10 @@ export default {
         getContextMenuItemsProp: () => this.contextMenuItems,
         getMenuEl: () => this.$refs.contextMenuRef,
         onMenuStateChange: (state) => { this.contextMenuState = state },
-        emitViewportChange: (next) => this.$emit('viewport-change', next),
+        emitViewportChange: (next) => {
+          this.$emit('viewport-change', next)
+          this.syncViewportChrome()
+        },
         emitGroupStateChange: (next) => this.$emit('group-state-change', next),
         getBeforeNodeDrop: () => this.beforeNodeDrop,
         getBeforeGroupReorder: () => this.beforeGroupReorder,
@@ -751,56 +861,10 @@ export default {
   outline: 1px solid #3d9cff;
   outline-offset: -1px;
 }
-.minimap-toolbar {
-  position: absolute;
-  z-index: 3;
-  top: 8px;
-  left: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 12px;
-  border: 1px solid #2a3038;
-  border-radius: 8px;
-  background: rgba(22, 26, 32, 0.96);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
-}
-.minimap-toolbar-button {
-  width: 28px;
-  height: 28px;
-  color: #9aa3af;
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  font: 16px/1 system-ui, sans-serif;
-}
-.minimap-toolbar-button:hover:not(:disabled) {
-  color: #d8dee8;
-  background: #232930;
-}
-.minimap-toolbar-button:disabled {
-  opacity: 0.45;
-}
-.minimap-toolbar-button.is-primary {
-  color: #d8dee8;
-}
-.minimap-toolbar-button.is-accent {
-  color: #2bdd7f;
-}
-.minimap-toolbar-separator {
-  width: 1px;
-  height: 24px;
-  background: #2a3038;
-}
-.minimap-toolbar-spacer {
-  flex: 1;
-}
 .minimap-search {
   position: absolute;
   z-index: 4;
-  top: 68px;
+  top: 16px;
   right: 16px;
   display: flex;
   align-items: center;
@@ -836,6 +900,69 @@ export default {
 .minimap-search-btn:disabled {
   opacity: 0.4;
 }
+.minimap-canvas-footer-left {
+  position: absolute;
+  z-index: 4;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: none;
+}
+.minimap-bottom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+.minimap-control-pod {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px;
+  border: 1px solid #303741;
+  border-radius: 10px;
+  background: rgba(22, 26, 32, 0.96);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+}
+.minimap-zoom-pod {
+  padding: 0 8px;
+  gap: 4px;
+}
+.minimap-history-pod {
+  padding: 0 4px;
+}
+.minimap-control-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  color: #d8dee8;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font: 15px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.minimap-control-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+.minimap-control-button:disabled {
+  color: #5c6570;
+  cursor: default;
+}
+.minimap-zoom-label {
+  min-width: 44px;
+  color: #d8dee8;
+  font: 13px/1 system-ui, sans-serif;
+  text-align: center;
+  user-select: none;
+}
 .minimap-overview-panel {
   position: absolute;
   z-index: 4;
@@ -866,10 +993,6 @@ export default {
   cursor: pointer;
 }
 .minimap-performance {
-  position: absolute;
-  z-index: 4;
-  left: 14px;
-  bottom: 14px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -880,6 +1003,7 @@ export default {
   border-radius: 8px;
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
   font: 12px/1 system-ui, sans-serif;
+  pointer-events: auto;
 }
 .minimap-performance-label {
   color: #7f8a99;
