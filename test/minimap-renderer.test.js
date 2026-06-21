@@ -549,6 +549,14 @@ test('renderScene culls off-screen items: drawn < total', () => {
   assert.equal(stats.drawn + stats.culled, stats.total)
 })
 
+test('renderScene reports total graph node count separately from visible layout items', () => {
+  const ctx = createMockCtx()
+  const scene = demoScene()
+  const stats = renderScene(ctx, scene)
+  assert.equal(stats.nodeCount, scene.graph.nodes.size)
+  assert.ok(stats.nodeCount >= stats.total)
+})
+
 test('stress graph: drawn count stays far below total node count', () => {
   const ctx = createMockCtx()
   const graph = createStressGraph(10000)

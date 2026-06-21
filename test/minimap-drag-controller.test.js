@@ -380,6 +380,43 @@ test('dropping a resource over a node appends it as that node\'s last child via 
   assert.equal(calls.change.length, 1)
 })
 
+test('dragover over a node shows an attach preview for resource drop', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+
+  drag.onDragOver({ preventDefault() {}, clientX: 260, clientY: 84 })
+
+  assert.equal(calls.scheduleRender.length, 1)
+  assert.equal(calls.scheduleRender[0], 'resource-drag')
+  const state = drag.getInteractionRenderState()
+  assert.ok(state.attachPreview?.rect)
+  assert.ok(state.attachPreview?.parentRect)
+})
+
+test('dragleave and drop clear the resource attach preview', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+
+  drag.onDragOver({ preventDefault() {}, clientX: 260, clientY: 84 })
+  assert.ok(drag.getInteractionRenderState().attachPreview)
+
+  drag.onDragLeave()
+  assert.equal(drag.getInteractionRenderState().attachPreview, null)
+
+  drag.onDragOver({ preventDefault() {}, clientX: 260, clientY: 84 })
+  drag.onDrop({
+    preventDefault() {},
+    clientX: 260,
+    clientY: 84,
+    dataTransfer: { getData: () => JSON.stringify({ id: 'sensor', label: 'Sensor' }) },
+  })
+  assert.equal(drag.getInteractionRenderState().attachPreview, null)
+})
+
 test('beforeNodeDrop returning false blocks the drop and leaves the graph untouched', () => {
   const graph = createDemoGraph()
   const layout = demoLayout()

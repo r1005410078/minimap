@@ -266,6 +266,7 @@ test('renderCurrent forwards stats and overview scene through the injected callb
   ctrl.mount(canvas, container)
 
   assert.equal(stats.length, 1)
+  assert.equal(stats[0].nodeCount, deps.getGraph().nodes.size)
   assert.equal(overviewScenes.length, 1)
   assert.equal(overviewScenes[0].mainWidth, 800)
   ctrl.destroy()

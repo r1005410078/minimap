@@ -179,16 +179,15 @@ const EDGE_THRESHOLD_SCREEN_PX = 5
 // 中间大片区域是嵌套（变成子节点）。窄带宽度按屏幕像素换算成世界单位传入，
 // 缩放后窄带的视觉宽度不变；矩形太小塞不下两条窄带时各自收缩到一半，
 // 保证不会重叠、也不会出现"中间区域宽度为负"。
-function siblingDropZoneAt(graph, layout, point, draggedNodeId, targetNodeId, direction, edgeThresholdWorld) {
-  const dragged = graph.nodes.get(draggedNodeId)
+function siblingDropZoneAt(graph, layout, point, draggedNodeId, targetNodeId, direction, edgeThresholdWorld, excludeNodeIds = null) {
+  const excluded = new Set(excludeNodeIds ?? [draggedNodeId])
   const target = graph.nodes.get(targetNodeId)
-  if (!dragged || !target || dragged.parentId !== target.parentId) return null
-  const parent = dragged.parentId ? graph.nodes.get(dragged.parentId) : null
+  if (!target?.parentId) return null
+  const parent = graph.nodes.get(target.parentId)
   const targetRect = layout.nodes.get(targetNodeId)
-  if (!parent || !targetRect || !parent.children.includes(draggedNodeId) || !parent.children.includes(targetNodeId)) {
-    return null
-  }
-  const restChildren = parent.children.filter((id) => id !== draggedNodeId)
+  if (!parent || !targetRect || !parent.children.includes(targetNodeId)) return null
+
+  const restChildren = parent.children.filter((id) => !excluded.has(id))
   const targetIndex = restChildren.indexOf(targetNodeId)
   if (targetIndex === -1) return null
 
@@ -202,25 +201,25 @@ function siblingDropZoneAt(graph, layout, point, draggedNodeId, targetNodeId, di
   return { mode: 'nest' }
 }
 
-// 在"去掉被拖节点后的兄弟列表"里找相邻两个之间的物理空隙（SIBLING_GAP），
-// 命中即判定插入到它们之间——比窄带宽得多，是拖拽时最自然会瞄准的落点，
-// 不要求像素级精确停在某个节点边缘上。只看仍是平铺节点（未被分组框消费）的兄弟，
-// 分组框内部的命中检测走另一套机制，不归这里管。
-function siblingGapHitAt(graph, layout, point, draggedNodeId, direction) {
-  const dragged = graph.nodes.get(draggedNodeId)
-  if (!dragged?.parentId) return null
-  const parent = graph.nodes.get(dragged.parentId)
+function collectParentIdsWithPlainChildren(graph, layout) {
+  const parentIds = new Set()
+  for (const id of layout.nodes.keys()) {
+    const node = graph.nodes.get(id)
+    if (node?.parentId) parentIds.add(node.parentId)
+  }
+  return parentIds
+}
+
+function siblingGapHitInParent(graph, layout, point, parentId, excluded, direction) {
+  const parent = graph.nodes.get(parentId)
   if (!parent) return null
 
-  const restChildren = parent.children.filter((id) => id !== draggedNodeId)
+  const restChildren = parent.children.filter((id) => !excluded.has(id))
   const plainRestChildren = restChildren.filter((id) => layout.nodes.has(id))
 
   for (let i = 0; i < plainRestChildren.length - 1; i++) {
     const idA = plainRestChildren[i]
     const idB = plainRestChildren[i + 1]
-    // 两者在过滤前的兄弟顺序里必须真的紧挨着——如果中间隔着被分组框消费掉的
-    // 子节点（一个或多个），它们在屏幕上并不物理相邻，中间隔着那个分组框，
-    // 不能把分组框所在的区域误判成"空隙"。
     if (restChildren.indexOf(idB) !== restChildren.indexOf(idA) + 1) continue
     const rectA = layout.nodes.get(idA)
     const rectB = layout.nodes.get(idB)
@@ -245,13 +244,25 @@ function siblingGapHitAt(graph, layout, point, draggedNodeId, direction) {
   return null
 }
 
+// 在"去掉被拖节点后的兄弟列表"里找相邻两个之间的物理空隙（SIBLING_GAP），
+// 命中即判定插入到它们之间——比窄带宽得多，是拖拽时最自然会瞄准的落点，
+// 不要求像素级精确停在某个节点边缘上。只看仍是平铺节点（未被分组框消费）的兄弟，
+// 分组框内部的命中检测走另一套机制，不归这里管。
+function siblingGapHitAt(graph, layout, point, draggedNodeId, direction, excludeNodeIds = null) {
+  const excluded = new Set(excludeNodeIds ?? [draggedNodeId])
+  for (const parentId of collectParentIdsWithPlainChildren(graph, layout)) {
+    const hit = siblingGapHitInParent(graph, layout, point, parentId, excluded, direction)
+    if (hit) return { parentId, insertIndex: hit.insertIndex }
+  }
+  return null
+}
+
 // 插入预览框（跟标准节点同样大小）的世界坐标位置：命中空隙时居中在空隙上。
 // insertIndex 只会是 siblingGapHitAt 命中空隙时返回的下标，两侧节点必然都存在，
 // 不需要兜底分支。
-function siblingGapPreviewRect(graph, layout, draggedNodeId, insertIndex, direction) {
-  const dragged = graph.nodes.get(draggedNodeId)
-  const parent = graph.nodes.get(dragged.parentId)
-  const restChildren = parent.children.filter((id) => id !== draggedNodeId)
+function siblingGapPreviewRect(graph, layout, parentId, excluded, insertIndex, direction) {
+  const parent = graph.nodes.get(parentId)
+  const restChildren = parent.children.filter((id) => !excluded.has(id))
   const rectA = layout.nodes.get(restChildren[insertIndex - 1])
   const rectB = layout.nodes.get(restChildren[insertIndex])
   if (direction === 'vertical') {
@@ -282,7 +293,7 @@ function siblingEdgePreviewRect(layout, targetNodeId, mode, direction) {
 // 分组框轻微重叠，是简化设计下的预期效果，不是 bug。
 function attachPreviewRect(graph, layout, draggedNodeId, targetParentId, direction) {
   const target = graph.nodes.get(targetParentId)
-  const restChildren = target.children.filter((id) => id !== draggedNodeId)
+  const restChildren = draggedNodeId ? target.children.filter((id) => id !== draggedNodeId) : target.children
   const plainRestChildren = restChildren.filter((id) => layout.nodes.has(id))
   const lastChildId = plainRestChildren[plainRestChildren.length - 1]
   if (lastChildId) return siblingEdgePreviewRect(layout, lastChildId, 'after', direction)
@@ -291,6 +302,72 @@ function attachPreviewRect(graph, layout, draggedNodeId, targetParentId, directi
   return direction === 'vertical'
     ? { x: targetRect.x, y: targetRect.y + targetRect.height + LEVEL_GAP, width: NODE.width, height: NODE.height }
     : { x: targetRect.x + targetRect.width + LEVEL_GAP, y: targetRect.y, width: NODE.width, height: NODE.height }
+}
+
+function insertIndexPreviewRect(graph, layout, parentId, insertIndex, direction) {
+  const parent = graph.nodes.get(parentId)
+  if (!parent) return null
+  const { children } = parent
+  const clampedIndex = Math.max(0, Math.min(insertIndex, children.length))
+
+  let beforeId = null
+  let afterId = null
+  for (let i = clampedIndex - 1; i >= 0; i -= 1) {
+    if (layout.nodes.has(children[i])) {
+      beforeId = children[i]
+      break
+    }
+  }
+  for (let i = clampedIndex; i < children.length; i += 1) {
+    if (layout.nodes.has(children[i])) {
+      afterId = children[i]
+      break
+    }
+  }
+
+  if (beforeId && afterId && children.indexOf(afterId) === children.indexOf(beforeId) + 1) {
+    return siblingGapPreviewRect(graph, layout, parentId, new Set(), children.indexOf(afterId), direction)
+  }
+  if (afterId) return siblingEdgePreviewRect(layout, afterId, 'before', direction)
+  if (beforeId) return siblingEdgePreviewRect(layout, beforeId, 'after', direction)
+  return attachPreviewRect(graph, layout, null, parentId, direction)
+}
+
+// 资源树拖入悬停时的插入/挂载预览，语义与 resolveResourceDropTarget 一致。
+export function resolveResourceDropPreview(graph, layout, point, direction, selectedIds, rootIds) {
+  const hit = hitTest(layout, point)
+
+  if (hit?.type === 'node') {
+    const parentId = hit.id
+    return {
+      valid: true,
+      parentId,
+      previewRect: attachPreviewRect(graph, layout, null, parentId, direction),
+      parentRect: layout.nodes.get(parentId) ?? null,
+    }
+  }
+
+  if (hit?.type === 'group' && hit.zone === 'item') {
+    const parentId = hit.childId
+    return {
+      valid: true,
+      parentId,
+      previewRect: attachPreviewRect(graph, layout, null, parentId, direction),
+      parentRect: layout.nodes.get(parentId) ?? null,
+    }
+  }
+
+  const parentId = selectedIds[0] ?? rootIds[0]
+  const parent = graph.nodes.get(parentId)
+  if (!parent) return { valid: false }
+
+  const insertIndex = findInsertionIndex(graph, layout, parentId, point, direction)
+  return {
+    valid: true,
+    parentId,
+    previewRect: insertIndexPreviewRect(graph, layout, parentId, insertIndex, direction),
+    parentRect: layout.nodes.get(parentId) ?? null,
+  }
 }
 
 // 拖拽悬停目标解析：先看是否命中两个相邻兄弟之间的物理空隙（插入排序，最容易瞄准）；
@@ -311,14 +388,14 @@ export function resolveDropTarget(
   const excluded = new Set(excludeNodeIds ?? [draggedNodeId])
   const edgeThresholdWorld = EDGE_THRESHOLD_SCREEN_PX / viewportScale
 
-  const gapHit = siblingGapHitAt(graph, layout, point, draggedNodeId, direction)
+  const gapHit = siblingGapHitAt(graph, layout, point, draggedNodeId, direction, [...excluded])
   if (gapHit) {
     return {
       valid: true,
-      parentId: graph.nodes.get(draggedNodeId).parentId,
+      parentId: gapHit.parentId,
       group: null,
       insertIndex: gapHit.insertIndex,
-      previewRect: siblingGapPreviewRect(graph, layout, draggedNodeId, gapHit.insertIndex, direction),
+      previewRect: siblingGapPreviewRect(graph, layout, gapHit.parentId, excluded, gapHit.insertIndex, direction),
     }
   }
 
@@ -336,11 +413,24 @@ export function resolveDropTarget(
   }
 
   if (hit.type === 'node') {
-    const zone = siblingDropZoneAt(graph, layout, point, draggedNodeId, hit.id, direction, edgeThresholdWorld)
+    if (hit.id === draggedNodeId || isNodeOrDescendant(graph, draggedNodeId, hit.id)) {
+      return { valid: false }
+    }
+    const zone = siblingDropZoneAt(
+      graph,
+      layout,
+      point,
+      draggedNodeId,
+      hit.id,
+      direction,
+      edgeThresholdWorld,
+      [...excluded],
+    )
     if (zone && zone.mode !== 'nest') {
+      const targetNode = graph.nodes.get(hit.id)
       return {
         valid: true,
-        parentId: graph.nodes.get(draggedNodeId).parentId,
+        parentId: targetNode.parentId,
         group: null,
         insertIndex: zone.insertIndex,
         previewRect: siblingEdgePreviewRect(layout, hit.id, zone.mode, direction),

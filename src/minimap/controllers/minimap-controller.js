@@ -195,6 +195,7 @@ export function createMinimapController(deps) {
     ['pointercancel', () => handlePointerCancel],
     ['lostpointercapture', () => handleLostPointerCapture],
     ['dragover', () => drag.onDragOver],
+    ['dragleave', () => drag.onDragLeave],
     ['drop', () => drag.onDrop],
     ['keydown', () => handleKeyDown],
     ['contextmenu', () => contextMenu.suppressContextMenu],

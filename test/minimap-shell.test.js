@@ -975,6 +975,7 @@ test('context menu copy, paste, delete and config actions reuse existing command
   await openContextMenu(configWrapper, { x: 760, y: 560 })
   await clickContextMenuItem(configWrapper, 'toggle-performance')
   assert.equal(configWrapper.find('.minimap-performance').exists(), true)
+  assert.match(configWrapper.find('.minimap-performance').text(), /总节点/)
   assert.match(configWrapper.find('.minimap-performance').text(), /ms/)
   await openContextMenu(configWrapper, { x: 760, y: 560 })
   await clickContextMenuItem(configWrapper, 'toggle-hide-text-during-interaction')

@@ -11,6 +11,7 @@ import {
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
   resolveDropTarget,
+  resolveResourceDropPreview,
   edgePanVelocity,
   hitScrollbarThumb,
 } from '../interaction/interaction.js'
@@ -28,6 +29,7 @@ const DRAG_SHIFT_DURATION_MS = 150
 
 export function createDragController(deps) {
   let dragState = null
+  let resourceDragState = null
   let scrollbarDragState = null
   let panState = null
   let marqueeState = null
@@ -56,6 +58,18 @@ export function createDragController(deps) {
 
   function getInteractionRenderState() {
     const timestamp = now()
+    if (resourceDragState) {
+      return {
+        dragging: false,
+        interacting: false,
+        groupDrag: null,
+        selectionRect: null,
+        groupScrollbarHoverId: hoveredScrollbarGroupId,
+        attachPreview: resourceDragState.attachPreviewRect
+          ? { rect: resourceDragState.attachPreviewRect, parentRect: resourceDragState.attachPreviewParentRect }
+          : null,
+      }
+    }
     if (!dragState || !dragState.dragging) {
       return {
         dragging: false,
@@ -595,9 +609,7 @@ export function createDragController(deps) {
         const targetGroup = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
         const index = targetGroup
           ? groupInsertIndexToParentIndex(parent, targetGroup, dragState.nodeId, dragState.insertIndex)
-          : dragState.targetParentId === dragState.fromParentId
-            ? dragState.insertIndex ?? parent.children.length
-            : parent.children.length
+          : dragState.insertIndex ?? parent.children.length
         const ids = dragNodeIds()
         const graph = deps.getGraph()
         const sameParentReorder =
@@ -708,8 +720,50 @@ export function createDragController(deps) {
     deps.zoomAt(screenPoint, event.deltaY)
   }
 
+  function clearResourceDragPreview() {
+    if (!resourceDragState) return
+    resourceDragState = null
+    deps.scheduleRender('resource-drag')
+  }
+
+  function updateResourceDragPreview(point) {
+    const layout = deps.getLayout()
+    if (!layout) {
+      clearResourceDragPreview()
+      return
+    }
+    const preview = resolveResourceDropPreview(
+      deps.getGraph(),
+      layout,
+      point,
+      deps.getLayoutDirection(),
+      deps.getSelectedIds(),
+      deps.getGraph().rootIds,
+    )
+    if (!preview.valid || !preview.previewRect) {
+      clearResourceDragPreview()
+      return
+    }
+    const next = {
+      attachPreviewRect: preview.previewRect,
+      attachPreviewParentRect: preview.parentRect,
+    }
+    const unchanged =
+      resourceDragState &&
+      resourceDragState.attachPreviewRect?.x === next.attachPreviewRect.x &&
+      resourceDragState.attachPreviewRect?.y === next.attachPreviewRect.y
+    resourceDragState = next
+    if (!unchanged) deps.scheduleRender('resource-drag')
+  }
+
   function handleDragOver(event) {
     event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    updateResourceDragPreview(deps.pointFromClient(event.clientX, event.clientY))
+  }
+
+  function handleDragLeave() {
+    clearResourceDragPreview()
   }
 
   function resolveResourceDropTarget(point) {
@@ -737,6 +791,7 @@ export function createDragController(deps) {
 
   function handleDrop(event) {
     event.preventDefault()
+    clearResourceDragPreview()
     deps.settleAnimation()
     if (!deps.getLayout()) return
     const raw = event.dataTransfer.getData('application/json')
@@ -769,6 +824,7 @@ export function createDragController(deps) {
     onLostPointerCapture: cancelPointerInteractions,
     onWheel: handleWheel,
     onDragOver: handleDragOver,
+    onDragLeave: handleDragLeave,
     onDrop: handleDrop,
     cancelPointerInteractions,
     getInteractionRenderState,

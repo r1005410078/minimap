@@ -99,6 +99,32 @@ test('dragging a plain node onto a non-sibling plain node makes it the new paren
   wrapper.destroy()
 })
 
+test('dragging a node onto the leading edge of a non-sibling inserts it as that node\'s sibling', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, LAYOUT_OPTS)
+  const wrapper = mountMinimap( { propsData: { graph } })
+
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodePoint(layout, 'cluster-25', { y: 2 })
+
+  dispatchPointerDown(wrapper, from)
+  dispatchPointerMove(wrapper, to)
+  dispatchPointerUp(wrapper, to)
+
+  assert.equal(graph.nodes.get('feeder-1').parentId, 'energy-root')
+  assert.equal(graph.nodes.get('grid-tie').children.includes('feeder-1'), false)
+  assert.equal(graph.nodes.get('cluster-25').children.includes('feeder-1'), false)
+  assert.ok(
+    graph.nodes.get('energy-root').children.indexOf('feeder-1')
+      < graph.nodes.get('energy-root').children.indexOf('cluster-25'),
+  )
+  assert.equal(wrapper.emitted('node-move').length, 1)
+  assert.equal(wrapper.emitted('node-move')[0][0].toParentId, 'energy-root')
+  assert.equal(wrapper.emitted('change').at(-1)[0].type, 'move-node')
+
+  wrapper.destroy()
+})
+
 test('multi-selected nodes drag together and the ghost shows the selected count', async () => {
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)

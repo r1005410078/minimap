@@ -10,6 +10,7 @@ import {
   groupAutoScrollSpeed,
   groupInsertIndexToParentIndex,
   resolveDropTarget,
+  resolveResourceDropPreview,
   edgePanVelocity,
   scrollbarMetrics,
   hitScrollbarThumb,
@@ -311,6 +312,48 @@ test('resolveDropTarget resolves a non-sibling plain node hit as the new parent'
   assert.equal(target.parentId, 'cluster-25')
   assert.equal(target.group, null)
   assert.equal(target.insertIndex, null)
+})
+
+test('resolveResourceDropPreview resolves a node hit as an attach preview under that node', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('cluster-25')
+  const point = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + targetRect.height / 2 }
+
+  const preview = resolveResourceDropPreview(graph, layout, point, 'horizontal', [], graph.rootIds)
+
+  assert.equal(preview.valid, true)
+  assert.equal(preview.parentId, 'cluster-25')
+  assert.ok(preview.previewRect)
+  assert.deepEqual(preview.parentRect, targetRect)
+})
+
+test('resolveResourceDropPreview resolves blank-area hover as an insert preview under the selected parent', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const feeder2Rect = layout.nodes.get('feeder-2')
+  const point = { x: feeder2Rect.x + feeder2Rect.width / 2, y: feeder2Rect.y - 20 }
+
+  const preview = resolveResourceDropPreview(graph, layout, point, 'horizontal', ['grid-tie'], graph.rootIds)
+
+  assert.equal(preview.valid, true)
+  assert.equal(preview.parentId, 'grid-tie')
+  assert.ok(preview.previewRect)
+  assert.deepEqual(preview.parentRect, layout.nodes.get('grid-tie'))
+})
+
+test('resolveDropTarget resolves a cross-parent plain node edge hit as insert under the target parent', () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, VIEWPORT)
+  const targetRect = layout.nodes.get('cluster-25')
+  const beforePoint = { x: targetRect.x + targetRect.width / 2, y: targetRect.y + 2 }
+
+  const target = resolveDropTarget(graph, layout, beforePoint, 'feeder-1')
+
+  assert.equal(target.valid, true)
+  assert.equal(target.parentId, 'energy-root')
+  assert.equal(target.insertIndex, graph.nodes.get('energy-root').children.indexOf('cluster-25'))
+  assert.ok(target.previewRect)
 })
 
 test('resolveDropTarget resolves a sibling plain node hit as a same-parent reorder target', () => {

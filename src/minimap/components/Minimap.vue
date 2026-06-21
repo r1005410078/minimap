@@ -34,7 +34,8 @@
       <div class="minimap-canvas-footer-left">
         <div v-if="effectiveOptions.showPerformance" class="minimap-performance">
           <span class="minimap-performance-label">性能</span>
-          <span class="minimap-performance-value">{{ renderStats ? `${renderStats.drawn}/${renderStats.total}` : '0/0' }}</span>
+          <span class="minimap-performance-value">{{ renderStats ? `${renderStats.nodeCount} 总节点` : '0 总节点' }}</span>
+          <span class="minimap-performance-value">{{ renderStats ? `${renderStats.drawn}/${renderStats.total} 可见项` : '0/0 可见项' }}</span>
           <span class="minimap-performance-value">{{ renderStats ? `${renderStats.culled} culled` : '0 culled' }}</span>
           <span class="minimap-performance-value">{{ renderStats ? `${renderStats.durationMs.toFixed(1)}ms` : '0.0ms' }}</span>
         </div>
@@ -49,7 +50,15 @@
             >
               −
             </button>
-            <span class="minimap-zoom-label" aria-live="polite">{{ viewportScaleLabel }}</span>
+            <button
+              class="minimap-control-button minimap-zoom-label"
+              type="button"
+              aria-label="重置缩放为 100%"
+              aria-live="polite"
+              @click="handleZoomReset"
+            >
+              {{ viewportScaleLabel }}
+            </button>
             <button
               class="minimap-control-button"
               type="button"
@@ -68,7 +77,24 @@
               :disabled="!historyCanUndo"
               @click="handleUndo"
             >
-              ↶
+              <svg class="minimap-control-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <polyline
+                  points="6 9 4 7 6 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M4 7h7.5a2.5 2.5 0 0 1 0 5H9"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
             </button>
             <button
               class="minimap-control-button"
@@ -77,7 +103,24 @@
               :disabled="!historyCanRedo"
               @click="handleRedo"
             >
-              ↷
+              <svg class="minimap-control-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <polyline
+                  points="10 9 12 7 10 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M12 7H4.5a2.5 2.5 0 0 0 0 5H7"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
             </button>
           </div>
         </div>
@@ -181,7 +224,7 @@
  * @property {boolean} [enableOverview=true] 是否渲染右下角 Overview 缩略图。
  * @property {boolean} [enableActiveBorder=false] 画布聚焦时是否显示蓝色描边。
  * @property {boolean} [showGrid=true] 是否绘制背景网格。
- * @property {boolean} [showPerformance=false] 是否显示左下角绘制性能 HUD。
+ * @property {boolean} [showPerformance=true] 是否显示左下角绘制性能 HUD。
  * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
  * @property {boolean} [disableInitialCenter=false] 为 `true` 时首次布局不自动居中（测试用）。
  */
@@ -189,8 +232,9 @@
 /**
  * @typedef {Object} RenderStats
  * @property {number} drawn 本帧实际绘制的可见项数量。
- * @property {number} total 布局可见项总数。
+ * @property {number} total 画布可见布局项总数（一个合并框占 1 项）。
  * @property {number} culled 视口裁剪掉的项数量。
+ * @property {number} nodeCount 图中数据节点总数（`graph.nodes.size`；合并框内的每个子节点各算 1，合并框本身不是 graph 节点）。
  * @property {number} durationMs 本帧 `renderScene` 耗时（毫秒）。
  */
 
@@ -472,7 +516,7 @@ export default {
         enableOverview: true,
         enableActiveBorder: false,
         showGrid: true,
-        showPerformance: false,
+        showPerformance: true,
         hideTextDuringInteraction: false,
         disableInitialCenter: false,
         ...this.internalOptions,
@@ -616,6 +660,11 @@ export default {
       const opts = viewportOptions(this.effectiveOptions)
       const next = clampScale(this.controller.getViewport().scale * 1.1, opts)
       this.controller.zoomTo(next)
+    },
+
+    /** 点击缩放百分比时重置为 100%。 */
+    handleZoomReset() {
+      this.controller.zoomTo(1)
     },
 
     /** 撤销一步编辑并刷新历史按钮状态。 */
@@ -956,12 +1005,49 @@ export default {
   color: #5c6570;
   cursor: default;
 }
+.minimap-control-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
 .minimap-zoom-label {
+  position: relative;
   min-width: 44px;
   color: #d8dee8;
   font: 13px/1 system-ui, sans-serif;
   text-align: center;
   user-select: none;
+  cursor: pointer;
+}
+.minimap-zoom-label::after {
+  content: '点击重置为 100%';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 5px 8px;
+  border: 1px solid #303741;
+  border-radius: 6px;
+  background: rgba(18, 22, 28, 0.98);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  color: #d8dee8;
+  font: 11px/1.3 system-ui, sans-serif;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease, visibility 0.12s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+.minimap-zoom-label:hover::after,
+.minimap-zoom-label:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+.minimap-zoom-label:hover,
+.minimap-zoom-label:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
 }
 .minimap-overview-panel {
   position: absolute;

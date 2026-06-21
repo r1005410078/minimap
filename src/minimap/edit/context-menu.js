@@ -69,7 +69,7 @@ function commonItems(context) {
       id: 'toggle-performance',
       label: '显示性能信息',
       type: 'checkbox',
-      checked: optionEnabled(context.options, 'showPerformance', false),
+      checked: optionEnabled(context.options, 'showPerformance', true),
     }),
     normalizeMenuItem({
       id: 'toggle-hide-text-during-interaction',

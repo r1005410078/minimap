@@ -631,5 +631,11 @@ export function renderScene(ctx, scene) {
 
   if (state.selectionRect) drawSelectionRect(ctx, state.selectionRect, theme)
 
-  return { total: layout.visibleItems.length, drawn, culled, durationMs: now() - t0 }
+  return {
+    total: layout.visibleItems.length,
+    drawn,
+    culled,
+    nodeCount: graph.nodes.size,
+    durationMs: now() - t0,
+  }
 }

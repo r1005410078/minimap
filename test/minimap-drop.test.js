@@ -4,10 +4,11 @@ import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph/graph.js'
 import { computeLayout } from '../src/minimap/graph/layout.js'
+import { defaultTheme } from '../src/minimap/render/theme.js'
 
 installDomEnv()
 stubElementSize(800, 600)
-stubCanvasContext()
+const contexts = stubCanvasContext()
 stubResizeObserver()
 
 const { mountMinimap } = await import('./helpers/mount-minimap.js')
@@ -33,6 +34,32 @@ function dispatchDrop(wrapper, payload, point) {
   Object.defineProperty(evt, 'clientX', { value: point.x, configurable: true })
   Object.defineProperty(evt, 'clientY', { value: point.y, configurable: true })
   canvasEl.dispatchEvent(evt)
+}
+
+function dispatchDragOver(wrapper, point) {
+  const canvasEl = wrapper.find('canvas').element
+  const evt = new Event('dragover', { bubbles: true, cancelable: true })
+  Object.defineProperty(evt, 'clientX', { value: point.x, configurable: true })
+  Object.defineProperty(evt, 'clientY', { value: point.y, configurable: true })
+  canvasEl.dispatchEvent(evt)
+}
+
+function dropSlotDrawn(ctx, theme) {
+  const lastClear = ctx.calls.map((c) => c.method).lastIndexOf('clearRect')
+  const calls = ctx.calls.slice(lastClear + 1)
+  return calls.some((call) => call.method === 'set:fillStyle' && call.args[0] === theme.group.dropSlot.fill)
+}
+
+function attachLineDrawn(ctx, theme) {
+  const lastClear = ctx.calls.map((c) => c.method).lastIndexOf('clearRect')
+  const calls = ctx.calls.slice(lastClear + 1)
+  return calls.some((call, i) => {
+    if (call.method !== 'moveTo') return false
+    for (let j = i - 1; j >= 0; j -= 1) {
+      if (calls[j].method === 'set:strokeStyle') return calls[j].args[0] === theme.group.dropSlot.stroke
+    }
+    return false
+  })
 }
 
 function nodeCenter(layout, nodeId) {
@@ -79,6 +106,21 @@ test('dropping onto a plain node adds the resource as that node child', () => {
   assert.equal(feeder2.children.length, 1)
   assert.ok(feeder2.children[0].startsWith('res-battery-bank-'))
   assert.equal(graph.nodes.get(feeder2.children[0]).parentId, 'feeder-2')
+  wrapper.destroy()
+})
+
+test('dragover a plain node from the resource tree shows an attach preview before drop', async () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const wrapper = mountMinimap({ propsData: { graph } })
+  const targetPoint = nodeCenter(layout, 'feeder-2')
+
+  dispatchDragOver(wrapper, targetPoint)
+  await wrapper.vm.$nextTick()
+
+  assert.equal(dropSlotDrawn(contexts.at(-1), defaultTheme), true)
+  assert.equal(attachLineDrawn(contexts.at(-1), defaultTheme), true)
+
   wrapper.destroy()
 })
 
