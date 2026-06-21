@@ -45,7 +45,6 @@ import { searchNodes } from './search.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
-const ANIMATION_DURATION_MS = 200
 const DRAG_SHIFT_DURATION_MS = 150
 const SCROLLBAR_WIDTH = 8
 
