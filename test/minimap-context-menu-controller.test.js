@@ -260,3 +260,17 @@ test('contextMenuItems prop override is passed through to mergeContextMenuItems'
 
   assert.ok(calls.states.at(-1).items.some((item) => item.id === 'custom-action'))
 })
+
+test('isOpen reflects whether the menu is currently open', () => {
+  const layout = demoLayout()
+  const { deps } = createDeps(layout)
+  const controller = createContextMenuController(deps)
+
+  assert.equal(controller.isOpen(), false)
+
+  controller.open({ clientX: -500, clientY: -500, preventDefault: () => {}, stopPropagation: () => {} })
+  assert.equal(controller.isOpen(), true)
+
+  controller.close()
+  assert.equal(controller.isOpen(), false)
+})

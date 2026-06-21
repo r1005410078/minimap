@@ -141,5 +141,5 @@ export function createContextMenuController(deps) {
     close()
   }
 
-  return { open, close, runItem }
+  return { open, close, runItem, isOpen: () => state !== null }
 }
