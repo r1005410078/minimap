@@ -27,6 +27,16 @@ import { applySelectionClick, idsInSelectionRect, normalizeRect, resolveDragNode
 
 const DRAG_SHIFT_DURATION_MS = 150
 
+function parseResourcePayload(raw) {
+  const payload = JSON.parse(raw)
+  if (Array.isArray(payload.resources) && payload.resources.length > 0) return payload.resources
+  return [payload]
+}
+
+function resourceNodeId(resource, index) {
+  return `res-${resource.id}-${Date.now()}-${index}`
+}
+
 export function createDragController(deps) {
   let dragState = null
   let resourceDragState = null
@@ -796,22 +806,49 @@ export function createDragController(deps) {
     if (!deps.getLayout()) return
     const raw = event.dataTransfer.getData('application/json')
     if (!raw) return
-    const resource = JSON.parse(raw)
+    const resources = parseResourcePayload(raw).filter((resource) => resource?.id && resource?.label)
+    if (resources.length === 0) return
 
     const point = deps.pointFromClient(event.clientX, event.clientY)
     const target = resolveResourceDropTarget(point)
     if (!target) return
     const { parentId, index } = target
-    const id = `res-${resource.id}-${Date.now()}`
-    const operation = {
-      type: 'drop-node',
-      payload: { resource, parentId, index, id },
-    }
+    const operation = resources.length === 1
+      ? {
+        type: 'drop-node',
+        payload: {
+          resource: resources[0],
+          parentId,
+          index,
+          id: resourceNodeId(resources[0], 0),
+        },
+      }
+      : {
+        type: 'drop-nodes',
+        payload: {
+          parentId,
+          index,
+          nodes: resources.map((resource, resourceIndex) => ({
+            id: resourceNodeId(resource, resourceIndex),
+            resource,
+          })),
+        },
+      }
     const result = deps.applyOperation(operation, { before: deps.getBeforeNodeDrop() })
     if (!result.applied) return
 
     deps.updateLayout()
-    deps.emitNodeDrop({ resource, parentId, index: result.operation.payload.index })
+    const batchId = resources.length > 1 ? `drop-${Date.now()}` : undefined
+    resources.forEach((resource, batchIndex) => {
+      deps.emitNodeDrop({
+        resource,
+        parentId,
+        index: result.operation.payload.index + batchIndex,
+        ...(batchId
+          ? { batchId, batchIndex, batchSize: resources.length }
+          : {}),
+      })
+    })
     deps.emitChangeIfApplied(result)
   }
 

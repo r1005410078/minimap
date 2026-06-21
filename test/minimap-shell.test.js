@@ -1010,3 +1010,20 @@ test('contextMenuItems can hide defaults and append custom actions', async () =>
   assert.equal(wrapper.emitted('change'), undefined)
   wrapper.destroy()
 })
+
+test('options.disableUsedResources disables resources whose ids exist in graph node data.resourceId', async () => {
+  const graph = createDemoGraph()
+  graph.nodes.get('grid-tie').data = { resourceId: 'site' }
+  const wrapper = mountMinimap({
+    propsData: {
+      graph,
+      options: { disableUsedResources: true },
+      resources: [{ category: '储能设备', expanded: true, items: [{ id: 'site', label: '站点' }] }],
+    },
+  })
+
+  await wrapper.vm.$nextTick()
+  const row = wrapper.find('[data-resource-id="site"]')
+  assert.equal(row.classes().includes('is-disabled'), true)
+  wrapper.destroy()
+})

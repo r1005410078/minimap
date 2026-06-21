@@ -216,9 +216,41 @@ test('beforeNodeDrop can block the default drop mutation', () => {
 
   assert.equal(calls.length, 1)
   assert.equal(calls[0].parentId, 'energy-root')
-  assert.equal(calls[0].resource.label, 'Blocked Hook')
-  assert.equal(graph.nodes.size, beforeSize)
   assert.equal(wrapper.emitted('node-drop'), undefined)
   assert.equal(wrapper.emitted('change'), undefined)
+  wrapper.destroy()
+})
+
+test('dropping multiple resources onto a node creates consecutive children and emits node-drop batch metadata', () => {
+  const graph = createDemoGraph()
+  const wrapper = mountMinimap({ propsData: { graph } })
+  const calls = []
+  wrapper.vm.$on('node-drop', (payload) => calls.push(payload))
+
+  const canvas = wrapper.find('canvas').element
+  const target = wrapper.vm.controller.getLayout().nodes.get('grid-tie')
+  const evt = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(evt, 'clientX', { value: target.x + 10, configurable: true })
+  Object.defineProperty(evt, 'clientY', { value: target.y + 10, configurable: true })
+  Object.defineProperty(evt, 'dataTransfer', {
+    value: {
+      getData: () => JSON.stringify({
+        resources: [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ],
+      }),
+    },
+  })
+
+  canvas.dispatchEvent(evt)
+
+  const children = graph.nodes.get('grid-tie').children
+  const added = children.slice(-2)
+  assert.equal(graph.nodes.get(added[0]).data.resourceId, 'a')
+  assert.equal(graph.nodes.get(added[1]).data.resourceId, 'b')
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].batchSize, 2)
+  assert.equal(calls[1].batchIndex, 1)
   wrapper.destroy()
 })

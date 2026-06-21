@@ -1,6 +1,10 @@
 <template>
   <div class="minimap">
-    <ResourceTree class="minimap-resources" :resources="resources" />
+    <ResourceTree
+      class="minimap-resources"
+      :resources="resources"
+      :used-resource-ids="usedResourceIds"
+    />
     <div ref="containerRef" class="minimap-canvas-container">
       <canvas
         ref="canvasRef"
@@ -227,6 +231,7 @@
  * @property {boolean} [showPerformance=true] 是否显示左下角绘制性能 HUD。
  * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
  * @property {boolean} [disableInitialCenter=false] 为 `true` 时首次布局不自动居中（测试用）。
+ * @property {boolean} [disableUsedResources=false] 禁用已在画布中出现的资源项，匹配 `node.data.resourceId`。
  */
 
 /**
@@ -535,6 +540,16 @@ export default {
           visible: this.effectiveOptions.showGrid !== false,
         },
       }
+    },
+
+    /** @returns {Set<string>} 已在画布节点 `data.resourceId` 中出现的资源 id；仅 `disableUsedResources` 时填充。 */
+    usedResourceIds() {
+      if (this.effectiveOptions.disableUsedResources !== true) return new Set()
+      const ids = new Set()
+      for (const node of this.graph.nodes.values()) {
+        if (node.data?.resourceId) ids.add(node.data.resourceId)
+      }
+      return ids
     },
   },
 

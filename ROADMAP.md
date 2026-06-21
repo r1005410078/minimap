@@ -14,7 +14,7 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：资源树虚拟化与批量拖入 implementation plan 已产出，等待用户 review plan；确认后按切片 1 -> 5 实施。范围限定为左侧资源树 10000 资源项、嵌套层级、多选、批量拖入、已用资源禁用，不改主画布布局/渲染主链路。
+- **当前阶段**：资源树虚拟化与批量拖入已完成；下一步回到第五阶段切片 5/6 或性能优化后续切片。
 - **当前阶段 Spec**：[Resource Tree Virtualization Design](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)
 - **当前阶段计划**：[Resource Tree Virtualization Implementation Plan](docs/superpowers/plans/2026-06-22-resource-tree-virtualization.md)
 - **已完成切片**：
@@ -51,17 +51,17 @@
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
 - **性能优化切片**：
   - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
-- **资源树虚拟化切片**（左侧资源树支持 10000 资源项，参考 VS Code 文件树；[spec](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)，[plan](docs/superpowers/plans/2026-06-22-resource-tree-virtualization.md)，等待用户 review plan 后实施）：
-  - [ ] 切片 1：纯资源树模型与虚拟窗口（资源归一化、嵌套 flatten、搜索过滤、已用资源禁用、固定行高窗口和快速滚动 overscan）
-  - [ ] 切片 2：资源树选择模型（单选、Cmd/Ctrl 切换、Shift 范围、键盘焦点、禁用行排除，folder focus 与 resource selection 分离）
-  - [ ] 切片 3：虚拟化 `ResourceTree.vue`（固定行高虚拟行、嵌套展开折叠、debounced search、快速滚动不白屏、稳定 key、多选/焦点/禁用样式、拖拽 payload 延迟组装）
-  - [ ] 切片 4：批量资源 drop operation（新增 `drop-nodes`，一次批量拖入对应一个 undo/redo history entry，创建节点写入 `data.resourceId`，保留 legacy `drop-node`）
-  - [ ] 切片 5：Minimap/canvas 集成（`disableUsedResources` 派生 `usedResourceIds`，`drag-controller` 解析 `payload.resources`，兼容 `node-drop` 事件并附带 batch metadata，补集成测试）
+- **资源树虚拟化切片**（左侧资源树支持 10000 资源项，参考 VS Code 文件树；[spec](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)，[plan](docs/superpowers/plans/2026-06-22-resource-tree-virtualization.md)）：
+  - [x] 切片 1：纯资源树模型与虚拟窗口（资源归一化、嵌套 flatten、搜索过滤、已用资源禁用、固定行高窗口和快速滚动 overscan）
+  - [x] 切片 2：资源树选择模型（单选、Cmd/Ctrl 切换、Shift 范围、键盘焦点、禁用行排除，folder focus 与 resource selection 分离）
+  - [x] 切片 3：虚拟化 `ResourceTree.vue`（固定行高虚拟行、嵌套展开折叠、debounced search、快速滚动不白屏、稳定 key、多选/焦点/禁用样式、拖拽 payload 延迟组装）
+  - [x] 切片 4：批量资源 drop operation（新增 `drop-nodes`，一次批量拖入对应一个 undo/redo history entry，创建节点写入 `data.resourceId`，保留 legacy `drop-node`）
+  - [x] 切片 5：Minimap/canvas 集成（`disableUsedResources` 派生 `usedResourceIds`，`drag-controller` 解析 `payload.resources`，兼容 `node-drop` 事件并附带 batch metadata，补集成测试）
 - **Controller 抽取切片**（`Minimap.vue` 已超 2000 行，目标是把编排/状态机逻辑迁到框架无关的 controller 模块，Vue 只保留 props/emits/模板绑定/生命周期挂载，方便以后换 React 或 Vue3；6 个 controller 文件按复杂度合并成 3 个实施切片，core 和 drag 各有 rAF 循环/状态机单独做，剩下 4 个无循环的打包一起做；[design](docs/superpowers/specs/2026-06-21-controller-extraction-design.md)）：
   - [x] 切片 1：根 controller + core-controller（canvas/resize/layout 状态/布局切换动画/viewport+tween/渲染调度降级；新增 `core-controller.js`/`minimap-controller.js` + 测试；`Minimap.vue` 改为创建并挂载 controller，`onMounted`/`onUnmounted`/`defineExpose` 的相机方法全部转发给 controller，拖拽/选择/搜索/撤销重做/右键菜单逻辑本切片不动；分组滚动条拖拽预览保留原有"先直接改本地、松手才提交"行为，未跟着表头展开/滚轮一起改成 `controller.scrollGroup`；[design](docs/superpowers/specs/2026-06-21-controller-extraction-design.md)，[plan](docs/superpowers/plans/2026-06-21-controller-extraction-slice-1.md)，subagent-driven-development 4 个任务全部 spec+quality 通过（含一轮修复：`setGroupExpanded` 的 id 嗅探 hack 还原成计划的简单形式、共享测试 helper `stubAnimationFrame` 还原原语义），`npm test` 392 全过，`npm run build` 通过，dev server 真实浏览器手动验收通过（初始渲染、平移、滚轮缩放、搜索跳转+分组展开滚动均正常，控制台无报错））
   - [x] 切片 2：selection-controller + edit-controller + search-controller + context-menu-controller（受控选中态/撤销重做剪贴板/搜索/右键菜单，四个文件一起做；`edit-controller` 拥有 `operationManager` 单例并暴露 `applyOperation`/供切片 3 drag-controller 复用同一条撤销栈，本切片里 `Minimap.vue` 尚未迁移的拖拽换位/跨父级移动/资源拖入也改接这个方法；`context-menu-controller` 自己管理菜单开关时的 document 外部点击监听；[design](docs/superpowers/specs/2026-06-21-controller-extraction-slice-2-design.md)，[plan](docs/superpowers/plans/2026-06-21-controller-extraction-slice-2.md)，`npm test` 全过，`npm run build` 通过）
   - [x] 切片 3：drag-controller（节点拖拽/滚动条拖拽/框选/空白平移/自动滚动/边缘平移/拖拽让位动画/资源拖放提交；`scrollbarMetrics`/`hitScrollbarThumb` 移进 `interaction.js`；`edit-controller` 暴露 `emitChangeIfApplied`、`context-menu-controller` 新增 `isOpen()` 供 drag/根 controller 复用；根 controller 收尾两个跨切片临时依赖（`cancelPointerInteractions`、相机方法包装函数），新增 `handleKeyDown` 本地派发，`mount()` 的指针/键盘/滚轮/拖放事件全部直接派发给真实 controller，`Minimap.vue` 不再有任何指针事件处理代码；[design](docs/superpowers/specs/2026-06-21-controller-extraction-slice-3-design.md)，[plan](docs/superpowers/plans/2026-06-21-controller-extraction-slice-3.md)，`npm test` 全过，`npm run build` 通过）
-- **下一步**：请用户 review 资源树虚拟化 spec；确认后写 implementation plan，并在 plan 通过后按切片 1 -> 5 实施。
+- **下一步**：继续第五阶段切片 5（组件状态与可访问性）或切片 6（性能状态与生命周期收尾）。
 
 ## 目标
 
