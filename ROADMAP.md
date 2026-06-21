@@ -14,9 +14,9 @@
 
 > 换窗口/新会话时先读这里。进度是持久状态，做完一步就更新本块。
 
-- **当前阶段**：第五阶段切片 4 —— 右键菜单
-- **当前阶段 Spec**：[docs/superpowers/specs/2026-06-21-context-menu-design.md](docs/superpowers/specs/2026-06-21-context-menu-design.md)
-- **当前阶段计划**：[docs/superpowers/plans/2026-06-21-context-menu.md](docs/superpowers/plans/2026-06-21-context-menu.md)
+- **当前阶段**：Controller 抽取切片 1 —— 见下方「Controller 抽取切片」（第五阶段切片 5/6 暂缓，等 controller 抽取完成后再回来做）
+- **当前阶段 Spec**：待头脑风暴产出后补充
+- **当前阶段计划**：待头脑风暴产出后补充
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
@@ -44,14 +44,21 @@
   - [x] 切片 1：编辑操作底座（新增 `graph-operations`/history 层，统一节点拖入和分组内换位的 mutation 入口；支持 `readonly`、before hooks、`undo`/`redo`、`canUndo`/`canRedo`、`change` payload 规范；[spec](docs/superpowers/specs/2026-06-20-phase-5-edit-operation-base.md)，[plan](docs/superpowers/plans/2026-06-20-phase-5-edit-operation-base.md)，`npm test` 与 `npm run build` 通过）
   - [x] 切片 2：删除、复制、导入导出（基于切片 1 的 operation 机制实现 `deleteSelection`/`exportGraph`/`importGraph`，补齐键盘 `Delete`、`Cmd/Ctrl+C`/`Cmd/Ctrl+V` 快捷键和 graph `version` 校验；复制/粘贴拆分为只读 `copySelection`（写入内部 clipboard，`readonly` 不拦截）+ 新增 `paste()`（插入到当前选中节点下，可重复粘贴，`readonly`/`beforePaste` 拦截）；[spec](docs/superpowers/specs/2026-06-20-phase-5-delete-copy-import-export.md)，[plan](docs/superpowers/plans/2026-06-20-phase-5-delete-copy-import-export.md)，复制/粘贴拆分 [spec](docs/superpowers/specs/2026-06-20-phase-5-copy-paste-split.md)，[plan](docs/superpowers/plans/2026-06-20-phase-5-copy-paste-split.md)，`npm test` 与 `npm run build` 通过）
   - [x] 切片 3：节点跨父级拖拽移动与排序（任意真实节点都可拖到另一个父节点下面变成其子节点；目标父节点跟起点父节点相同时退化为现有 `reorder-group-child`（含未分组兄弟互拖新场景）；新增 `move-node` operation 处理跨父级移动，复用整图快照回滚做 undo/redo；悬停分组框 item 时复用并泛化让位动画，悬停普通节点时只高亮；拖近画布边缘自动平移视口；`beforeNodeMove`/`beforeGroupReorder`/`readonly` 拦截；[spec](docs/superpowers/specs/2026-06-20-phase-5-cross-parent-move.md)，[plan](docs/superpowers/plans/2026-06-20-phase-5-cross-parent-move.md)，`npm test` 与 `npm run build` 通过）
-  - [ ] 切片 4：右键菜单（节点/分组/空白画布右键菜单；节点菜单包含通用画布菜单；默认菜单 + `contextMenuItems` 覆盖；配置项通过 `config-change` 受控通知；新增节点入口保留但禁用；不做重命名和连线菜单；[spec](docs/superpowers/specs/2026-06-21-context-menu-design.md)，[plan](docs/superpowers/plans/2026-06-21-context-menu.md)）
+  - [x] 切片 4：右键菜单（节点/分组/空白画布右键菜单；节点菜单包含通用画布菜单；默认菜单 + `contextMenuItems` 覆盖；配置项通过 `config-change` 受控通知；新增节点入口保留但禁用；不做重命名和连线菜单；新增 `context-menu.js`/`clipboard.js` + 测试；[spec](docs/superpowers/specs/2026-06-21-context-menu-design.md)，[plan](docs/superpowers/plans/2026-06-21-context-menu.md)，commit `a3a0f01`（跟性能优化切片1一起提交），`npm test` 全过，`npm run build` 通过；本条之前未及时勾选，2026-06-21 补记）
   - [ ] 切片 5：组件状态与可访问性（`loading`/空图/`error` 状态，`error` 事件，`options.keyboard` 开关，aria 状态区域展示选中数量、选中 label、搜索结果和错误信息）
   - [ ] 切片 6：性能状态与生命周期收尾（`performance` 事件或调试状态展示总节点数、可见节点数、缩放比例、帧耗时；验证销毁后没有残留事件监听、ResizeObserver 或动画循环）
 - **视觉整理切片**：
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
 - **性能优化切片**：
   - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
-- **下一步**：回到第五阶段切片 4「右键菜单」收尾，或继续性能优化后续切片（空间索引 / 静态层缓存 / 拖拽动态层合帧）。
+- **Controller 抽取切片**（`Minimap.vue` 已超 2000 行，目标是把编排/状态机逻辑迁到框架无关的 controller 模块，Vue 只保留 props/emits/模板绑定/生命周期挂载，方便以后换 React 或 Vue3；按依赖关系从地基到最复杂依次抽取）：
+  - [ ] 切片 1：根 controller + core-controller（canvas/resize/layout 状态/布局切换动画/viewport+tween/渲染调度降级）
+  - [ ] 切片 2：selection-controller（受控/非受控选中态）
+  - [ ] 切片 3：edit-controller（撤销/重做/剪贴板/复制/粘贴/删除/导入导出）
+  - [ ] 切片 4：search-controller（搜索/上一个/下一个/跳转）
+  - [ ] 切片 5：context-menu-controller（打开关闭/命中转 context/菜单项构建合并/动作执行）
+  - [ ] 切片 6：drag-controller（节点拖拽/滚动条拖拽/框选/空白平移/自动滚动/边缘平移/拖拽让位动画/资源拖放提交）
+- **下一步**：推进 Controller 抽取切片 1（根 + core-controller），完成后依次推进切片 2-6；全部完成后再回到第五阶段切片 5/6，或继续性能优化后续切片（空间索引 / 静态层缓存 / 拖拽动态层合帧）。
 
 ## 目标
 
