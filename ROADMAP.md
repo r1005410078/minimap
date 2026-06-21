@@ -16,7 +16,7 @@
 
 - **当前阶段**：Controller 抽取切片 3 —— drag-controller（第五阶段切片 5/6 暂缓，等 controller 抽取完成后再回来做）
 - **当前阶段 Spec**：[design](docs/superpowers/specs/2026-06-21-controller-extraction-slice-3-design.md)（已确认，待写计划）
-- **当前阶段计划**：待写计划
+- **当前阶段计划**：[plan](docs/superpowers/plans/2026-06-21-controller-extraction-slice-3.md)（已写好，待执行）
 - **已完成切片**：
   - 逻辑层 `graph` / `layout` / `coords` + 测试（commit `893b6b7`）
   - Canvas 渲染器 `renderer` / `theme` + 测试（commit `1caccd8`，`npm test` 22 全过）
