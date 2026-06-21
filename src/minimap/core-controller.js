@@ -87,34 +87,8 @@ export function createCoreController(deps) {
     else renderCurrent()
   }
 
-  function setGroupExpanded(groupIdOrNodeId, expanded) {
-    // If groupIdOrNodeId is a node ID (not a group ID), find all groups with matching parentId
-    const toUpdate = []
-
-    // Check if this looks like a group ID (contains ::)
-    if (groupIdOrNodeId.includes('::')) {
-      // It's a group ID
-      toUpdate.push(groupIdOrNodeId)
-    } else {
-      // It's a node ID, search for groups with this parentId
-      for (const groupId of Object.keys(currentGroupStates())) {
-        if (groupId.startsWith(`${groupIdOrNodeId}::`)) {
-          toUpdate.push(groupId)
-        }
-      }
-      // If still no matches in states, check all groups in the current layout
-      if (toUpdate.length === 0 && layout) {
-        for (const group of layout.groups) {
-          if (group.parentId === groupIdOrNodeId) {
-            toUpdate.push(group.id)
-          }
-        }
-      }
-    }
-
-    for (const groupId of toUpdate) {
-      updateGroupState(groupId, { expanded })
-    }
+  function setGroupExpanded(groupId, expanded) {
+    updateGroupState(groupId, { expanded })
     updateLayout()
   }
 

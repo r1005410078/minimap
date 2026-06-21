@@ -221,7 +221,8 @@ test('setGroupExpanded toggles expanded state and relayouts', () => {
   const heightBefore = before.height
 
   controller.setGroupExpanded(before.id, true)
-  while (frames.runNext(16)) {
+  let time = 0
+  while (frames.runNext((time += 16))) {
     // complete layout animation
   }
 
@@ -303,13 +304,15 @@ test('updateLayout animates between the previous and next layout, settling on th
   const frames = stubAnimationFrame()
   const { controller } = mountController()
 
-  controller.setGroupExpanded('heap-1', true)
+  const targetGroup = controller.getLayout().groups.find((g) => g.parentId === 'heap-1')
+  controller.setGroupExpanded(targetGroup.id, true)
   const midLayout = controller.getLayout()
   const midGroup = midLayout.groups.find((g) => g.parentId === 'heap-1')
   assert.ok(midGroup, 'animation has not started yet, group should still be present')
   assert.equal(midGroup.expanded, false, 'before animation, group should be collapsed')
 
-  while (frames.runNext(16)) {
+  let time = 0
+  while (frames.runNext((time += 16))) {
     // 推进所有排队的动画帧直到结束
   }
 
@@ -325,7 +328,8 @@ test('fitToScreen tweens the viewport to fit the layout bounds', () => {
   const { controller } = mountController()
 
   controller.fitToScreen()
-  while (frames.runNext(16)) {
+  let time = 0
+  while (frames.runNext((time += 16))) {
     // 推进 viewport tween
   }
   assert.notDeepEqual(controller.getViewport(), { x: 0, y: 0, scale: 1 })
@@ -337,7 +341,8 @@ test('centerOnNode reveals a collapsed-group child and centers the viewport on i
   const { controller } = mountController()
 
   controller.centerOnNode('cluster-20')
-  while (frames.runNext(16)) {
+  let time = 0
+  while (frames.runNext((time += 16))) {
     // 推进 viewport tween
   }
 
@@ -354,7 +359,8 @@ test('centerOnSelection centers on the bounding box of multiple targets', () => 
   ctrl.mount(canvas, container)
 
   ctrl.centerOnSelection()
-  while (frames.runNext(16)) {
+  let time = 0
+  while (frames.runNext((time += 16))) {
     // 推进 viewport tween
   }
 
@@ -367,7 +373,8 @@ test('zoomTo sets an exact scale anchored on a world point', () => {
   const { controller } = mountController()
 
   controller.zoomTo(2, { x: 0, y: 0 })
-  while (frames.runNext(16)) {
+  let time = 0
+  while (frames.runNext((time += 16))) {
     // 推进 viewport tween
   }
 
