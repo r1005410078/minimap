@@ -3,24 +3,13 @@ import { createSelectionController } from './selection-controller.js'
 import { createEditController } from './edit-controller.js'
 import { createSearchController } from './search-controller.js'
 import { createContextMenuController } from './context-menu-controller.js'
-
-const POINTER_EVENT_BINDINGS = [
-  ['pointerdown', 'onPointerDown'],
-  ['pointermove', 'onPointerMove'],
-  ['pointerup', 'onPointerUp'],
-  ['pointerleave', 'onPointerLeave'],
-  ['pointercancel', 'onPointerCancel'],
-  ['lostpointercapture', 'onLostPointerCapture'],
-  ['keydown', 'onKeyDown'],
-  ['dragover', 'onDragOver'],
-  ['drop', 'onDrop'],
-]
+import { createDragController } from './drag-controller.js'
 
 export function createMinimapController(deps) {
-  // selection 的 renderCurrent 依赖通过闭包延迟引用 core——此时 core 还没创建，
-  // 但 renderCurrent 这个箭头函数只在 selection.setSelected() 真正被调用时才执行
-  // （那一定发生在 createMinimapController() 整个跑完、core 已经赋值之后），
-  // 所以这里直接引用下面才声明的 `core` 变量是安全的，不会触发 TDZ 报错。
+  // selection 的 renderCurrent 依赖通过闭包延迟引用 core，core 的 getInteractionRenderState
+  // 依赖通过闭包延迟引用 drag——两者都只在真正被调用时才访问，那一定发生在
+  // createMinimapController() 整个跑完、core/drag 都已经赋值之后，所以这里直接引用
+  // 下面才声明的变量是安全的，不会触发 TDZ 报错。
   const selection = createSelectionController({
     getSelectedIdsProp: deps.getSelectedIdsProp,
     emitSelect: deps.emitSelect,
@@ -30,6 +19,7 @@ export function createMinimapController(deps) {
   const core = createCoreController({
     ...deps,
     getSelectedIds: selection.getSelectedIds,
+    getInteractionRenderState: () => drag.getInteractionRenderState(),
   })
 
   const edit = createEditController({
@@ -51,15 +41,59 @@ export function createMinimapController(deps) {
     emitChange: deps.emitChange,
   })
 
-  const search = createSearchController({
-    getGraph: deps.getGraph,
-    centerOnNode: deps.centerOnNode,
-    select: selection.select,
-    emitSearch: deps.emitSearch,
-    onSearchStateChange: deps.onSearchStateChange,
-  })
-
   let canvasEl = null
+
+  // 永久取代 Vue 本地"先 cancelPointerInteractions 再转发"的相机包装函数（切片 1/2 的
+  // 临时跨切片依赖到这里收尾）。函数体只在被调用时才访问 drag/core，声明顺序不受限。
+  function fitToScreen() {
+    drag.cancelPointerInteractions()
+    core.fitToScreen()
+  }
+
+  function centerOnNode(id) {
+    drag.cancelPointerInteractions()
+    core.centerOnNode(id)
+  }
+
+  function centerOnSelection() {
+    drag.cancelPointerInteractions()
+    core.centerOnSelection()
+  }
+
+  function zoomTo(scale, center) {
+    drag.cancelPointerInteractions()
+    core.zoomTo(scale, center)
+  }
+
+  // 根 controller 自己持有 selection/edit/contextMenu 的真实引用，不需要经过 deps 间接转发，
+  // 也不需要 Vue 再传 handleKeyDown 本身——这段纯派发逻辑跟"拖拽"无关，留在根 controller。
+  function handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      if (contextMenu.isOpen()) {
+        event.preventDefault()
+        contextMenu.close()
+        return
+      }
+      if (selection.getSelectedIds().length === 0) return
+      event.preventDefault()
+      selection.setSelected([])
+      return
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault()
+      edit.deleteSelection()
+      return
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+      event.preventDefault()
+      edit.copySelection()
+      return
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+      event.preventDefault()
+      edit.paste()
+    }
+  }
 
   const contextMenu = createContextMenuController({
     getGraph: deps.getGraph,
@@ -78,10 +112,10 @@ export function createMinimapController(deps) {
     deleteSelection: edit.deleteSelection,
     pasteInto: edit.pasteInto,
     paste: edit.paste,
-    fitToScreen: deps.fitToScreen,
-    centerOnSelection: deps.centerOnSelection,
-    centerOnNode: deps.centerOnNode,
-    cancelPointerInteractions: deps.cancelPointerInteractions,
+    fitToScreen,
+    centerOnSelection,
+    centerOnNode,
+    cancelPointerInteractions: () => drag.cancelPointerInteractions(),
     emitConfigChange: deps.emitConfigChange,
     emitContextMenuAction: deps.emitContextMenuAction,
     getContextMenuItemsProp: deps.getContextMenuItemsProp,
@@ -90,34 +124,79 @@ export function createMinimapController(deps) {
     onMenuStateChange: deps.onMenuStateChange,
   })
 
+  const drag = createDragController({
+    getGraph: deps.getGraph,
+    getLayoutDirection: deps.getLayoutDirection,
+    getOptions: deps.getOptions,
+    getGroupStatesProp: deps.getGroupStatesProp,
+    getBeforeNodeDrop: deps.getBeforeNodeDrop,
+    getBeforeGroupReorder: deps.getBeforeGroupReorder,
+    getBeforeNodeMove: deps.getBeforeNodeMove,
+    getLayout: core.getLayout,
+    getViewport: core.getViewport,
+    applyViewport: core.applyViewport,
+    updateLayout: core.updateLayout,
+    getCssSize: core.getCssSize,
+    screenPointFromClient: core.screenPointFromClient,
+    pointFromClient: core.pointFromClient,
+    renderCurrent: core.renderCurrent,
+    scheduleRender: core.scheduleRender,
+    flushScheduledRender: core.flushScheduledRender,
+    cancelScheduledRender: core.cancelScheduledRender,
+    settleAnimation: core.settleAnimation,
+    scrollGroup: core.scrollGroup,
+    setGroupExpanded: core.setGroupExpanded,
+    zoomAt: core.zoomAt,
+    getCanvasEl: () => canvasEl,
+    getSelectedIds: selection.getSelectedIds,
+    setSelected: selection.setSelected,
+    applyOperation: edit.applyOperation,
+    emitChangeIfApplied: edit.emitChangeIfApplied,
+    closeContextMenu: contextMenu.close,
+    emitNodeDrop: deps.emitNodeDrop,
+    emitGroupReorder: deps.emitGroupReorder,
+    emitNodeMove: deps.emitNodeMove,
+  })
+
+  const search = createSearchController({
+    getGraph: deps.getGraph,
+    centerOnNode,
+    select: selection.select,
+    emitSearch: deps.emitSearch,
+    onSearchStateChange: deps.onSearchStateChange,
+  })
+
   const listeners = []
 
   function addListener(eventName, handler, options) {
     listeners.push({ eventName, handler, options })
   }
 
-  function handleWheel(event) {
-    deps.onWheel(event)
-  }
-
-  function handleContextMenu(event) {
-    contextMenu.open(event)
-  }
+  const DIRECT_EVENT_BINDINGS = [
+    ['pointerdown', () => drag.onPointerDown],
+    ['pointermove', () => drag.onPointerMove],
+    ['pointerup', () => drag.onPointerUp],
+    ['pointerleave', () => drag.onPointerLeave],
+    ['pointercancel', () => drag.onPointerCancel],
+    ['lostpointercapture', () => drag.onLostPointerCapture],
+    ['dragover', () => drag.onDragOver],
+    ['drop', () => drag.onDrop],
+    ['keydown', () => handleKeyDown],
+    ['contextmenu', () => contextMenu.open],
+  ]
 
   function mount(canvas, container) {
     canvasEl = canvas
     core.mount(canvas, container)
     if (!canvasEl) return
 
-    for (const [eventName, depName] of POINTER_EVENT_BINDINGS) {
-      const handler = (event) => deps[depName](event)
+    for (const [eventName, getHandler] of DIRECT_EVENT_BINDINGS) {
+      const handler = getHandler()
       addListener(eventName, handler)
       canvasEl.addEventListener(eventName, handler)
     }
-    addListener('wheel', handleWheel, { passive: false })
-    canvasEl.addEventListener('wheel', handleWheel, { passive: false })
-    addListener('contextmenu', handleContextMenu)
-    canvasEl.addEventListener('contextmenu', handleContextMenu)
+    addListener('wheel', drag.onWheel, { passive: false })
+    canvasEl.addEventListener('wheel', drag.onWheel, { passive: false })
   }
 
   function destroy() {
@@ -147,10 +226,10 @@ export function createMinimapController(deps) {
     applyViewport: core.applyViewport,
     zoomAt: core.zoomAt,
     panBy: core.panBy,
-    fitToScreen: core.fitToScreen,
-    centerOnNode: core.centerOnNode,
-    centerOnSelection: core.centerOnSelection,
-    zoomTo: core.zoomTo,
+    fitToScreen,
+    centerOnNode,
+    centerOnSelection,
+    zoomTo,
     setViewport: core.setViewport,
     cancelViewportTween: core.cancelViewportTween,
     settleAnimation: core.settleAnimation,
@@ -179,5 +258,6 @@ export function createMinimapController(deps) {
     searchPrevious: search.searchPrevious,
     closeContextMenu: contextMenu.close,
     runContextMenuItem: contextMenu.runItem,
+    cancelPointerInteractions: () => drag.cancelPointerInteractions(),
   }
 }

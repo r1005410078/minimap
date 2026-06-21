@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { installDomEnv, stubElementSize } from './helpers/dom-env.js'
 import { stubCanvasContext, stubResizeObserver, stubAnimationFrame } from './helpers/canvas-env.js'
 import { createDemoGraph } from '../src/minimap/graph.js'
+import { computeLayout } from '../src/minimap/layout.js'
 import { createMinimapController } from '../src/minimap/minimap-controller.js'
 import { defaultTheme } from '../src/minimap/theme.js'
 
@@ -12,6 +13,8 @@ stubCanvasContext()
 stubResizeObserver()
 stubAnimationFrame()
 
+const LAYOUT_OPTS = { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 }
+
 function createElements() {
   const canvas = document.createElement('canvas')
   const container = document.createElement('div')
@@ -19,12 +22,14 @@ function createElements() {
   return { canvas, container }
 }
 
+function nodeCenter(layout, nodeId) {
+  const rect = layout.nodes.get(nodeId)
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
 function createDeps(overrides = {}) {
   // 缓存单个 graph 实例并始终返回同一个引用——跟真实 Vue 用法里 props.graph 是同一个稳定
-  // 引用的语义一致。如果这里改成每次调用都 new 一个 createDemoGraph()，core/edit/search/
-  // contextMenu 几个 controller 各自拿到的 getGraph() 就会是不同的对象实例：edit-controller
-  // 内部 graph-operations.js 的撤销栈是在 edit 构造时绑定的某一个实例上做就地修改，
-  // 如果 core 的 layout 是从另一个实例算出来的，两边会静默失配。
+  // 引用的语义一致。
   const graph = createDemoGraph()
   return {
     getGraph: () => graph,
@@ -41,93 +46,32 @@ function createDeps(overrides = {}) {
     getBeforeCopy: () => null,
     getBeforeImport: () => null,
     getBeforePaste: () => null,
+    getBeforeNodeDrop: () => null,
+    getBeforeGroupReorder: () => null,
+    getBeforeNodeMove: () => null,
     emitDelete: () => {},
     emitCopy: () => {},
     emitPaste: () => {},
     emitImport: () => {},
     emitExport: () => {},
     emitChange: () => {},
-    centerOnNode: () => {},
-    fitToScreen: () => {},
-    centerOnSelection: () => {},
+    emitNodeDrop: () => {},
+    emitGroupReorder: () => {},
+    emitNodeMove: () => {},
     emitSearch: () => {},
     onSearchStateChange: () => {},
-    cancelPointerInteractions: () => {},
     emitConfigChange: () => {},
     emitContextMenuAction: () => {},
     getContextMenuItemsProp: () => null,
     getMenuEl: () => null,
     onMenuStateChange: () => {},
-    getInteractionRenderState: () => ({
-      dragging: false,
-      interacting: false,
-      groupDrag: null,
-      selectionRect: null,
-      groupScrollbarHoverId: null,
-      attachPreview: null,
-    }),
     emitViewportChange: () => {},
     emitGroupStateChange: () => {},
     onRenderStats: () => {},
     onOverviewRender: () => {},
-    onPointerDown: () => {},
-    onPointerMove: () => {},
-    onPointerUp: () => {},
-    onPointerLeave: () => {},
-    onPointerCancel: () => {},
-    onLostPointerCapture: () => {},
-    onKeyDown: () => {},
-    onWheel: () => {},
-    onDragOver: () => {},
-    onDrop: () => {},
     ...overrides,
   }
 }
-
-const POINTER_EVENTS = [
-  ['pointerdown', 'onPointerDown'],
-  ['pointermove', 'onPointerMove'],
-  ['pointerup', 'onPointerUp'],
-  ['pointerleave', 'onPointerLeave'],
-  ['pointercancel', 'onPointerCancel'],
-  ['lostpointercapture', 'onLostPointerCapture'],
-  ['keydown', 'onKeyDown'],
-  ['wheel', 'onWheel'],
-  ['dragover', 'onDragOver'],
-  ['drop', 'onDrop'],
-]
-
-test('mount attaches every canvas DOM listener and forwards events to the injected handlers', () => {
-  const received = {}
-  const overrides = {}
-  for (const [, depName] of POINTER_EVENTS) {
-    overrides[depName] = (event) => {
-      received[depName] = event
-    }
-  }
-  const controller = createMinimapController(createDeps(overrides))
-  const { canvas, container } = createElements()
-  controller.mount(canvas, container)
-
-  for (const [eventName, depName] of POINTER_EVENTS) {
-    const EventCtor = eventName === 'wheel' ? MouseEvent : Event
-    canvas.dispatchEvent(new EventCtor(eventName, { bubbles: true, cancelable: true }))
-    assert.ok(received[depName], `expected ${depName} to be called for ${eventName}`)
-  }
-
-  controller.destroy()
-})
-
-test('destroy removes every canvas DOM listener', () => {
-  let calls = 0
-  const controller = createMinimapController(createDeps({ onPointerDown: () => { calls += 1 } }))
-  const { canvas, container } = createElements()
-  controller.mount(canvas, container)
-  controller.destroy()
-
-  canvas.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
-  assert.equal(calls, 0)
-})
 
 test('camera and layout methods forward to the underlying core-controller', () => {
   const controller = createMinimapController(createDeps())
@@ -208,16 +152,14 @@ test('applyOperation forwards to the real edit-controller, sharing its undo hist
   controller.destroy()
 })
 
-test('search methods forward to the real search-controller and jump using the injected camera wrapper', () => {
-  const centered = []
-  const controller = createMinimapController(createDeps({ centerOnNode: (id) => centered.push(id) }))
+test('search methods forward to the real search-controller and jump using the real camera composition', () => {
+  const controller = createMinimapController(createDeps())
   const { canvas, container } = createElements()
   controller.mount(canvas, container)
 
   const payload = controller.search('feeder')
 
   assert.deepEqual(payload.matches, ['feeder-1', 'feeder-2', 'feeder-3'])
-  assert.deepEqual(centered, ['feeder-1'])
   assert.deepEqual(controller.getSelectedIds(), ['feeder-1'])
 
   controller.destroy()
@@ -239,4 +181,143 @@ test('the canvas contextmenu DOM event dispatches directly to the context-menu-c
   assert.equal(menuStates.at(-1), null)
 
   controller.destroy()
+})
+
+test('pointerdown and pointerup without moving dispatch to the real drag-controller and select the clicked node', () => {
+  const deps = createDeps()
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const layout = computeLayout(deps.getGraph(), LAYOUT_OPTS)
+  const point = nodeCenter(layout, 'feeder-1')
+
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, button: 0, pointerId: 1, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: point.x, clientY: point.y, pointerId: 1, bubbles: true, cancelable: true }))
+
+  assert.deepEqual(controller.getSelectedIds(), ['feeder-1'])
+
+  controller.destroy()
+})
+
+test('pointerdown, pointermove, and pointerup dispatch to the real drag-controller and commit a cross-parent move', () => {
+  const calls = { nodeMove: [] }
+  const deps = createDeps({ emitNodeMove: (payload) => calls.nodeMove.push(payload) })
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const layout = computeLayout(deps.getGraph(), LAYOUT_OPTS)
+  const from = nodeCenter(layout, 'feeder-1')
+  const to = nodeCenter(layout, 'cluster-25')
+
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: from.x, clientY: from.y, button: 0, pointerId: 1, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: to.x, clientY: to.y, pointerId: 1, bubbles: true, cancelable: true }))
+
+  assert.equal(deps.getGraph().nodes.get('feeder-1').parentId, 'cluster-25')
+  assert.equal(calls.nodeMove.length, 1)
+  assert.equal(calls.nodeMove[0].toParentId, 'cluster-25')
+
+  controller.destroy()
+})
+
+test('keydown Escape dispatches to the real keydown handler and clears the selection', () => {
+  const controller = createMinimapController(createDeps())
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  controller.setSelected(['feeder-1'])
+
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+
+  assert.deepEqual(controller.getSelectedIds(), [])
+
+  controller.destroy()
+})
+
+test('wheel over blank canvas dispatches to the real drag-controller and zooms the viewport', () => {
+  const controller = createMinimapController(createDeps())
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const before = controller.getViewport().scale
+
+  const event = new WheelEvent('wheel', { clientX: 780, clientY: 580, deltaY: -100, bubbles: true, cancelable: true })
+  canvas.dispatchEvent(event)
+
+  assert.notEqual(controller.getViewport().scale, before)
+
+  controller.destroy()
+})
+
+test('dragover prevents the default and drop dispatches to the real drag-controller, committing a dropped resource', () => {
+  const calls = { nodeDrop: [] }
+  const deps = createDeps({ emitNodeDrop: (payload) => calls.nodeDrop.push(payload) })
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const layout = computeLayout(deps.getGraph(), LAYOUT_OPTS)
+  const point = nodeCenter(layout, 'grid-tie')
+
+  const overEvent = new Event('dragover', { bubbles: true, cancelable: true })
+  canvas.dispatchEvent(overEvent)
+  assert.equal(overEvent.defaultPrevented, true)
+
+  const dropEvent = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(dropEvent, 'dataTransfer', { value: { getData: () => JSON.stringify({ id: 'sensor', label: 'Sensor' }) } })
+  Object.defineProperty(dropEvent, 'clientX', { value: point.x, configurable: true })
+  Object.defineProperty(dropEvent, 'clientY', { value: point.y, configurable: true })
+  canvas.dispatchEvent(dropEvent)
+
+  assert.equal(calls.nodeDrop.length, 1)
+  assert.equal(calls.nodeDrop[0].parentId, 'grid-tie')
+
+  controller.destroy()
+})
+
+test('cancelPointerInteractions is forwarded to the real drag-controller and clears an in-progress pan', () => {
+  const controller = createMinimapController(createDeps())
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 780, clientY: 580, button: 0, pointerId: 1, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 760, clientY: 560, pointerId: 1, bubbles: true, cancelable: true }))
+
+  controller.cancelPointerInteractions()
+  const before = controller.getViewport()
+  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 760, clientY: 560, pointerId: 1, bubbles: true, cancelable: true }))
+
+  assert.deepEqual(controller.getViewport(), before) // pointerup after cancel does not flush/commit the pan
+
+  controller.destroy()
+})
+
+test('fitToScreen cancels an in-progress node drag before recentering the viewport', () => {
+  const deps = createDeps()
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  const layout = computeLayout(deps.getGraph(), LAYOUT_OPTS)
+  const point = nodeCenter(layout, 'feeder-1')
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, button: 0, pointerId: 1, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: point.x + 200, clientY: point.y + 200, pointerId: 1, bubbles: true, cancelable: true }))
+
+  controller.fitToScreen()
+  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: point.x + 200, clientY: point.y + 200, pointerId: 1, bubbles: true, cancelable: true }))
+
+  // the drag was cancelled by fitToScreen, so the pointerup above is a no-op: feeder-1 stays put
+  assert.equal(deps.getGraph().nodes.get('grid-tie').children.includes('feeder-1'), true)
+
+  controller.destroy()
+})
+
+test('destroy removes every canvas DOM listener', () => {
+  const deps = createDeps()
+  const controller = createMinimapController(deps)
+  const { canvas, container } = createElements()
+  controller.mount(canvas, container)
+  controller.destroy()
+
+  const layout = computeLayout(deps.getGraph(), LAYOUT_OPTS)
+  const point = nodeCenter(layout, 'feeder-1')
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: point.x, clientY: point.y, button: 0, pointerId: 1, bubbles: true, cancelable: true }))
+  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: point.x, clientY: point.y, pointerId: 1, bubbles: true, cancelable: true }))
+
+  assert.deepEqual(controller.getSelectedIds(), [])
 })
