@@ -4,35 +4,12 @@
 // 见 docs/superpowers/specs/2026-06-18-phase-1-vue-shell.md
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import {
-  computeLayout,
-  keepAnchorStable,
-  GROUP,
-  clampGroupScroll,
-  childRectInGroup,
-  locateChildGroup,
-  scrollTopToReveal,
-} from './layout.js'
-import {
-  createLayoutTransition,
-  layoutAt,
-  resolveAnchorCenter,
-} from './layout-transition.js'
-import { renderScene, worldRectToScreen } from './renderer.js'
+import { GROUP, clampGroupScroll } from './layout.js'
+import { worldRectToScreen } from './renderer.js'
+import { createMinimapController } from './minimap-controller.js'
 import { defaultTheme } from './theme.js'
 import { screenToWorld } from './coords.js'
-import {
-  DEFAULT_VIEWPORT,
-  centerViewportOn,
-  clampScale,
-  fitViewportToBounds,
-  normalizeViewport,
-  panViewportBy,
-  sameViewport,
-  tweenViewport,
-  viewportOptions,
-  zoomViewportAt,
-} from './viewport.js'
+import { centerViewportOn, panViewportBy, viewportOptions, zoomViewportAt } from './viewport.js'
 import {
   hitTest,
   findInsertionIndex,
@@ -61,13 +38,10 @@ import {
 import {
   applySelectionClick,
   applySelectionSet,
-  buildSelectionRelations,
   idsInSelectionRect,
   normalizeRect,
 } from './selection.js'
 import { searchNodes } from './search.js'
-import { createRenderScheduler } from './render-scheduler.js'
-import { resolveRenderQuality } from './render-quality.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
@@ -147,31 +121,17 @@ const effectiveTheme = computed(() => {
   }
 })
 
-let ctx = null
-let resizeObserver = null
-let layout = null
-let cssWidth = 0
-let cssHeight = 0
-let internalSelectedIds = []
-let internalGroupStates = {}
+let controller = null
 let dragState = null
 let scrollbarDragState = null
 let panState = null
 let marqueeState = null
 let hoveredScrollbarGroupId = null
-
-let internalViewport = { ...DEFAULT_VIEWPORT }
-let settledLayout = null
-let animationFrameId = null
-let activeTransition = null
-let lastRenderedLayout = null
-let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
-let activeViewportTween = null
-let viewportTweenFrameId = null
 let operationManager = null
 let contextMenuDocumentListener = null
-let renderScheduler = null
 const contextMenuState = ref(null)
+
+let internalSelectedIds = []
 
 const CONTEXT_MENU_WIDTH = 190
 const CONTEXT_MENU_MAX_HEIGHT = 360
@@ -181,78 +141,9 @@ function currentSelectedIds() {
   return internalSelectedIds
 }
 
-function currentGroupStates() {
-  return props.groupStates !== null ? props.groupStates : internalGroupStates
-}
-
 function syncConfigFromProps() {
   internalReadonly.value = props.readonly
   internalOptions.value = { ...(props.options ?? {}) }
-}
-
-function currentViewport() {
-  return normalizeViewport(props.viewport ?? internalViewport, viewportOptions(props.options))
-}
-
-function applyViewport(nextViewport, { emitChange = true, render = true } = {}) {
-  const next = normalizeViewport(nextViewport, viewportOptions(props.options))
-  const previous = currentViewport()
-  if (sameViewport(previous, next)) return false
-  if (emitChange) emit('viewport-change', next)
-  if (props.viewport !== null) return true
-  internalViewport = next
-  if (render) renderCurrent(layout, next)
-  return true
-}
-
-function cancelViewportTween() {
-  if (viewportTweenFrameId !== null) {
-    cancelAnimationFrame(viewportTweenFrameId)
-    viewportTweenFrameId = null
-  }
-  activeViewportTween = null
-}
-
-function runViewportTween(toViewport, { durationMs = 200 } = {}) {
-  settleAnimation()
-  cancelViewportTween()
-  cancelPointerInteractions()
-
-  const next = normalizeViewport(toViewport, viewportOptions(props.options))
-  const fromViewport = currentViewport()
-  if (sameViewport(fromViewport, next)) return
-
-  if (props.viewport !== null) {
-    emit('viewport-change', next)
-    return
-  }
-
-  activeViewportTween = { fromViewport, toViewport: next, durationMs, startedAt: null }
-  const tick = (time) => {
-    if (!activeViewportTween) return
-    if (activeViewportTween.startedAt === null) activeViewportTween.startedAt = time
-    const progress = (time - activeViewportTween.startedAt) / activeViewportTween.durationMs
-    if (progress >= 1) {
-      viewportTweenFrameId = null
-      const finalViewport = activeViewportTween.toViewport
-      activeViewportTween = null
-      internalViewport = finalViewport
-      renderCurrent(layout, finalViewport)
-      emit('viewport-change', finalViewport)
-      return
-    }
-    internalViewport = tweenViewport(activeViewportTween.fromViewport, activeViewportTween.toViewport, progress)
-    renderCurrent(layout, internalViewport)
-    viewportTweenFrameId = requestAnimationFrame(tick)
-  }
-  viewportTweenFrameId = requestAnimationFrame(tick)
-}
-
-function updateGroupState(groupId, patch) {
-  const current = currentGroupStates()
-  const next = { ...current, [groupId]: { ...current[groupId], ...patch } }
-  if (props.groupStates === null) internalGroupStates = next
-  emit('group-state-change', next)
 }
 
 const now = () => (globalThis.performance ?? Date).now()
@@ -268,12 +159,23 @@ function shouldAutoScroll(group) {
   return group && dragState?.ghostWorldPoint && groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y) !== 0
 }
 
-function dragRenderContext() {
-  if (!dragState || !dragState.dragging || !layout) return null
+function interactionRenderState() {
   const timestamp = now()
-  const group = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
-  if (!group) {
+  if (!dragState || !dragState.dragging) {
     return {
+      dragging: false,
+      interacting: Boolean(panState || marqueeState?.active),
+      groupDrag: null,
+      selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
+      groupScrollbarHoverId: hoveredScrollbarGroupId,
+      attachPreview: null,
+    }
+  }
+  const layout = controller.getLayout()
+  const group = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
+  let groupDrag
+  if (!group) {
+    groupDrag = {
       groupId: null,
       order: null,
       draggingChildId: dragState.nodeId,
@@ -281,33 +183,31 @@ function dragRenderContext() {
       childRectsById: null,
       dropSlotOpacity: 1,
     }
+  } else {
+    const order = buildVirtualOrder(group.children, dragState.nodeId, dragState.insertIndex)
+    const autoScrolling = shouldAutoScroll(group)
+    const childRectsById =
+      !autoScrolling &&
+      dragState.shiftFromById &&
+      dragState.shiftToById &&
+      dragState.shiftStartedAt != null
+        ? currentShiftRects(dragState.shiftFromById, dragState.shiftToById, dragState.shiftStartedAt, DRAG_SHIFT_DURATION_MS, timestamp)
+        : null
+    const dropSlotOpacity =
+      autoScrolling || dragState.slotFadeStartedAt == null
+        ? 1
+        : dragShiftEasedProgress(dragState.slotFadeStartedAt, DRAG_SHIFT_DURATION_MS, timestamp)
+    groupDrag = { groupId: group.id, order, draggingChildId: dragState.nodeId, ghostRect: dragState.ghostScreenRect, childRectsById, dropSlotOpacity }
   }
-  const order = buildVirtualOrder(group.children, dragState.nodeId, dragState.insertIndex)
-  const autoScrolling = shouldAutoScroll(group)
-  const childRectsById =
-    !autoScrolling &&
-    dragState.shiftFromById &&
-    dragState.shiftToById &&
-    dragState.shiftStartedAt != null
-      ? currentShiftRects(
-          dragState.shiftFromById,
-          dragState.shiftToById,
-          dragState.shiftStartedAt,
-          DRAG_SHIFT_DURATION_MS,
-          timestamp,
-        )
-      : null
-  const dropSlotOpacity =
-    autoScrolling || dragState.slotFadeStartedAt == null
-      ? 1
-      : dragShiftEasedProgress(dragState.slotFadeStartedAt, DRAG_SHIFT_DURATION_MS, timestamp)
   return {
-    groupId: group.id,
-    order,
-    draggingChildId: dragState.nodeId,
-    ghostRect: dragState.ghostScreenRect,
-    childRectsById,
-    dropSlotOpacity,
+    dragging: true,
+    interacting: false,
+    groupDrag,
+    selectionRect: null,
+    groupScrollbarHoverId: hoveredScrollbarGroupId,
+    attachPreview: dragState.attachPreviewRect
+      ? { rect: dragState.attachPreviewRect, parentRect: dragState.attachPreviewParentRect }
+      : null,
   }
 }
 
@@ -336,7 +236,7 @@ function ensureDragShiftLoop() {
       cancelDragShiftLoop()
       return
     }
-    renderCurrent()
+    controller.renderCurrent()
     if (dragShiftActive(time ?? now())) dragState.shiftRafId = requestAnimationFrame(tick)
     else dragState.shiftRafId = null
   }
@@ -359,6 +259,7 @@ function withinGroupBody(group, point) {
 }
 
 function updateDragTarget(worldPoint) {
+  const layout = controller.getLayout()
   const previousGroupId = dragState.targetGroupId
   const previousIndex = dragState.insertIndex
 
@@ -381,7 +282,7 @@ function updateDragTarget(worldPoint) {
           worldPoint,
           dragState.nodeId,
           props.layoutDirection,
-          currentViewport().scale,
+          controller.getViewport().scale,
         )
 
   if (!target.valid) {
@@ -436,227 +337,15 @@ function scheduleDragShift(group, insertIndex, { reset = false } = {}) {
   dragState.shiftStartedAt = timestamp
 }
 
-function isHighFrequencyInteractionActive() {
-  return Boolean(
-    panState ||
-      marqueeState?.active,
-  )
-}
-
-function currentRenderQuality(renderViewport = currentViewport()) {
-  return resolveRenderQuality({
-    scale: renderViewport.scale,
-    interacting: effectiveOptions.value.hideTextDuringInteraction === true && isHighFrequencyInteractionActive(),
-  })
-}
-
-function scheduleRender(reason = 'render') {
-  if (!renderScheduler) {
-    renderCurrent()
-    return
-  }
-  renderScheduler.schedule(reason)
-}
-
-function flushScheduledRender() {
-  renderScheduler?.flush()
-}
-
-function cancelScheduledRender() {
-  renderScheduler?.cancel()
-}
-
-function renderCurrent(currentLayout = layout, renderViewport = currentViewport()) {
-  if (!ctx || !currentLayout) return
-  lastRenderedLayout = currentLayout
-  lastRenderedViewport = { ...renderViewport }
-  // 拖拽过程中暂时不展示旧选区的父子关系高亮/降权——拖拽时的反馈完全交给下面的
-  // attachPreview（占位框+连接线），不需要整节点高亮。
-  const relations = dragState?.dragging
-    ? buildSelectionRelations(props.graph, currentLayout, [])
-    : buildSelectionRelations(props.graph, currentLayout, currentSelectedIds())
-  const highlightedIds = relations.highlightedIds
-  const attachPreview =
-    dragState?.dragging && dragState.attachPreviewRect
-      ? {
-          rect: worldRectToScreen(dragState.attachPreviewRect, renderViewport),
-          parentRect: dragState.attachPreviewParentRect
-            ? worldRectToScreen(dragState.attachPreviewParentRect, renderViewport)
-            : null,
-        }
-      : null
-  renderStats.value = renderScene(ctx, {
-    layout: currentLayout,
-    graph: props.graph,
-    layoutDirection: props.layoutDirection,
-    viewport: renderViewport,
-    width: cssWidth,
-    height: cssHeight,
-    theme: effectiveTheme.value,
-    state: {
-      selectedIds: relations.selectedIds,
-      highlightedIds,
-      dimmedIds: relations.dimmedIds,
-      highlightedEdgeIds: relations.highlightedEdgeIds,
-      dimmedEdgeIds: relations.dimmedEdgeIds,
-      groupDrag: dragRenderContext(),
-      groupScrollbarHoverId: hoveredScrollbarGroupId,
-      selectionRect: marqueeState?.active ? normalizeRect(marqueeState.rect) : null,
-      attachPreview,
-    },
-    quality: currentRenderQuality(renderViewport),
-    renderers: { node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer },
-  })
-  overviewRef.value?.render({
-    layout: currentLayout,
-    viewport: renderViewport,
-    mainWidth: cssWidth,
-    mainHeight: cssHeight,
-    theme: effectiveTheme.value,
-  })
-}
-
-function cancelAnimation() {
-  if (animationFrameId !== null) {
-    cancelAnimationFrame(animationFrameId)
-    animationFrameId = null
-  }
-  activeTransition = null
-}
-
-function settleAnimation() {
-  if (!activeTransition) return
-  const { nextLayout, nextViewport } = activeTransition
-  cancelAnimation()
-  finishLayout(nextLayout, nextViewport)
-}
-
-function chooseAnchorId(startLayout, nextLayout) {
-  const selected = currentSelectedIds()[0]
-  if (selected && resolveAnchorCenter(startLayout, selected) && resolveAnchorCenter(nextLayout, selected)) return selected
-  const root = props.graph.rootIds[0]
-  if (root && resolveAnchorCenter(startLayout, root) && resolveAnchorCenter(nextLayout, root)) return root
-  return null
-}
-
-function targetViewportFor(startLayout, nextLayout, preserveAnchor) {
-  const viewport = currentViewport()
-  if (!preserveAnchor || !startLayout) return viewport
-  const anchorId = chooseAnchorId(startLayout, nextLayout)
-  if (!anchorId) return viewport
-  const before = resolveAnchorCenter(startLayout, anchorId)
-  const after = resolveAnchorCenter(nextLayout, anchorId)
-  return keepAnchorStable(viewport, before, after)
-}
-
-function commitViewportSilently(nextViewport) {
-  const next = normalizeViewport(nextViewport, viewportOptions(props.options))
-  if (props.viewport === null) internalViewport = next
-}
-
-function finishLayout(nextLayout, nextViewport) {
-  layout = nextLayout
-  settledLayout = nextLayout
-  commitViewportSilently(nextViewport)
-  renderCurrent(layout, currentViewport())
-}
-
-function startAnimation(startLayout, nextLayout, startViewport, nextViewport) {
-  const transition = createLayoutTransition({
-    fromLayout: startLayout,
-    toLayout: nextLayout,
-    fromViewport: startViewport,
-    toViewport: nextViewport,
-    durationMs: ANIMATION_DURATION_MS,
-  })
-  activeTransition = { transition, startedAt: null, nextLayout, nextViewport }
-
-  const tick = (time) => {
-    if (!activeTransition) return
-    if (activeTransition.startedAt === null) activeTransition.startedAt = time
-    const elapsed = time - activeTransition.startedAt
-    const progress = elapsed / activeTransition.transition.durationMs
-    const frame = layoutAt(activeTransition.transition, progress)
-    layout = frame.layout
-    commitViewportSilently(frame.viewport)
-    renderCurrent(layout, currentViewport())
-
-    if (progress >= 1) {
-      animationFrameId = null
-      const finished = activeTransition
-      activeTransition = null
-      finishLayout(finished.nextLayout, finished.nextViewport)
-      return
-    }
-
-    animationFrameId = requestAnimationFrame(tick)
-  }
-
-  animationFrameId = requestAnimationFrame(tick)
-}
-
-function updateLayout({ animate = true, preserveAnchor = true } = {}) {
-  if (!ctx) return
-  const nextLayout = computeLayout(props.graph, {
-    direction: props.layoutDirection,
-    viewportWidth: cssWidth,
-    viewportHeight: cssHeight,
-    groupThreshold: effectiveOptions.value.groupThreshold,
-    groupStates: new Map(Object.entries(currentGroupStates())),
-  })
-
-  const startLayout = lastRenderedLayout || settledLayout || layout
-  const startViewport = lastRenderedViewport || currentViewport()
-  const nextViewport = targetViewportFor(startLayout, nextLayout, preserveAnchor)
-  const canAnimate =
-    animate &&
-    typeof requestAnimationFrame === 'function' &&
-    typeof cancelAnimationFrame === 'function'
-
-  cancelAnimation()
-
-  if (!startLayout || !canAnimate || ANIMATION_DURATION_MS <= 0) {
-    finishLayout(nextLayout, nextViewport)
-    return
-  }
-
-  commitViewportSilently(startViewport)
-  startAnimation(startLayout, nextLayout, startViewport, nextViewport)
-}
-
 function setSelected(ids) {
   const nextIds = [...ids]
   if (props.selectedIds === null) internalSelectedIds = nextIds
   emit('select', nextIds)
-  renderCurrent()
+  controller.renderCurrent()
 }
 
 function isAdditiveSelection(event) {
   return event.shiftKey || event.metaKey || event.ctrlKey
-}
-
-function canvasElement() {
-  return (
-    canvasRef.value ??
-    containerRef.value?.querySelector('canvas') ??
-    document.querySelector('.minimap-canvas-container canvas') ??
-    null
-  )
-}
-
-function containerElement() {
-  return containerRef.value ?? document.querySelector('.minimap-canvas-container') ?? null
-}
-
-function screenPointFromEvent(event) {
-  const canvas = canvasElement()
-  if (!canvas) return { x: event.clientX, y: event.clientY }
-  const rect = canvas.getBoundingClientRect()
-  return { x: event.clientX - rect.left, y: event.clientY - rect.top }
-}
-
-function pointFromEvent(event) {
-  return screenToWorld(screenPointFromEvent(event), currentViewport())
 }
 
 function clampContextMenuPosition(screenPoint, items) {
@@ -666,6 +355,7 @@ function clampContextMenuPosition(screenPoint, items) {
     CONTEXT_MENU_MAX_HEIGHT,
     16 + itemCount * 30 + separatorCount * 8,
   )
+  const { width: cssWidth, height: cssHeight } = controller.getCssSize()
   return {
     x: Math.max(8, Math.min(screenPoint.x, cssWidth - CONTEXT_MENU_WIDTH - 8)),
     y: Math.max(8, Math.min(screenPoint.y, cssHeight - estimatedHeight - 8)),
@@ -691,13 +381,14 @@ function canPaste() {
 }
 
 function groupForHit(hit) {
+  const layout = controller.getLayout()
   if (!hit || hit.type !== 'group' || !layout) return null
   return layout.groups.find((group) => group.id === hit.id) ?? null
 }
 
 function contextFromHit(hit, event) {
-  const screenPoint = screenPointFromEvent(event)
-  const worldPoint = screenToWorld(screenPoint, currentViewport())
+  const screenPoint = controller.screenPointFromClient(event.clientX, event.clientY)
+  const worldPoint = controller.pointFromClient(event.clientX, event.clientY)
   if (hit?.type === 'node') {
     const node = props.graph.nodes.get(hit.id)
     return {
@@ -749,13 +440,14 @@ function contextFromHit(hit, event) {
 }
 
 function openContextMenu(event) {
+  const layout = controller.getLayout()
   if (!layout) return
   event.preventDefault()
   event.stopPropagation()
   closeContextMenu()
   cancelPointerInteractions()
-  canvasElement()?.focus?.()
-  const hit = hitTest(layout, pointFromEvent(event))
+  canvasRef.value?.focus?.()
+  const hit = hitTest(layout, controller.pointFromClient(event.clientX, event.clientY))
   const context = contextFromHit(hit, event)
   const defaults = buildContextMenuItems(context)
   const items = mergeContextMenuItems(context, defaults, props.contextMenuItems)
@@ -794,7 +486,7 @@ function ghostRectForPoint(worldPoint) {
     width: GROUP.itemW,
     height: GROUP.itemH,
   }
-  return worldRectToScreen(worldRect, currentViewport())
+  return worldRectToScreen(worldRect, controller.getViewport())
 }
 
 function scrollbarMetrics(group) {
@@ -815,6 +507,7 @@ function scrollbarMetrics(group) {
 }
 
 function hitScrollbarThumb(point) {
+  const layout = controller.getLayout()
   if (!layout) return null
   for (const group of layout.groups) {
     if (!group.overflowY) continue
@@ -836,6 +529,7 @@ function cancelAutoScrollLoop() {
 function startAutoScrollLoop() {
   const tick = (time) => {
     if (!dragState || !dragState.dragging) return
+    const layout = controller.getLayout()
     const group = dragState.targetGroupId ? layout.groups.find((g) => g.id === dragState.targetGroupId) : null
     if (group && dragState.ghostWorldPoint) {
       const delta = groupAutoScrollSpeed(group, dragState.ghostWorldPoint.y)
@@ -845,7 +539,7 @@ function startAutoScrollLoop() {
         updateDragTarget(dragState.ghostWorldPoint)
       }
     }
-    renderCurrent()
+    controller.renderCurrent()
     const timestamp = time ?? now()
     const scrolling = shouldAutoScroll(group)
     if (scrolling || dragShiftActive(timestamp)) dragState.scrollRafId = requestAnimationFrame(tick)
@@ -856,6 +550,7 @@ function startAutoScrollLoop() {
 
 function ensureAutoScrollLoop() {
   if (!dragState?.dragging || dragState.scrollRafId != null) return
+  const layout = controller.getLayout()
   const group = dragState.targetGroupId ? layout?.groups.find((g) => g.id === dragState.targetGroupId) : null
   if (!shouldAutoScroll(group) && !dragShiftActive()) return
   startAutoScrollLoop()
@@ -863,7 +558,8 @@ function ensureAutoScrollLoop() {
 
 function edgePanActive() {
   if (!dragState?.dragging || !dragState.lastScreenPoint) return false
-  const velocity = edgePanVelocity(dragState.lastScreenPoint, cssWidth, cssHeight)
+  const { width, height } = controller.getCssSize()
+  const velocity = edgePanVelocity(dragState.lastScreenPoint, width, height)
   return velocity.x !== 0 || velocity.y !== 0
 }
 
@@ -878,11 +574,12 @@ function ensureEdgePanLoop() {
   if (!dragState?.dragging || dragState.edgePanRafId != null || !edgePanActive()) return
   const tick = () => {
     if (!dragState?.dragging) return
-    const velocity = edgePanVelocity(dragState.lastScreenPoint, cssWidth, cssHeight)
+    const { width, height } = controller.getCssSize()
+    const velocity = edgePanVelocity(dragState.lastScreenPoint, width, height)
     if (velocity.x !== 0 || velocity.y !== 0) {
-      applyViewport(panViewportBy(currentViewport(), { x: -velocity.x, y: -velocity.y }, viewportOptions(props.options)))
-      updateDragTarget(screenToWorld(dragState.lastScreenPoint, currentViewport()))
-      renderCurrent()
+      controller.applyViewport(panViewportBy(controller.getViewport(), { x: -velocity.x, y: -velocity.y }, viewportOptions(props.options)))
+      updateDragTarget(screenToWorld(dragState.lastScreenPoint, controller.getViewport()))
+      controller.renderCurrent()
     }
     if (edgePanActive()) dragState.edgePanRafId = requestAnimationFrame(tick)
     else dragState.edgePanRafId = null
@@ -896,17 +593,17 @@ function cancelDrag() {
   cancelDragShiftLoop()
   cancelEdgePanLoop()
   dragState = null
-  renderCurrent()
+  controller.renderCurrent()
 }
 
 function cancelScrollbarDrag() {
   if (!scrollbarDragState) return
-  const group = layout?.groups.find((g) => g.id === scrollbarDragState.groupId)
+  const group = controller.getLayout()?.groups.find((g) => g.id === scrollbarDragState.groupId)
   if (group && props.groupStates === null) group.scrollTop = scrollbarDragState.startScrollTop
   hoveredScrollbarGroupId = null
   scrollbarDragState = null
-  if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
-  else renderCurrent()
+  if (props.groupStates !== null) controller.updateLayout({ animate: false, preserveAnchor: false })
+  else controller.renderCurrent()
 }
 
 function cancelPan() {
@@ -918,7 +615,7 @@ function cancelMarquee() {
 }
 
 function cancelPointerInteractions() {
-  cancelScheduledRender()
+  controller.cancelScheduledRender()
   cancelDrag()
   cancelScrollbarDrag()
   cancelPan()
@@ -928,7 +625,7 @@ function cancelPointerInteractions() {
 function updateScrollbarHover(groupId) {
   if (hoveredScrollbarGroupId === groupId) return
   hoveredScrollbarGroupId = groupId
-  renderCurrent()
+  controller.renderCurrent()
 }
 
 function clearScrollbarHover() {
@@ -937,13 +634,14 @@ function clearScrollbarHover() {
 
 function handlePointerDown(event) {
   closeContextMenu()
+  const layout = controller.getLayout()
   if (!layout) return
   if (event.button !== 0) return
-  canvasElement()?.focus?.()
-  const point = pointFromEvent(event)
+  canvasRef.value?.focus?.()
+  const point = controller.pointFromClient(event.clientX, event.clientY)
   const scrollbarHit = hitScrollbarThumb(point)
   if (scrollbarHit) {
-    canvasElement()?.setPointerCapture?.(event.pointerId)
+    canvasRef.value?.setPointerCapture?.(event.pointerId)
     updateScrollbarHover(scrollbarHit.group.id)
     scrollbarDragState = {
       groupId: scrollbarHit.group.id,
@@ -957,9 +655,8 @@ function handlePointerDown(event) {
   const hit = hitTest(layout, point)
 
   if (hit?.type === 'group' && hit.zone === 'header') {
-    const group = layout.groups.find((g) => g.id === hit.id)
-    updateGroupState(hit.id, { expanded: !group.expanded })
-    updateLayout()
+    const group = controller.getLayout().groups.find((g) => g.id === hit.id)
+    controller.setGroupExpanded(hit.id, !group.expanded)
     return
   }
 
@@ -967,12 +664,12 @@ function handlePointerDown(event) {
     const nodeId = hit.type === 'group' ? hit.childId : hit.id
     const node = props.graph.nodes.get(nodeId)
     if (!node) return
-    canvasElement()?.setPointerCapture?.(event.pointerId)
+    canvasRef.value?.setPointerCapture?.(event.pointerId)
     dragState = {
       nodeId,
       fromParentId: node.parentId,
       additive: isAdditiveSelection(event),
-      startScreen: screenPointFromEvent(event),
+      startScreen: controller.screenPointFromClient(event.clientX, event.clientY),
       dragging: false,
       targetParentId: null,
       targetGroupId: null,
@@ -994,24 +691,24 @@ function handlePointerDown(event) {
   }
 
   if (!hit) {
-    settleAnimation()
-    canvasElement()?.setPointerCapture?.(event.pointerId)
+    controller.settleAnimation()
+    canvasRef.value?.setPointerCapture?.(event.pointerId)
     if (event.metaKey || event.ctrlKey) {
-      const startScreen = screenPointFromEvent(event)
+      const startScreen = controller.screenPointFromClient(event.clientX, event.clientY)
       marqueeState = {
         pointerId: event.pointerId,
         startScreen,
         rect: { x: startScreen.x, y: startScreen.y, width: 0, height: 0 },
         active: false,
       }
-      renderCurrent()
+      controller.renderCurrent()
       return
     }
     setSelected([])
     panState = {
       pointerId: event.pointerId,
       startScreen: { x: event.clientX, y: event.clientY },
-      startViewport: currentViewport(),
+      startViewport: controller.getViewport(),
       moved: false,
     }
     return
@@ -1022,22 +719,20 @@ function handlePointerDown(event) {
 
 function handlePointerMove(event) {
   if (scrollbarDragState) {
-    const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
+    const group = controller.getLayout().groups.find((g) => g.id === scrollbarDragState.groupId)
     if (!group) return
     const deltaScreenY = event.clientY - scrollbarDragState.startScreenY
-    const viewport = currentViewport()
-    const scrollDelta =
-      (deltaScreenY / (scrollbarDragState.metrics.maxThumbOffset * viewport.scale)) *
-      scrollbarDragState.metrics.maxScroll
+    const viewport = controller.getViewport()
+    const scrollDelta = (deltaScreenY / (scrollbarDragState.metrics.maxThumbOffset * viewport.scale)) * scrollbarDragState.metrics.maxScroll
     const rawScrollTop = scrollbarDragState.startScrollTop + scrollDelta
     const nextScrollTop = clampGroupScroll(group, rawScrollTop)
     group.scrollTop = nextScrollTop
-    renderCurrent()
+    controller.renderCurrent()
     return
   }
 
   if (marqueeState) {
-    const screenPoint = screenPointFromEvent(event)
+    const screenPoint = controller.screenPointFromClient(event.clientX, event.clientY)
     marqueeState.rect = {
       x: marqueeState.startScreen.x,
       y: marqueeState.startScreen.y,
@@ -1045,7 +740,7 @@ function handlePointerMove(event) {
       height: screenPoint.y - marqueeState.startScreen.y,
     }
     marqueeState.active = true
-    scheduleRender('marquee')
+    controller.scheduleRender('marquee')
     return
   }
 
@@ -1055,18 +750,18 @@ function handlePointerMove(event) {
       y: event.clientY - panState.startScreen.y,
     }
     panState.moved = panState.moved || delta.x !== 0 || delta.y !== 0
-    applyViewport(panViewportBy(panState.startViewport, delta, viewportOptions(props.options)), { render: false })
-    scheduleRender('pan')
+    controller.applyViewport(panViewportBy(panState.startViewport, delta, viewportOptions(props.options)), { render: false })
+    controller.scheduleRender('pan')
     return
   }
 
   if (!dragState) {
-    const scrollbarHit = hitScrollbarThumb(pointFromEvent(event))
+    const scrollbarHit = hitScrollbarThumb(controller.pointFromClient(event.clientX, event.clientY))
     updateScrollbarHover(scrollbarHit?.group.id ?? null)
     return
   }
-  const screenPoint = screenPointFromEvent(event)
-  const worldPoint = pointFromEvent(event)
+  const screenPoint = controller.screenPointFromClient(event.clientX, event.clientY)
+  const worldPoint = controller.pointFromClient(event.clientX, event.clientY)
   dragState.lastScreenPoint = screenPoint
 
   if (!dragState.dragging) {
@@ -1077,7 +772,7 @@ function handlePointerMove(event) {
   }
 
   updateDragTarget(worldPoint)
-  renderCurrent()
+  controller.renderCurrent()
   ensureAutoScrollLoop()
   ensureEdgePanLoop()
   if (dragShiftActive()) ensureDragShiftLoop()
@@ -1085,28 +780,24 @@ function handlePointerMove(event) {
 
 function handlePointerUp() {
   if (marqueeState) {
-    flushScheduledRender()
-    const ids = marqueeState.active ? idsInSelectionRect(layout, marqueeState.rect, currentViewport()) : []
+    controller.flushScheduledRender()
+    const ids = marqueeState.active ? idsInSelectionRect(controller.getLayout(), marqueeState.rect, controller.getViewport()) : []
     marqueeState = null
     setSelected(ids)
     return
   }
 
   if (panState) {
-    flushScheduledRender()
+    controller.flushScheduledRender()
     panState = null
-    renderCurrent()
+    controller.renderCurrent()
     return
   }
 
   if (scrollbarDragState) {
-    flushScheduledRender()
-    const group = layout.groups.find((g) => g.id === scrollbarDragState.groupId)
-    if (group) {
-      updateGroupState(group.id, { scrollTop: group.scrollTop })
-      if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
-      else renderCurrent()
-    }
+    controller.flushScheduledRender()
+    const group = controller.getLayout().groups.find((g) => g.id === scrollbarDragState.groupId)
+    if (group) controller.scrollGroup(group, group.scrollTop)
     scrollbarDragState = null
     return
   }
@@ -1114,10 +805,11 @@ function handlePointerUp() {
   if (!dragState) return
 
   if (dragState.dragging) {
-    flushScheduledRender()
+    controller.flushScheduledRender()
     cancelAutoScrollLoop()
     cancelDragShiftLoop()
     cancelEdgePanLoop()
+    const layout = controller.getLayout()
     let renderAfterDrag = false
     let updateLayoutAfterDrag = false
     let groupScrollPatch = null
@@ -1187,12 +879,15 @@ function handlePointerUp() {
     }
 
     dragState = null
-    if (groupScrollPatch) updateGroupState(groupScrollPatch.groupId, { scrollTop: groupScrollPatch.scrollTop })
-    if (updateLayoutAfterDrag) updateLayout()
+    if (groupScrollPatch) {
+      const group = layout.groups.find((g) => g.id === groupScrollPatch.groupId)
+      if (group) controller.scrollGroup(group, groupScrollPatch.scrollTop)
+    }
+    if (updateLayoutAfterDrag) controller.updateLayout()
     if (groupReorderPayload) emit('group-reorder', groupReorderPayload)
     if (nodeMovePayload) emit('node-move', nodeMovePayload)
     if (changeResult) emitChange(changeResult)
-    if (renderAfterDrag) renderCurrent()
+    if (renderAfterDrag) controller.renderCurrent()
     return
   } else {
     setSelected(applySelectionClick(currentSelectedIds(), dragState.nodeId, { additive: dragState.additive }))
@@ -1203,30 +898,26 @@ function handlePointerUp() {
 
 function handleWheel(event) {
   closeContextMenu()
+  const layout = controller.getLayout()
   if (!layout) return
   if (dragState || scrollbarDragState || panState) return
-  const viewport = currentViewport()
-  const screenPoint = screenPointFromEvent(event)
-  const point = screenToWorld(screenPoint, viewport)
+  const viewport = controller.getViewport()
+  const screenPoint = controller.screenPointFromClient(event.clientX, event.clientY)
+  const point = controller.pointFromClient(event.clientX, event.clientY)
   const hit = hitTest(layout, point)
   if (hit?.type === 'group') {
-    const group = layout.groups.find((g) => g.id === hit.id)
+    const group = controller.getLayout().groups.find((g) => g.id === hit.id)
     if (group?.overflowY) {
       event.preventDefault()
-      const rawScrollTop = group.scrollTop + event.deltaY
-      const nextScrollTop = clampGroupScroll(group, rawScrollTop)
-      if (props.groupStates === null) group.scrollTop = nextScrollTop
-      updateGroupState(group.id, { scrollTop: nextScrollTop })
-      if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
-      else renderCurrent()
+      controller.scrollGroup(group, group.scrollTop + event.deltaY)
       return
     }
   }
 
   event.preventDefault()
-  settleAnimation()
+  controller.settleAnimation()
   const nextViewport = zoomViewportAt(viewport, screenPoint, event.deltaY, viewportOptions(props.options))
-  applyViewport(nextViewport)
+  controller.applyViewport(nextViewport)
 }
 
 function handleKeyDown(event) {
@@ -1278,6 +969,7 @@ function emitChange(result) {
 }
 
 function resolveResourceDropTarget(point) {
+  const layout = controller.getLayout()
   const hit = hitTest(layout, point)
   if (hit?.type === 'node') {
     const parent = props.graph.nodes.get(hit.id)
@@ -1301,13 +993,13 @@ function resolveResourceDropTarget(point) {
 
 function handleDrop(event) {
   event.preventDefault()
-  settleAnimation()
-  if (!layout) return
+  controller.settleAnimation()
+  if (!controller.getLayout()) return
   const raw = event.dataTransfer.getData('application/json')
   if (!raw) return
   const resource = JSON.parse(raw)
 
-  const point = pointFromEvent(event)
+  const point = controller.pointFromClient(event.clientX, event.clientY)
   const target = resolveResourceDropTarget(point)
   if (!target) return
   const { parentId, index } = target
@@ -1322,85 +1014,9 @@ function handleDrop(event) {
   })
   if (!result.applied) return
 
-  updateLayout()
+  controller.updateLayout()
   emit('node-drop', { resource, parentId, index: result.operation.payload.index })
   emitChange(result)
-}
-
-function resolveTargetRect(id) {
-  if (!layout) return null
-  const group = layout.groups.find((g) => g.id === id)
-  if (group) return { x: group.x, y: group.y, width: group.width, height: group.height }
-  const nodeRect = layout.nodes.get(id)
-  if (nodeRect) return nodeRect
-  const located = locateChildGroup(layout, id)
-  if (!located) return null
-  return childRectInGroup(located.group, id)
-}
-
-function rectCenter(rect) {
-  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-}
-
-// 跟 resolveTargetRect 不同：这个版本会先把 id 所在分组的 scrollTop 滚到能看见它的位置
-// （副作用），只给 centerOnNode 用。centerOnSelection 故意不用这个——多个选中 id 落在
-// 同一分组时，逐个滚动会互相覆盖 scrollTop，让已经读出的矩形过期，包围盒数学失真。
-function resolveCenterTarget(id) {
-  if (!layout) return null
-  const located = locateChildGroup(layout, id)
-  if (located) {
-    const scrollTop = scrollTopToReveal(located.group, located.index)
-    if (props.groupStates === null) located.group.scrollTop = scrollTop
-    updateGroupState(located.group.id, { scrollTop })
-    if (props.groupStates !== null) updateLayout({ animate: false, preserveAnchor: false })
-  }
-  const rect = resolveTargetRect(id)
-  return rect ? rectCenter(rect) : null
-}
-
-function fitToScreen() {
-  if (!layout) return
-  runViewportTween(fitViewportToBounds(layout.bounds, cssWidth, cssHeight, props.options))
-}
-
-function centerOnNode(id) {
-  const target = resolveCenterTarget(id)
-  if (!target) return
-  runViewportTween(centerViewportOn(target, currentViewport(), cssWidth, cssHeight))
-}
-
-function centerOnSelection() {
-  const ids = currentSelectedIds()
-  if (ids.length === 0) return
-  const rects = ids.map(resolveTargetRect).filter(Boolean)
-  if (rects.length === 0) return
-  const minX = Math.min(...rects.map((r) => r.x))
-  const maxX = Math.max(...rects.map((r) => r.x + r.width))
-  const minY = Math.min(...rects.map((r) => r.y))
-  const maxY = Math.max(...rects.map((r) => r.y + r.height))
-  const target = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
-  runViewportTween(centerViewportOn(target, currentViewport(), cssWidth, cssHeight))
-}
-
-function zoomTo(scale, center = null) {
-  const viewport = currentViewport()
-  const worldCenter = center ?? screenToWorld({ x: cssWidth / 2, y: cssHeight / 2 }, viewport)
-  const nextScale = clampScale(scale, viewportOptions(props.options))
-  runViewportTween({
-    x: worldCenter.x * (viewport.scale - nextScale) + viewport.x,
-    y: worldCenter.y * (viewport.scale - nextScale) + viewport.y,
-    scale: nextScale,
-  })
-}
-
-function setViewport(viewport) {
-  settleAnimation()
-  cancelViewportTween()
-  applyViewport(viewport)
-}
-
-function getViewport() {
-  return currentViewport()
 }
 
 function select(ids, mode = 'replace') {
@@ -1409,6 +1025,30 @@ function select(ids, mode = 'replace') {
 
 function clearSelection() {
   setSelected([])
+}
+
+// fitToScreen/centerOnNode/centerOnSelection/zoomTo 都经由 controller 的 runViewportTween
+// 触发动画，但 panState/marqueeState/dragState/scrollbarDragState 仍然是 Minimap.vue 本地状态，
+// core-controller 并不知道它们的存在——所以这里要在调用前手动取消正在进行的指针交互，
+// 保持跟旧版 runViewportTween 内部调用 cancelPointerInteractions() 一致的行为。
+function fitToScreen() {
+  cancelPointerInteractions()
+  controller.fitToScreen()
+}
+
+function centerOnNode(id) {
+  cancelPointerInteractions()
+  controller.centerOnNode(id)
+}
+
+function centerOnSelection() {
+  cancelPointerInteractions()
+  controller.centerOnSelection()
+}
+
+function zoomTo(scale, center) {
+  cancelPointerInteractions()
+  controller.zoomTo(scale, center)
 }
 
 function jumpToSearchResult(id) {
@@ -1445,13 +1085,14 @@ function searchPrevious() {
 }
 
 function handleOverviewNavigate(worldPoint) {
-  applyViewport(centerViewportOn(worldPoint, currentViewport(), cssWidth, cssHeight))
+  const { width, height } = controller.getCssSize()
+  controller.applyViewport(centerViewportOn(worldPoint, controller.getViewport(), width, height))
 }
 
 function emitConfigChange(key, value, context) {
   if (key === 'readonly') internalReadonly.value = value
   else internalOptions.value = { ...internalOptions.value, [key]: value }
-  renderCurrent()
+  controller.renderCurrent()
   emit('config-change', { key, value, source: 'context-menu', context })
 }
 
@@ -1464,10 +1105,9 @@ function executeContextMenuAction(action, context) {
   if (action === 'center-selection') return centerOnSelection()
   if (action === 'center-target' && context.targetId) return centerOnNode(context.targetId)
   if (action === 'toggle-group' && context.groupId) {
-    const group = layout?.groups.find((item) => item.id === context.groupId)
+    const group = controller.getLayout()?.groups.find((item) => item.id === context.groupId)
     if (!group) return
-    updateGroupState(context.groupId, { expanded: !group.expanded })
-    updateLayout()
+    controller.setGroupExpanded(context.groupId, !group.expanded)
     return
   }
   if (action === 'toggle-search') return emitConfigChange('enableSearch', !effectiveOptions.value.enableSearch, context)
@@ -1496,7 +1136,7 @@ function runContextMenuItem(item) {
 function undo() {
   const result = graphOperations().undo()
   if (result.applied) {
-    updateLayout()
+    controller.updateLayout()
     emitChange(result)
   }
   return result
@@ -1505,7 +1145,7 @@ function undo() {
 function redo() {
   const result = graphOperations().redo()
   if (result.applied) {
-    updateLayout()
+    controller.updateLayout()
     emitChange(result)
   }
   return result
@@ -1520,6 +1160,7 @@ function canRedo() {
 }
 
 function selectedRealNodeIds() {
+  const layout = controller.getLayout()
   if (!layout) return currentSelectedIds()
   const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
   const ids = []
@@ -1546,7 +1187,7 @@ function deleteSelection() {
   })
   if (!result.applied) return result
 
-  updateLayout({ animate: false })
+  controller.updateLayout({ animate: false })
   setSelected(selectionAfterDeleting(result.operation.payload.deletedIds || []))
   emit('delete', { ids, deletedIds: result.operation.payload.deletedIds || [] })
   emitChange(result)
@@ -1587,6 +1228,7 @@ function copySelection() {
 
 function pasteTargetId() {
   const id = currentSelectedIds()[0] ?? null
+  const layout = controller.getLayout()
   if (!id || !layout) return id
   const groupsById = new Map(layout.groups.map((group) => [group.id, group]))
   const group = groupsById.get(id)
@@ -1621,7 +1263,7 @@ function pasteInto(targetParentId = pasteTargetId()) {
   })
   if (!result.applied) return result
 
-  updateLayout()
+  controller.updateLayout()
   emit('paste', {
     targetParentId,
     pastedIds: result.operation.payload.pastedIds || [],
@@ -1672,7 +1314,7 @@ function importGraph(data) {
   })
   if (!result.applied) return result
 
-  updateLayout({ animate: false })
+  controller.updateLayout({ animate: false })
   setSelected([])
   emit('import', { graph: props.graph })
   emitChange(result)
@@ -1680,12 +1322,12 @@ function importGraph(data) {
 }
 
 defineExpose({
-  fitToScreen,
-  centerOnNode,
-  centerOnSelection,
-  zoomTo,
-  setViewport,
-  getViewport,
+  fitToScreen: () => fitToScreen(),
+  centerOnNode: (id) => centerOnNode(id),
+  centerOnSelection: () => centerOnSelection(),
+  zoomTo: (scale, center) => zoomTo(scale, center),
+  setViewport: (viewport) => controller.setViewport(viewport),
+  getViewport: () => controller.getViewport(),
   select,
   clearSelection,
   search,
@@ -1702,87 +1344,63 @@ defineExpose({
   importGraph,
 })
 
-function syncCanvasSize() {
-  const container = containerElement()
-  const canvas = canvasElement()
-  if (!container || !canvas) return
-  cssWidth = container.clientWidth
-  cssHeight = container.clientHeight
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = Math.max(1, Math.round(cssWidth * dpr))
-  canvas.height = Math.max(1, Math.round(cssHeight * dpr))
-  canvas.style.width = `${cssWidth}px`
-  canvas.style.height = `${cssHeight}px`
-  // setTransform 而不是 scale：避免每次 resize 后缩放重复叠加。
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+function createInteractionController() {
+  return createMinimapController({
+    getGraph: () => props.graph,
+    getLayoutDirection: () => props.layoutDirection,
+    getOptions: () => effectiveOptions.value,
+    getTheme: () => effectiveTheme.value,
+    getRenderers: () => ({ node: props.nodeRenderer, group: props.groupRenderer, edge: props.edgeRenderer }),
+    getViewportProp: () => props.viewport,
+    getGroupStatesProp: () => props.groupStates,
+    getSelectedIds: () => currentSelectedIds(),
+    getInteractionRenderState: () => interactionRenderState(),
+    emitViewportChange: (next) => emit('viewport-change', next),
+    emitGroupStateChange: (next) => emit('group-state-change', next),
+    onRenderStats: (stats) => { renderStats.value = stats },
+    onOverviewRender: (scene) => overviewRef.value?.render(scene),
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePointerUp,
+    onPointerLeave: clearScrollbarHover,
+    onPointerCancel: cancelPointerInteractions,
+    onLostPointerCapture: cancelPointerInteractions,
+    onKeyDown: handleKeyDown,
+    onWheel: handleWheel,
+    onContextMenu: openContextMenu,
+    onDragOver: handleDragOver,
+    onDrop: handleDrop,
+  })
 }
 
 onMounted(() => {
-  const canvas = canvasElement()
-  const container = containerElement()
-  if (!canvas) return
-  ctx = canvas.getContext('2d')
-  renderScheduler = createRenderScheduler({ render: () => renderCurrent() })
-  syncCanvasSize()
-  resizeObserver = new ResizeObserver(() => {
-    syncCanvasSize()
-    updateLayout({ animate: false, preserveAnchor: false })
-  })
-  if (container) resizeObserver.observe(container)
-  canvas.addEventListener('pointerdown', handlePointerDown)
-  canvas.addEventListener('pointermove', handlePointerMove)
-  canvas.addEventListener('pointerleave', clearScrollbarHover)
-  canvas.addEventListener('pointerup', handlePointerUp)
-  canvas.addEventListener('pointercancel', cancelPointerInteractions)
-  canvas.addEventListener('lostpointercapture', cancelPointerInteractions)
-  canvas.addEventListener('keydown', handleKeyDown)
-  canvas.addEventListener('wheel', handleWheel, { passive: false })
-  canvas.addEventListener('contextmenu', openContextMenu)
-  canvas.addEventListener('dragover', handleDragOver)
-  canvas.addEventListener('drop', handleDrop)
-  updateLayout({ animate: false, preserveAnchor: false })
+  controller = createInteractionController()
+  controller.mount(canvasRef.value, containerRef.value)
 })
 
 onUnmounted(() => {
-  const canvas = canvasElement()
-  cancelScheduledRender()
-  renderScheduler = null
-  cancelAnimation()
-  cancelViewportTween()
   cancelPointerInteractions()
-  if (canvas) {
-    canvas.removeEventListener('pointerdown', handlePointerDown)
-    canvas.removeEventListener('pointermove', handlePointerMove)
-    canvas.removeEventListener('pointerleave', clearScrollbarHover)
-    canvas.removeEventListener('pointerup', handlePointerUp)
-    canvas.removeEventListener('pointercancel', cancelPointerInteractions)
-    canvas.removeEventListener('lostpointercapture', cancelPointerInteractions)
-    canvas.removeEventListener('keydown', handleKeyDown)
-    canvas.removeEventListener('wheel', handleWheel)
-    canvas.removeEventListener('contextmenu', openContextMenu)
-    canvas.removeEventListener('dragover', handleDragOver)
-    canvas.removeEventListener('drop', handleDrop)
-  }
-  if (resizeObserver) resizeObserver.disconnect()
+  controller?.destroy()
+  controller = null
   closeContextMenu()
 })
 
-watch(() => props.layoutDirection, () => updateLayout())
+watch(() => props.layoutDirection, () => controller.updateLayout())
 watch(
   () => props.graph,
   () => {
     closeContextMenu()
     operationManager = createGraphOperationManager(props.graph)
-    updateLayout()
+    controller.updateLayout()
   },
 )
-watch(() => props.selectedIds, () => renderCurrent())
-watch(() => props.groupStates, () => updateLayout())
-watch(() => props.viewport, () => renderCurrent())
+watch(() => props.selectedIds, () => controller.renderCurrent())
+watch(() => props.groupStates, () => controller.updateLayout())
+watch(() => props.viewport, () => controller.renderCurrent())
 watch(() => props.options, () => {
   syncConfigFromProps()
   closeContextMenu()
-  updateLayout()
+  controller.updateLayout()
 })
 watch(() => props.readonly, () => syncConfigFromProps())
 watch(() => props.contextMenuItems, () => closeContextMenu())
