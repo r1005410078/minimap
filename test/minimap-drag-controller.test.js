@@ -152,6 +152,11 @@ test('getInteractionRenderState exposes ghostCount when multiple nodes are dragg
   const state = drag.getInteractionRenderState()
   assert.equal(state.groupDrag.ghostCount, 3)
   assert.deepEqual(state.groupDrag.draggingChildIds, selectedIds)
+
+  // starting the drag schedules an auto-scroll-loop rAF frame (the transient slot-fade
+  // animation that begins as soon as dragging starts); leaving it pending would pollute the
+  // shared `raf` stub's `scheduled` array for the rest of this file's tests.
+  drag.cancelPointerInteractions()
 })
 
 test('dragging a node onto a node in a different subtree moves it as a new child appended at the end', () => {

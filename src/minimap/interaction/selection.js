@@ -94,7 +94,9 @@ export function resolveDragNodeIds(primaryId, selectedIds, graph, layout) {
   if (parentId && nodeIds.every((id) => graph.nodes.get(id)?.parentId === parentId)) {
     return graph.nodes.get(parentId).children.filter((id) => selectedSet.has(id))
   }
-  return nodeIds
+  // selection spans more than just primaryId's siblings (e.g. a node and its own parent
+  // are both selected) -- dragging one node shouldn't drag unrelated selected nodes with it.
+  return [primaryId]
 }
 
 export function idsInSelectionRect(layout, screenRect, viewport) {

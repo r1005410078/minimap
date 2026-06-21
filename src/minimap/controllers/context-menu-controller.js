@@ -76,9 +76,10 @@ export function createContextMenuController(deps) {
   }
 
   function close() {
+    cancelPending()
+    if (state === null && !documentListener) return
     state = null
     publish()
-    cancelPending()
     if (documentListener) {
       document.removeEventListener('pointerdown', documentListener, true)
       documentListener = null

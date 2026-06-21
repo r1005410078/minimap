@@ -317,7 +317,7 @@ test('isOpen reflects whether the menu is currently open', () => {
 })
 
 function pointerEvent(type, { x, y, button = 0, pointerId = 1 }) {
-  return { type, clientX: x, clientY: y, button, pointerId }
+  return { type, clientX: x, clientY: y, button, pointerId, preventDefault: () => {}, stopPropagation: () => {} }
 }
 
 test('right-click opens on pointerup after a complete press and release', () => {
