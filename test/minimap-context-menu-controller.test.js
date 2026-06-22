@@ -302,6 +302,31 @@ test('contextMenuItems prop override is passed through to mergeContextMenuItems'
   assert.ok(calls.states.at(-1).items.some((item) => item.id === 'custom-action'))
 })
 
+test('opening a node context menu in preview mode publishes only center-target toggle-group fit-to-screen and center-selection', () => {
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(layout, {
+    getOptions: () => ({
+      previewMode: true,
+      enableSearch: true,
+      showGrid: true,
+      showPerformance: false,
+      hideTextDuringInteraction: false,
+    }),
+  })
+  const controller = createContextMenuController(deps)
+  const center = rectCenter(layout.nodes.get('feeder-1'))
+
+  controller.open({ clientX: center.x, clientY: center.y, preventDefault: () => {}, stopPropagation: () => {} })
+
+  assert.deepEqual(
+    calls.states
+      .at(-1)
+      .items.filter((item) => item.type !== 'separator')
+      .map((item) => item.id),
+    ['center-target', 'toggle-group', 'fit-to-screen', 'center-selection'],
+  )
+})
+
 test('isOpen reflects whether the menu is currently open', () => {
   const layout = demoLayout()
   const { deps } = createDeps(layout)

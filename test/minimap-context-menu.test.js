@@ -83,6 +83,38 @@ test('node context prepends node actions and keeps common canvas actions', () =>
   assert.equal(items.find((item) => item.id === 'toggle-hide-text-during-interaction').checked, true)
 })
 
+test('preview mode canvas context keeps only fit-to-screen and center-selection', () => {
+  const items = buildContextMenuItems(
+    baseContext({
+      selectedIds: ['heap-1'],
+      options: { previewMode: true },
+    }),
+  )
+
+  assert.deepEqual(
+    items.filter((item) => item.type !== 'separator').map((item) => item.id),
+    ['fit-to-screen', 'center-selection'],
+  )
+})
+
+test('preview mode node context keeps only center-target toggle-group fit-to-screen and center-selection', () => {
+  const items = buildContextMenuItems(
+    baseContext({
+      targetType: 'node',
+      targetId: 'heap-1',
+      selectedIds: ['heap-1'],
+      canPaste: true,
+      hasToggleableGroup: true,
+      options: { previewMode: true },
+    }),
+  )
+
+  assert.deepEqual(
+    items.filter((item) => item.type !== 'separator').map((item) => item.id),
+    ['center-target', 'toggle-group', 'fit-to-screen', 'center-selection'],
+  )
+})
+
 test('disabled states follow readonly clipboard selection and group availability', () => {
   const items = buildContextMenuItems(
     baseContext({
@@ -113,6 +145,27 @@ test('contextMenuItems function can hide a default item and append a custom item
         .concat({ id: 'inspect-node', label: '查看详情', action: 'inspect-node' }),
   )
   assert.equal(items.some((item) => item.id === 'toggle-performance'), false)
+  assert.equal(items.at(-1).id, 'inspect-node')
+})
+
+test('preview mode passes preview-filtered defaults into contextMenuItems function merging', () => {
+  const context = baseContext({
+    targetType: 'node',
+    targetId: 'heap-1',
+    selectedIds: ['heap-1'],
+    hasToggleableGroup: true,
+    options: { previewMode: true },
+  })
+  const defaults = buildContextMenuItems(context)
+  const items = mergeContextMenuItems(context, defaults, (mergedContext, defaultItems) => {
+    assert.equal(mergedContext, context)
+    assert.deepEqual(
+      defaultItems.filter((item) => item.type !== 'separator').map((item) => item.id),
+      ['center-target', 'toggle-group', 'fit-to-screen', 'center-selection'],
+    )
+    return defaultItems.concat({ id: 'inspect-node', label: '查看详情', action: 'inspect-node' })
+  })
+
   assert.equal(items.at(-1).id, 'inspect-node')
 })
 

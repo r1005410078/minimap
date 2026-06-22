@@ -16,6 +16,13 @@ export const BUILT_IN_CONTEXT_MENU_ACTIONS = new Set([
   'toggle-readonly',
 ])
 
+const PREVIEW_MODE_CONTEXT_MENU_ACTIONS = new Set([
+  'fit-to-screen',
+  'center-selection',
+  'center-target',
+  'toggle-group',
+])
+
 function normalizeBoolean(value, fallback) {
   return value === undefined ? fallback : value
 }
@@ -131,7 +138,11 @@ export function buildContextMenuItems(context) {
     normalizedContext.targetType === 'canvas'
       ? commonItems(normalizedContext)
       : [...targetItems(normalizedContext), ...commonItems(normalizedContext)]
-  return defaults.filter((item) => item.visible !== false)
+  const filteredDefaults =
+    normalizedContext.options.previewMode === true
+      ? defaults.filter((item) => PREVIEW_MODE_CONTEXT_MENU_ACTIONS.has(item.id))
+      : defaults
+  return filteredDefaults.filter((item) => item.visible !== false)
 }
 
 export function mergeContextMenuItems(context, defaults, customItems) {
