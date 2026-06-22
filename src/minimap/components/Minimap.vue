@@ -260,6 +260,7 @@
  * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
  * @property {boolean} [disableInitialCenter=false] 为 `true` 时首次布局不自动居中（测试用）。
  * @property {boolean} [disableUsedResources=true] 禁用已在画布中出现的资源项，匹配 `node.data.resourceId`。
+ * @property {number} [groupExpandedMaxHeight=560] 展开态分组框最大高度（px，世界坐标）；超过即出现滚动条，业务方可覆盖默认值。
  */
 
 /**

@@ -205,6 +205,7 @@ export function createCoreController(deps) {
       viewportWidth: cssWidth,
       viewportHeight: cssHeight,
       groupThreshold: currentOptions().groupThreshold,
+      groupExpandedMaxHeight: currentOptions().groupExpandedMaxHeight,
       groupStates: new Map(Object.entries(currentGroupStates())),
     })
 

@@ -93,6 +93,7 @@
 - 分组框内部虚拟绘制：只绘制当前可见的分组子节点。
 - 分组框内部换位：框内节点可以拖拽排序，排序结果写回图数据。
 - 分组展开/折叠：支持手动展开或折叠分组，用于查看细节或降低画面复杂度。
+  - 展开态分组框默认最大高度（新增可配置选项 `groupExpandedMaxHeight`，默认 560px；展开态高度封顶后复用现有 `overflowY` 滚动通路，render/interaction 不变；[spec](docs/superpowers/specs/2026-06-22-group-expanded-max-height-design.md)，[plan](docs/superpowers/plans/2026-06-22-group-expanded-max-height.md)，`npm test` 全过，`npm run build` 通过）
 
 ### 第三阶段：视图和选择能力
 
