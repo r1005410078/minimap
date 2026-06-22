@@ -67,6 +67,45 @@ test('search and overview options still hide their panels in the polished shell'
   wrapper.destroy()
 })
 
+test('preview mode keeps search and zoom controls while hiding workspace chrome', async () => {
+  const wrapper = mountMinimap({
+    propsData: {
+      graph: createDemoGraph(),
+      resources: [{ category: '储能设备', expanded: true, items: [{ id: 'site', label: '站点' }] }],
+      options: { previewMode: true },
+    },
+  })
+
+  assert.equal(wrapper.find('.minimap-search').exists(), true)
+  assert.equal(wrapper.find('.minimap-zoom-pod').exists(), true)
+  assert.equal(wrapper.find('.minimap-resources').exists(), false)
+  assert.equal(wrapper.find('.minimap-resource-restore').exists(), false)
+  assert.equal(wrapper.find('.minimap-history-pod').exists(), false)
+  assert.equal(wrapper.find('.minimap-performance').exists(), false)
+  assert.equal(wrapper.find('.minimap-overview-panel').exists(), false)
+
+  wrapper.vm.resourceTreeCollapsed = true
+  await wrapper.vm.$nextTick()
+
+  assert.equal(wrapper.find('.minimap-resource-restore').exists(), false)
+  wrapper.destroy()
+})
+
+test('preview mode still honors enableSearch false while keeping zoom and hiding history', () => {
+  const wrapper = mountMinimap({
+    propsData: {
+      graph: createDemoGraph(),
+      options: { previewMode: true, enableSearch: false },
+    },
+  })
+
+  assert.equal(wrapper.find('.minimap-search').exists(), false)
+  assert.equal(wrapper.find('.minimap-zoom-pod').exists(), true)
+  assert.equal(wrapper.find('.minimap-history-pod').exists(), false)
+
+  wrapper.destroy()
+})
+
 test('active canvas border is opt-in and disabled by default', () => {
   const defaultWrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   assert.equal(defaultWrapper.find('canvas').classes().includes('is-active-border-enabled'), false)

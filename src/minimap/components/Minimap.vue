@@ -1,7 +1,7 @@
 <template>
   <div class="minimap">
     <ResourceTree
-      v-if="!resourceTreeCollapsed"
+      v-if="!effectiveOptions.previewMode && !resourceTreeCollapsed"
       class="minimap-resources"
       :resources="resources"
       :used-resource-ids="resolveUsedResourceIds()"
@@ -14,7 +14,7 @@
         tabindex="0"
       ></canvas>
       <button
-        v-if="resourceTreeCollapsed"
+        v-if="!effectiveOptions.previewMode && resourceTreeCollapsed"
         class="minimap-resource-restore"
         type="button"
         aria-label="展开资源树"
@@ -51,7 +51,7 @@
         </button>
       </div>
       <div class="minimap-canvas-footer-left">
-        <div v-if="effectiveOptions.showPerformance" class="minimap-performance">
+        <div v-if="!effectiveOptions.previewMode && effectiveOptions.showPerformance" class="minimap-performance">
           <span class="minimap-performance-label">性能</span>
           <span class="minimap-performance-value">{{ renderStats ? `${renderStats.nodeCount} 总节点` : '0 总节点' }}</span>
           <span class="minimap-performance-value">{{ renderStats ? `${renderStats.drawn}/${renderStats.total} 可见项` : '0/0 可见项' }}</span>
@@ -88,7 +88,7 @@
               +
             </button>
           </div>
-          <div class="minimap-control-pod minimap-history-pod">
+          <div v-if="!effectiveOptions.previewMode" class="minimap-control-pod minimap-history-pod">
             <button
               class="minimap-control-button"
               type="button"
@@ -144,7 +144,7 @@
           </div>
         </div>
       </div>
-      <div v-if="effectiveOptions.enableOverview !== false" class="minimap-overview-panel">
+      <div v-if="!effectiveOptions.previewMode && effectiveOptions.enableOverview !== false" class="minimap-overview-panel">
         <div class="minimap-overview-header">
           <span>MINIMAP</span>
           <span>拖入放置</span>
@@ -257,6 +257,7 @@
  * @property {boolean} [enableActiveBorder=false] 画布聚焦时是否显示蓝色描边。
  * @property {boolean} [showGrid=true] 是否绘制背景网格。
  * @property {boolean} [showPerformance=true] 是否显示左下角绘制性能 HUD。
+ * @property {boolean} [previewMode=false] 紧凑嵌入式展示模式；隐藏工作区 chrome，仅保留搜索与缩放控件。
  * @property {boolean} [hideTextDuringInteraction=false] 拖拽/平移等交互期间是否隐藏节点文字以减轻绘制压力。
  * @property {boolean} [disableInitialCenter=false] 为 `true` 时首次布局不自动居中（测试用）。
  * @property {boolean} [disableUsedResources=true] 禁用已在画布中出现的资源项，匹配 `node.data.resourceId`。
@@ -568,6 +569,7 @@ export default {
         enableActiveBorder: false,
         showGrid: true,
         showPerformance: true,
+        previewMode: false,
         hideTextDuringInteraction: false,
         disableInitialCenter: false,
         disableUsedResources: true,
