@@ -11,6 +11,7 @@
 | `interaction.js` | `hitTest`、`resolveDropTarget`、`scrollbarMetrics`/`hitScrollbarThumb`、自动滚动/边缘平移速度等 |
 | `drag-transition.js` | 分组框内换位让位动画：虚拟顺序、子节点矩形插值 |
 | `selection.js` | `applySelectionClick`、`applySelectionSet`、`idsInSelectionRect` |
+| `spatial-index.js` | `buildSpatialIndex`/`queryPoint`/`queryRect`/`getSpatialIndex`：顶层可见项的网格空间索引，供 `hitTest`/`idsInSelectionRect` 用 |
 
 ## 规范约束
 
@@ -27,7 +28,7 @@
 
 **依赖方向：**
 
-- 可 import `graph/layout.js`、`render/renderer.js`（如 `worldRectToScreen` 用于框选）
+- 可 import `graph/layout.js`、`coords/coords.js`（如 `screenRectToWorld` 用于框选）、`render/renderer.js`（如 `resolveEdges` 用于选中关系高亮）
 - 函数签名中 layout 由调用方显式传入，不在此层持有 controller 引用
 - 不应 import `controllers/`、`components/`
 

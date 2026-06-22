@@ -1,5 +1,7 @@
 import { visibleGroupChildren } from '../graph/layout.js'
-import { resolveEdges, worldRectToScreen } from '../render/renderer.js'
+import { resolveEdges } from '../render/renderer.js'
+import { screenRectToWorld } from '../coords/coords.js'
+import { getSpatialIndex, queryRect } from './spatial-index.js'
 
 export function normalizeRect(rect) {
   const x = Math.min(rect.x, rect.x + rect.width)
@@ -100,9 +102,17 @@ export function resolveDragNodeIds(primaryId, selectedIds, graph, layout) {
 }
 
 export function idsInSelectionRect(layout, screenRect, viewport) {
+  const worldRect = screenRectToWorld(screenRect, viewport)
   const ids = []
-  for (const item of visibleSelectableItems(layout)) {
-    if (intersectsRect(screenRect, worldRectToScreen(item, viewport))) ids.push(item.id)
+  for (const item of queryRect(getSpatialIndex(layout), worldRect)) {
+    if (item.type === 'node') {
+      ids.push(item.id)
+      continue
+    }
+    const group = layout.groups.find((g) => g.id === item.id)
+    for (const child of visibleGroupChildren(group)) {
+      if (intersectsRect(worldRect, child.rect)) ids.push(child.id)
+    }
   }
   return ids
 }
