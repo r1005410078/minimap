@@ -12,6 +12,11 @@ const GROUP_MAX_W_RATIO = 0.48
 const GROUP_MAX_H_RATIO = 0.42
 const GROUP_MIN_WIDTH = 2 * GROUP.padding + GROUP.itemW
 const GROUP_MIN_HEIGHT = GROUP.header + 2 * GROUP.padding + GROUP.itemH
+const GROUP_EXPANDED_MAX_HEIGHT = 560
+
+function normalizeExpandedMaxHeight(value) {
+  return Number.isFinite(value) && value > 0 ? value : GROUP_EXPANDED_MAX_HEIGHT
+}
 
 // 重新布局后，让锚点节点保持在原屏幕位置：补偿视口偏移。
 // screen = world * scale + viewport => viewport' = viewport + (before - after) * scale
@@ -112,7 +117,7 @@ export function scrollTopToReveal(group, index) {
 }
 
 // 把一个分组的子节点列表折叠成分组框，按内部网格推导尺寸，同时受视口比例约束。
-function buildGroup(groupId, parentId, children, state, viewportWidth, viewportHeight) {
+function buildGroup(groupId, parentId, children, state, viewportWidth, viewportHeight, groupExpandedMaxHeight) {
   const maxW = viewportWidth * GROUP_MAX_W_RATIO
   const maxH = viewportHeight * GROUP_MAX_H_RATIO
 
@@ -127,8 +132,10 @@ function buildGroup(groupId, parentId, children, state, viewportWidth, viewportH
 
   const expanded = state.expanded === true
   const width = Math.max(GROUP_MIN_WIDTH, Math.min(contentWidth, maxW))
+  // 展开态封顶值取 max(折叠态上限, 配置值)，保证展开态永远不矮于折叠态
+  const expandedMax = Math.max(maxH, groupExpandedMaxHeight)
   const height = expanded
-    ? Math.max(GROUP_MIN_HEIGHT, contentHeight)
+    ? Math.max(GROUP_MIN_HEIGHT, Math.min(contentHeight, expandedMax))
     : Math.max(GROUP_MIN_HEIGHT, Math.min(contentHeight, maxH))
   const overflowY = height < contentHeight
 
@@ -154,6 +161,7 @@ export function computeLayout(graph, options = {}) {
   const viewportWidth = options.viewportWidth ?? 1200
   const viewportHeight = options.viewportHeight ?? 760
   const groupThreshold = options.groupThreshold ?? GROUP_THRESHOLD
+  const groupExpandedMaxHeight = normalizeExpandedMaxHeight(options.groupExpandedMaxHeight)
   const groupStates = options.groupStates ?? new Map()
 
   // 1. 按"连续叶子兄弟分段"规则折叠；一个父节点下可能产生 0、1 或多个分组。
@@ -164,7 +172,7 @@ export function computeLayout(graph, options = {}) {
     segments.forEach((segmentChildren, segmentIndex) => {
       const groupId = `${node.id}::g${segmentIndex}`
       const state = groupStates.get(groupId) ?? {}
-      const group = buildGroup(groupId, node.id, segmentChildren, state, viewportWidth, viewportHeight)
+      const group = buildGroup(groupId, node.id, segmentChildren, state, viewportWidth, viewportHeight, groupExpandedMaxHeight)
       groups.push(group)
       for (const childId of segmentChildren) groupOf.set(childId, group)
     })

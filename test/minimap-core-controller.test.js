@@ -396,3 +396,17 @@ test('setViewport settles any in-flight animation and applies the viewport immed
   assert.equal(frames.runNext(16), false, 'the fitToScreen tween should have been cancelled')
   controller.destroy()
 })
+
+test('groupExpandedMaxHeight option flows through the controller into the layout', () => {
+  const deps = createDeps({
+    getOptions: () => ({ disableInitialCenter: true, groupExpandedMaxHeight: 400 }),
+    getGroupStatesProp: () => ({ 'heap-1::g0': { expanded: true } }),
+  })
+  const { controller } = mountController(deps)
+  const group = controller.getLayout().groups.find((g) => g.id === 'heap-1::g0')
+  assert.equal(group.expanded, true)
+  assert.ok(group.contentHeight > 400) // 前提：展开内容确实超过封顶，否则下面的断言会变 vacuous
+  assert.equal(group.height, 400) // 选项未透传时会是默认 560
+  assert.equal(group.overflowY, true)
+  controller.destroy()
+})
