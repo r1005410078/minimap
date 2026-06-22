@@ -263,11 +263,12 @@ export function createMinimapController(deps) {
     detachWindowPointerListeners()
   }
 
-  function handleLostPointerCapture(event) {
-    contextMenu.cancelPending()
-    drag.onLostPointerCapture(event)
-    detachWindowPointerListeners()
-  }
+  // 丢失指针捕获不代表手势结束。快速拖动时浏览器会在 pointerup 之前先发
+  // lostpointercapture；若在这里取消手势，进行中的框选/拖拽会被误丢弃，而紧随其后的
+  // pointerup 已无事可做（表现为“放快了选不中/拖不准，停一下才正常”）。
+  // 这里不再取消、也不提前摘掉 window 监听：手势由随后的 pointerup（canvas 或 window）
+  // 正常完成，或由 pointercancel 真正取消。
+  function handleLostPointerCapture() {}
 
   function handleWindowPointerMove(event) {
     if (!shouldHandleWindowPointerEvent(event)) return

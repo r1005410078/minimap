@@ -145,3 +145,26 @@ test('window pointerup completes a fast marquee that leaves the canvas immediate
     restore()
   }
 })
+
+// 快速甩动框选：松手位置远超最后一次 pointermove。pointerup 必须用它自己的位置
+// 把框选矩形补到终点，否则只会选中中途那一小段覆盖的节点（“需要停留一段时间”才正常）。
+test('pointerup extends an already-active marquee to its own release position', () => {
+  const { restore } = installHeadlessDom()
+  try {
+    const controller = createMinimapController(createDeps())
+    const { canvas, container } = createElements()
+    controller.mount(canvas, container)
+
+    canvas.dispatchEvent(pointerEvent('pointerdown', { x: 380, y: -10 }, { metaKey: true }))
+    // 中途的 pointermove 只覆盖到 feeder-1，并把 marquee 置为 active
+    canvas.dispatchEvent(pointerEvent('pointermove', { x: 450, y: 60 }, { metaKey: true }))
+    // 立刻在更远处松手（没有再触发 pointermove），矩形应补到终点覆盖全部三个 feeder
+    canvas.dispatchEvent(pointerEvent('pointerup', { x: 540, y: 170 }, { metaKey: true }))
+
+    assert.deepEqual(controller.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+
+    controller.destroy()
+  } finally {
+    restore()
+  }
+})
