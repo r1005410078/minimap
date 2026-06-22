@@ -248,6 +248,16 @@ function withDimmedAlpha(ctx, state, draw) {
   ctx.globalAlpha = previousAlpha
 }
 
+function resolveNodeIcon(icon) {
+  if (icon === undefined || icon === null || icon === '') return null
+  if (typeof icon === 'object') {
+    const text = icon.text ?? icon.label ?? icon.value
+    if (text === undefined || text === null || text === '') return null
+    return { text: String(text), color: icon.color }
+  }
+  return { text: String(icon), color: undefined }
+}
+
 function edgeMainAxis(direction) {
   return direction === 'vertical' ? 'y' : 'x'
 }
@@ -394,7 +404,16 @@ function drawNode(ctx, node, rect, state, theme, scale = 1, quality = {}) {
     ctx.beginPath()
     roundedRect(ctx, rect, theme.node.radius ?? 6)
     ctx.clip()
-    ctx.fillText(node.label ?? node.id, rect.x + 10 * scale, rect.y + rect.height / 2)
+    const textY = rect.y + rect.height / 2
+    const icon = resolveNodeIcon(node.icon)
+    if (icon) {
+      const previousFillStyle = ctx.fillStyle
+      if (icon.color) ctx.fillStyle = icon.color
+      ctx.fillText(icon.text, rect.x + 10 * scale, textY)
+      ctx.fillStyle = previousFillStyle
+    }
+    const labelX = rect.x + (icon ? 30 : 10) * scale
+    ctx.fillText(node.label ?? node.id, labelX, textY)
     ctx.restore()
   })
 }

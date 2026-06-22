@@ -192,10 +192,23 @@
  * @property {string} label 显示文本。
  * @property {string|null} parentId 父节点 id；根节点为 `null`。
  * @property {string[]} children 有序子节点 id 列表。
+ * @property {string|{text:string,color?:string}} [icon] 默认节点绘制器显示在标签左侧的图标文本。
  * @property {string} [kind] 业务类型标记，影响默认样式或资源拖入映射。
  * @property {number} [width] 布局宽度覆盖（世界坐标 px）。
  * @property {number} [height] 布局高度覆盖（世界坐标 px）。
  * @property {*} [data] 业务自定义载荷，组件不解读。
+ */
+
+/**
+ * @typedef {Object} TreeDataNode
+ * @property {string|number} id 节点唯一标识；内部会转为字符串。
+ * @property {string} [label] 显示文本。
+ * @property {string|{text:string,color?:string}} [icon] 默认节点绘制器显示在标签左侧的图标文本。
+ * @property {string} [kind] 业务类型标记。
+ * @property {number} [width] 布局宽度覆盖（世界坐标 px）。
+ * @property {number} [height] 布局高度覆盖（世界坐标 px）。
+ * @property {*} [data] 业务自定义载荷，组件不解读。
+ * @property {TreeDataNode[]} [children] 子节点列表。
  */
 
 /**
@@ -372,6 +385,7 @@
 import { createMinimapController } from '../controllers/minimap-controller.js'
 import { defaultTheme } from '../render/theme.js'
 import { centerViewportOn, clampScale, viewportOptions } from '../coords/viewport.js'
+import { graphToTreeData, treeDataToGraph } from '../graph/tree-data.js'
 import Overview from './Overview.vue'
 import ResourceTree from './ResourceTree.vue'
 
@@ -380,8 +394,11 @@ export default {
   components: { Overview, ResourceTree },
 
   props: {
-    /** @type {import('vue').PropOptions<Graph>} 图数据；必填。组件就地修改 `nodes`/`children`，不克隆整图。 */
-    graph: { type: Object, required: true },
+    /** @type {import('vue').PropOptions<Graph|null>} 图数据；高级入口。组件就地修改 `nodes`/`children`，不克隆整图。 */
+    graph: { type: Object, default: null },
+
+    /** @type {import('vue').PropOptions<TreeDataNode[]|TreeDataNode|null>} 简单层级数据；未传 `graph` 时内部转换为 graph。 */
+    data: { type: [Array, Object], default: null },
 
     /** @type {import('vue').PropOptions<ResourceCategory[]>} 左侧资源树数据；默认空数组。 */
     resources: { type: Array, default: () => [] },
@@ -457,6 +474,7 @@ export default {
    * | `delete` / `copy` / `paste` / `import` / `export` | 各 edit-controller 载荷 |
    * | `context-menu-action` | `{ id: string, context: * }` |
    * | `config-change` | {@link ConfigChangePayload} |
+   * | `data-change` | `TreeDataNode[]` 仅使用 `data` prop 时，图编辑后的层级数据快照 |
    */
   emits: [
     'select',
@@ -474,6 +492,7 @@ export default {
     'node-move',
     'context-menu-action',
     'config-change',
+    'data-change',
   ],
 
   /**
@@ -506,10 +525,17 @@ export default {
       graphRevision: 0,
       /** @type {boolean} 左侧资源树是否收起。 */
       resourceTreeCollapsed: false,
+      /** @type {Graph} 由简单 `data` prop 转换出的内部 graph。 */
+      internalGraph: treeDataToGraph(this.data),
     }
   },
 
   computed: {
+    /** @returns {Graph} 当前 controller 使用的 graph；`graph` prop 优先于简单 `data`。 */
+    effectiveGraph() {
+      return this.graph || this.internalGraph
+    },
+
     /** @returns {string} 缩放百分比标签，如 `100%`。 */
     viewportScaleLabel() {
       return `${Math.round(this.viewportScale * 100)}%`
@@ -574,6 +600,16 @@ export default {
      * 注意：Vue 2 不追踪 `Map` 内部 mutation，就地改节点需宿主手动触发更新或替换 `graph` 引用。
      */
     graph() {
+      this.controller.closeContextMenu()
+      this.controller.onGraphReplaced()
+      this.controller.updateLayout()
+    },
+
+    /** 简单层级数据整体替换时，重建内部 graph 并重置相关 controller 状态。 */
+    data() {
+      if (this.graph) return
+      this.internalGraph = treeDataToGraph(this.data)
+      this.graphRevision += 1
       this.controller.closeContextMenu()
       this.controller.onGraphReplaced()
       this.controller.updateLayout()
@@ -645,7 +681,7 @@ export default {
       if (this.effectiveOptions.disableUsedResources !== true) return new Set()
       const ids = new Set()
       // Vue 2 不能观察父层 graph.nodes(Map) 的原地 entry mutation，因此这里在渲染期解析。
-      for (const node of this.graph.nodes.values()) {
+      for (const node of this.effectiveGraph.nodes.values()) {
         const resourceId = node.data?.resourceId
         if (resourceId !== undefined && resourceId !== null && resourceId !== '') ids.add(String(resourceId))
       }
@@ -866,7 +902,7 @@ export default {
      */
     createInteractionController() {
       return createMinimapController({
-        getGraph: () => this.graph,
+        getGraph: () => this.effectiveGraph,
         getLayoutDirection: () => this.layoutDirection,
         getOptions: () => this.effectiveOptions,
         getTheme: () => this.effectiveTheme,
@@ -888,6 +924,7 @@ export default {
         emitChange: (payload) => {
           this.graphRevision += 1
           this.$emit('change', payload)
+          if (!this.graph) this.$emit('data-change', graphToTreeData(this.effectiveGraph))
           this.syncHistoryChrome()
         },
         emitSearch: (payload) => this.$emit('search', payload),

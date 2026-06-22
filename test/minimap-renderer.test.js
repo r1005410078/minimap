@@ -205,6 +205,22 @@ test('default renderer scales node and group text with the viewport', () => {
   assert.deepEqual(groupTitle.args.slice(1), [groupRect.x + 52, groupRect.y + 36])
 })
 
+test('default renderer draws node.icon before the node label', () => {
+  const ctx = createMockCtx()
+  const graph = createDemoGraph()
+  graph.nodes.get('energy-root').icon = 'S'
+  const layout = computeLayout(graph, VIEWPORT)
+  const scene = demoScene({ graph, layout })
+
+  renderScene(ctx, scene)
+
+  const rootRect = worldRectToScreen(scene.layout.nodes.get('energy-root'), scene.viewport)
+  const icon = ctx.methodsOf('fillText').find((call) => call.args[0] === 'S')
+  const label = ctx.methodsOf('fillText').find((call) => call.args[0] === 'Energy Root')
+  assert.deepEqual(icon.args.slice(1), [rootRect.x + 10, rootRect.y + rootRect.height / 2])
+  assert.deepEqual(label.args.slice(1), [rootRect.x + 30, rootRect.y + rootRect.height / 2])
+})
+
 test('compact quality skips default node text drawing', () => {
   const ctx = createMockCtx()
   const scene = demoScene({ viewport: { x: 0, y: 0, scale: 0.3 } })
