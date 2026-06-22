@@ -24,3 +24,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# npm lockfile (project tracks deps via package.json only)
+package-lock.json
