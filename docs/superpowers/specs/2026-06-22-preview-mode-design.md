@@ -54,6 +54,7 @@ Preview mode hides:
 - lower-left undo/redo history controls
 - the performance HUD, regardless of `showPerformance`
 - the right-bottom `Overview`, regardless of `enableOverview`
+- editing and configuration-heavy default context menu actions
 
 The component should still honor explicit search disabling:
 
@@ -86,6 +87,26 @@ previewMode: false
 
 No controller API changes are needed.
 
+## Context Menu
+
+Preview mode should adjust the default context menu to match the compact presentation. The menu remains available, but default items are limited to view/navigation actions.
+
+Keep these default actions when applicable:
+
+- `fit-to-screen`
+- `center-selection`
+- `center-target`
+- `toggle-group`
+
+Hide these default actions in preview mode:
+
+- edit and clipboard actions: `add-child`, `add-sibling`, `copy`, `paste`, `paste-into-target`, `delete`
+- configuration toggles: `toggle-search`, `toggle-grid`, `toggle-performance`, `toggle-hide-text-during-interaction`, `toggle-readonly`
+
+This keeps preview mode from exposing controls that either mutate graph data or configure chrome that preview mode intentionally hides. In particular, `toggle-performance` must not appear because the performance HUD is hidden regardless of `showPerformance`.
+
+Custom `contextMenuItems` remains an escape hatch for host-specific preview actions. Custom item merging should receive the preview-filtered defaults so callers can append domain actions without first removing workspace-only defaults.
+
 ## Data Flow
 
 The new option follows the existing options flow:
@@ -108,9 +129,16 @@ Add Vue component tests that mount `Minimap` with `options.previewMode: true` an
 - performance HUD is not rendered even if `showPerformance: true`.
 - search is hidden when `enableSearch: false` is explicitly combined with preview mode.
 
+Add context menu tests that verify preview mode:
+
+- keeps view/navigation defaults: `fit-to-screen`, `center-selection`, `center-target`, `toggle-group`.
+- removes edit, clipboard, and configuration defaults.
+- passes preview-filtered defaults into `contextMenuItems`.
+
 Run the focused test first, then the full project verification:
 
 ```bash
+npm test -- test/minimap-context-menu.test.js test/minimap-context-menu-controller.test.js
 npm test -- test/minimap-shell.test.js
 npm test
 npm run build
