@@ -15,3 +15,14 @@ export function screenToWorld(point, viewport) {
     y: (point.y - viewport.y) / viewport.scale,
   }
 }
+
+export function screenRectToWorld(rect, viewport) {
+  const a = screenToWorld({ x: rect.x, y: rect.y }, viewport)
+  const b = screenToWorld({ x: rect.x + rect.width, y: rect.y + rect.height }, viewport)
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    width: Math.abs(b.x - a.x),
+    height: Math.abs(b.y - a.y),
+  }
+}

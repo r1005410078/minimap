@@ -8,7 +8,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `coords.js` | `worldToScreen` / `screenToWorld` |
+| `coords.js` | `worldToScreen` / `screenToWorld` / `screenRectToWorld` |
 | `viewport.js` | `panViewportBy`、`zoomViewportAt`、`fitViewportToBounds`、`tweenViewport`、`clampScale`、`viewportOptions` 等 |
 
 ## 规范约束

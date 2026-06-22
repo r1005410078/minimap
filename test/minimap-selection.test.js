@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDemoGraph } from '../src/minimap/graph/graph.js'
-import { computeLayout } from '../src/minimap/graph/layout.js'
+import { computeLayout, visibleGroupChildren } from '../src/minimap/graph/layout.js'
 import {
   applySelectionClick,
   applySelectionSet,
@@ -132,4 +132,44 @@ test('applySelectionSet remove mode subtracts the given ids', () => {
 test('applySelectionSet toggle mode flips each id independently', () => {
   assert.deepEqual(applySelectionSet(['a'], ['a', 'b'], 'toggle'), ['b'])
   assert.deepEqual(applySelectionSet([], ['a', 'b'], 'toggle'), ['a', 'b'])
+})
+
+test("idsInSelectionRect excludes a group's children when the marquee never touches the group box", () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const grid = layout.nodes.get('grid-tie')
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+  const cluster25Group = layout.groups.find((group) => group.parentId === 'cluster-25')
+
+  const ids = idsInSelectionRect(
+    layout,
+    { x: grid.x, y: grid.y, width: grid.width, height: grid.height },
+    { x: 0, y: 0, scale: 1 },
+  )
+
+  assert.deepEqual(ids, ['grid-tie'])
+  assert.equal(heapGroup.children.some((childId) => ids.includes(childId)), false)
+  assert.equal(cluster25Group.children.some((childId) => ids.includes(childId)), false)
+})
+
+test("idsInSelectionRect includes a group's children when the marquee only grazes a corner of the group box", () => {
+  const graph = createDemoGraph()
+  const layout = computeLayout(graph, { direction: 'horizontal', viewportWidth: 800, viewportHeight: 600 })
+  const heapGroup = layout.groups.find((group) => group.parentId === 'heap-1')
+  const firstChild = visibleGroupChildren(heapGroup)[0]
+
+  const ids = idsInSelectionRect(
+    layout,
+    {
+      x: heapGroup.x,
+      y: heapGroup.y,
+      width: firstChild.rect.x + firstChild.rect.width / 2 - heapGroup.x,
+      height: firstChild.rect.y + firstChild.rect.height / 2 - heapGroup.y,
+    },
+    { x: 0, y: 0, scale: 1 },
+  )
+
+  assert.ok(ids.includes(firstChild.id))
+  assert.equal(ids.includes('grid-tie'), false)
+  assert.equal(ids.includes('cluster-25'), false)
 })

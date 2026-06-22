@@ -51,6 +51,7 @@
   - [x] 暗色工作台视觉优化（按参考图方向 B：资源树、顶部工具栏骨架、点阵画布、卡片式节点/分组、右下 overview 外框；只做视觉和结构，不引入第五阶段编辑行为；[spec](docs/superpowers/specs/2026-06-20-visual-polish-design.md)，[plan](docs/superpowers/plans/2026-06-20-visual-polish.md)，commit `47f975c..fadbbe0`，`npm test` 258 全过）
 - **性能优化切片**：
   - [x] 切片 1：大图交互合帧与缩放降级渲染（新增 `render-scheduler.js`、`render-quality.js`；平移/框选高频路径合帧；缩小时减少文字和分组子项绘制；拖拽合帧、空间索引和静态缓存作为后续独立切片；[spec](docs/superpowers/specs/2026-06-21-large-graph-performance.md)，[plan](docs/superpowers/plans/2026-06-21-large-graph-performance.md)，`npm test` 363 全过，`npm run build` 通过）
+  - [x] 切片 3：空间索引接入 hitTest / 框选矩形查询（新增 `interaction/spatial-index.js`：固定网格 bucket 只覆盖顶层可见项，`WeakMap` 按 `layout` 对象身份记忆化；`hitTest`/`idsInSelectionRect` 原地换内部实现，签名和调用方不变；新增 `coords.screenRectToWorld` 把框选矩形一次性转换到世界坐标；视口裁剪 `queryViewport` 留给切片 4；[spec](docs/superpowers/specs/2026-06-22-spatial-index-design.md)，[plan](docs/superpowers/plans/2026-06-22-spatial-index.md)，`npm test` 全过，`npm run build` 通过）
 - **资源树虚拟化切片**（左侧资源树支持 10000 资源项，参考 VS Code 文件树；[spec](docs/superpowers/specs/2026-06-22-resource-tree-virtualization-design.md)，[plan](docs/superpowers/plans/2026-06-22-resource-tree-virtualization.md)）：
   - [x] 切片 1：纯资源树模型与虚拟窗口（资源归一化、嵌套 flatten、搜索过滤、已用资源禁用、固定行高窗口和快速滚动 overscan）
   - [x] 切片 2：资源树选择模型（单选、Cmd/Ctrl 切换、Shift 范围、键盘焦点、禁用行排除，folder focus 与 resource selection 分离）
