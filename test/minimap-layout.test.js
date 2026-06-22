@@ -325,3 +325,95 @@ test('scrollTopToReveal centers the target row within the visible window, clampe
   const innerBottom = group.y + group.height
   assert.ok(revealedRect.y >= innerTop - 1 && revealedRect.y + revealedRect.height <= innerBottom + 1)
 })
+
+// 1200x760 视口下，p::g0 为 4 列；48 个叶子 -> 12 行，
+// contentHeight = GROUP.header(28) + 2*padding(24) + 12*itemH(40) + 11*itemGap(10) = 642；
+// 折叠态上限 maxH = 760*0.42 = 319.2；默认展开封顶 560。
+test('caps an expanded group box at the default max height and enables scrolling', () => {
+  const graph = graphWithChildren(leaves('c', 48))
+  const layout = computeLayout(graph, {
+    direction: 'horizontal',
+    viewportWidth: 1200,
+    viewportHeight: 760,
+    groupStates: new Map([['p::g0', { expanded: true }]]),
+  })
+  const group = layout.groups.find((g) => g.id === 'p::g0')
+  assert.equal(group.expanded, true)
+  assert.equal(group.contentHeight, 642)
+  assert.equal(group.height, 560)
+  assert.equal(group.overflowY, true)
+})
+
+test('an expanded group shorter than the max keeps its content height and does not scroll', () => {
+  // 8 个叶子 -> 2 行，contentHeight = 28+24+2*40+1*10 = 142 < 319.2 < 560
+  const graph = graphWithChildren(leaves('c', 8))
+  const layout = computeLayout(graph, {
+    direction: 'horizontal',
+    viewportWidth: 1200,
+    viewportHeight: 760,
+    groupStates: new Map([['p::g0', { expanded: true }]]),
+  })
+  const group = layout.groups.find((g) => g.id === 'p::g0')
+  assert.equal(group.contentHeight, 142)
+  assert.equal(group.height, 142)
+  assert.equal(group.overflowY, false)
+})
+
+test('a custom groupExpandedMaxHeight overrides the default cap', () => {
+  const graph = graphWithChildren(leaves('c', 48))
+  const layout = computeLayout(graph, {
+    direction: 'horizontal',
+    viewportWidth: 1200,
+    viewportHeight: 760,
+    groupExpandedMaxHeight: 400, // > maxH(319.2) 且 < contentHeight(642) -> 封顶取 400
+    groupStates: new Map([['p::g0', { expanded: true }]]),
+  })
+  const group = layout.groups.find((g) => g.id === 'p::g0')
+  assert.equal(group.height, 400)
+  assert.equal(group.overflowY, true)
+})
+
+test('an invalid groupExpandedMaxHeight falls back to the default', () => {
+  const graph = graphWithChildren(leaves('c', 48))
+  for (const bad of [0, -50, NaN, 'tall', null]) {
+    const layout = computeLayout(graph, {
+      direction: 'horizontal',
+      viewportWidth: 1200,
+      viewportHeight: 760,
+      groupExpandedMaxHeight: bad,
+      groupStates: new Map([['p::g0', { expanded: true }]]),
+    })
+    const group = layout.groups.find((g) => g.id === 'p::g0')
+    assert.equal(group.height, 560)
+  }
+})
+
+test('on a tall viewport the expanded cap never drops below the collapsed height', () => {
+  // viewportHeight 1400 -> maxH = 588 > 默认 560；expandedMax = max(588,560) = 588
+  const graph = graphWithChildren(leaves('c', 48))
+  const base = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 1400 }
+  const collapsed = computeLayout(graph, {
+    ...base,
+    groupStates: new Map([['p::g0', { expanded: false }]]),
+  }).groups.find((g) => g.id === 'p::g0')
+  const expanded = computeLayout(graph, {
+    ...base,
+    groupStates: new Map([['p::g0', { expanded: true }]]),
+  }).groups.find((g) => g.id === 'p::g0')
+  assert.ok(expanded.height >= collapsed.height)
+  assert.equal(expanded.height, 588)
+  assert.equal(collapsed.height, 588)
+})
+
+test('clamps scrollTop within the capped expanded group', () => {
+  const graph = graphWithChildren(leaves('c', 48))
+  const layout = computeLayout(graph, {
+    direction: 'horizontal',
+    viewportWidth: 1200,
+    viewportHeight: 760,
+    groupStates: new Map([['p::g0', { expanded: true, scrollTop: 10000 }]]),
+  })
+  const group = layout.groups.find((g) => g.id === 'p::g0')
+  assert.equal(group.height, 560)
+  assert.equal(group.scrollTop, group.contentHeight - group.height) // 642 - 560 = 82
+})
