@@ -4,6 +4,7 @@
 // 和 docs/superpowers/specs/2026-06-19-phase-2-vue-interaction.md
 
 import { GROUP, NODE, LEVEL_GAP, visibleGroupChildren } from '../graph/layout.js'
+import { getSpatialIndex, queryPoint } from './spatial-index.js'
 
 const SCROLLBAR_WIDTH = 8
 
@@ -33,13 +34,11 @@ function hitTestGroupZone(group, point) {
 // 在 layout.visibleItems 里找世界坐标包含 point 的项。
 // 树布局下节点和分组框天然不重叠，找到第一个命中项就返回。
 export function hitTest(layout, point) {
-  for (const item of layout.visibleItems) {
-    if (!containsPoint(item, point)) continue
-    if (item.type === 'node') return { type: 'node', id: item.id }
-    const group = layout.groups.find((g) => g.id === item.id)
-    return hitTestGroupZone(group, point)
-  }
-  return null
+  const item = queryPoint(getSpatialIndex(layout), point)
+  if (!item) return null
+  if (item.type === 'node') return { type: 'node', id: item.id }
+  const group = layout.groups.find((g) => g.id === item.id)
+  return hitTestGroupZone(group, point)
 }
 
 // 按 children 顺序比较交叉轴坐标，找第一个比 point 靠后的兄弟，插在它前面；

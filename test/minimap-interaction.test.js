@@ -646,3 +646,29 @@ test('isModKey falls back to getModifierState when key flags are missing', () =>
   }
   assert.equal(isModKey(event), true)
 })
+
+test('hitTest finds items spread across distant spatial-index grid cells', () => {
+  const farGroup = {
+    id: 'far-group',
+    parentId: 'p',
+    x: 3000,
+    y: 2000,
+    width: 200,
+    height: 150,
+    scrollTop: 0,
+    rows: 0,
+    columns: 1,
+    children: [],
+  }
+  const layout = {
+    visibleItems: [
+      { type: 'node', id: 'origin-node', x: 0, y: 0, width: 120, height: 40 },
+      { type: 'group', id: 'far-group', parentId: 'p', x: 3000, y: 2000, width: 200, height: 150 },
+    ],
+    groups: [farGroup],
+  }
+
+  assert.deepEqual(hitTest(layout, { x: 60, y: 20 }), { type: 'node', id: 'origin-node' })
+  assert.deepEqual(hitTest(layout, { x: 3100, y: 2010 }), { type: 'group', id: 'far-group', zone: 'header' })
+  assert.equal(hitTest(layout, { x: 1500, y: 1000 }), null)
+})
