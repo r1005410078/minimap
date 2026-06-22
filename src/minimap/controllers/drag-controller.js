@@ -600,7 +600,10 @@ export function createDragController(deps) {
 
   function handlePointerUp(event) {
     if (marqueeState) {
-      if (!marqueeState.active && updateMarqueeFromEvent(event)) {
+      // 总是把框选矩形补到松手位置：快速甩动时松手点会远超最后一次 pointermove，
+      // 不补就会用中途那段较小的矩形算选择（表现为“要在终点停一下才选得中”）。
+      const exceededThreshold = updateMarqueeFromEvent(event)
+      if (!marqueeState.active && exceededThreshold) {
         marqueeState.active = true
         deps.cancelContextMenuPending?.()
       }
@@ -636,6 +639,9 @@ export function createDragController(deps) {
     if (!dragState) return
 
     if (dragState.dragging) {
+      // 用松手位置补算落点：快速松手时最后一次 pointermove 可能落后于真实松手点，
+      // 不补算会把节点落到偏前的位置。
+      if (event) updateDragTarget(deps.pointFromClient(event.clientX, event.clientY))
       deps.flushScheduledRender()
       cancelAutoScrollLoop()
       cancelDragShiftLoop()
@@ -897,7 +903,6 @@ export function createDragController(deps) {
     onPointerUp: handlePointerUp,
     onPointerLeave: clearScrollbarHover,
     onPointerCancel: cancelPointerInteractions,
-    onLostPointerCapture: cancelPointerInteractions,
     onWheel: handleWheel,
     onDragOver: handleDragOver,
     onDragLeave: handleDragLeave,

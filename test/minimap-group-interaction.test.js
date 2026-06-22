@@ -339,25 +339,27 @@ test('pointercancel cancels an active group drag without selecting or reordering
   wrapper.destroy()
 })
 
-test('lost pointer capture cancels an active group drag without selecting or reordering', () => {
+test('lost pointer capture mid-drag does not cancel; the drag still completes on pointerup', () => {
+  // 快速拖动时浏览器会在 pointerup 之前先发 lostpointercapture。丢失捕获不等于取消手势：
+  // 后续的 pointerup 仍应正常完成拖拽，否则表现为“放快了拖不准/选不中，停一下才正常”。
   const graph = createDemoGraph()
   const layout = computeLayout(graph, LAYOUT_OPTS)
   const group = layout.groups.find((g) => g.parentId === 'heap-1')
   const wrapper = mountMinimap( { propsData: { graph } })
   const heap = graph.nodes.get('heap-1')
-  const childrenBefore = [...heap.children]
 
   const firstItemPoint = firstItemCenter(group)
   dispatchPointerDown(wrapper, firstItemPoint)
   const bottomEdge = { x: firstItemPoint.x, y: group.y + group.height - 1 }
   dispatchPointerMove(wrapper, bottomEdge)
+
+  for (let i = 0; i < 20; i++) frames.runNext(i * 16)
   dispatchLostPointerCapture(wrapper)
   dispatchPointerUp(wrapper, bottomEdge)
+  finishPendingAnimation()
 
-  assert.deepEqual(heap.children, childrenBefore)
-  assert.equal(wrapper.emitted('select'), undefined)
-  assert.equal(wrapper.emitted('group-reorder'), undefined)
-  assert.equal(wrapper.emitted('change'), undefined)
+  assert.equal(heap.children[14], 'cluster-1')
+  assert.equal(wrapper.emitted('group-reorder')[0][0].index, 14)
   wrapper.destroy()
 })
 
