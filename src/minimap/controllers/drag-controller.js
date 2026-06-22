@@ -273,6 +273,16 @@ export function createDragController(deps) {
     return event.shiftKey || isModKey(event)
   }
 
+  function canStartMarqueeFromHit(hit) {
+    return !hit || hit.type === 'node' || (hit.type === 'group' && (hit.zone === 'item' || hit.zone === 'body'))
+  }
+
+  function selectableIdFromHit(hit) {
+    if (hit?.type === 'node') return hit.id
+    if (hit?.type === 'group' && hit.zone === 'item') return hit.childId
+    return null
+  }
+
   function ghostRectForPoint(worldPoint) {
     const worldRect = {
       x: worldPoint.x - GROUP.itemW / 2,
@@ -398,17 +408,31 @@ export function createDragController(deps) {
     updateScrollbarHover(null)
   }
 
-  function startMarquee(event) {
+  function startMarquee(event, initialHit = null) {
     deps.settleAnimation()
     deps.getCanvasEl()?.setPointerCapture?.(event.pointerId)
     const startScreen = deps.screenPointFromClient(event.clientX, event.clientY)
     marqueeState = {
       pointerId: event.pointerId,
+      button: event.button ?? 0,
+      initialHit,
       startScreen,
       rect: { x: startScreen.x, y: startScreen.y, width: 0, height: 0 },
       active: false,
     }
     deps.renderCurrent()
+  }
+
+  function updateMarqueeFromEvent(event) {
+    if (!marqueeState || !event || (event.pointerId != null && event.pointerId !== marqueeState.pointerId)) return false
+    const screenPoint = deps.screenPointFromClient(event.clientX, event.clientY)
+    marqueeState.rect = {
+      x: marqueeState.startScreen.x,
+      y: marqueeState.startScreen.y,
+      width: screenPoint.x - marqueeState.startScreen.x,
+      height: screenPoint.y - marqueeState.startScreen.y,
+    }
+    return exceedsDragThreshold(marqueeState.startScreen, screenPoint)
   }
 
   let consumedMarqueeGesture = false
@@ -431,7 +455,7 @@ export function createDragController(deps) {
 
     if (isSecondary) {
       const hit = hitTest(layout, point)
-      if (!hit) startMarquee(event)
+      if (canStartMarqueeFromHit(hit)) startMarquee(event)
       return
     }
 
@@ -457,6 +481,10 @@ export function createDragController(deps) {
     }
 
     if ((hit?.type === 'group' && hit.zone === 'item') || hit?.type === 'node') {
+      if (isModKey(event)) {
+        startMarquee(event, hit)
+        return
+      }
       const nodeId = hit.type === 'group' ? hit.childId : hit.id
       const node = deps.getGraph().nodes.get(nodeId)
       if (!node) return
@@ -504,6 +532,11 @@ export function createDragController(deps) {
       return
     }
 
+    if (hit.type === 'group' && hit.zone === 'body' && isModKey(event)) {
+      startMarquee(event)
+      return
+    }
+
     deps.setSelected(applySelectionClick(deps.getSelectedIds(), hit.id, { additive: isAdditiveSelection(event) }))
   }
 
@@ -522,13 +555,7 @@ export function createDragController(deps) {
     }
 
     if (marqueeState) {
-      const screenPoint = deps.screenPointFromClient(event.clientX, event.clientY)
-      marqueeState.rect = {
-        x: marqueeState.startScreen.x,
-        y: marqueeState.startScreen.y,
-        width: screenPoint.x - marqueeState.startScreen.x,
-        height: screenPoint.y - marqueeState.startScreen.y,
-      }
+      updateMarqueeFromEvent(event)
       if (!marqueeState.active) {
         marqueeState.active = true
         deps.cancelContextMenuPending?.()
@@ -571,13 +598,20 @@ export function createDragController(deps) {
     if (dragShiftActive()) ensureDragShiftLoop()
   }
 
-  function handlePointerUp() {
+  function handlePointerUp(event) {
     if (marqueeState) {
+      if (!marqueeState.active && updateMarqueeFromEvent(event)) {
+        marqueeState.active = true
+        deps.cancelContextMenuPending?.()
+      }
       deps.flushScheduledRender()
       consumedMarqueeGesture = marqueeState.active
       if (marqueeState.active) {
         const ids = idsInSelectionRect(deps.getLayout(), marqueeState.rect, deps.getViewport())
         deps.setSelected(ids)
+      } else if (marqueeState.button === 0) {
+        const id = selectableIdFromHit(marqueeState.initialHit)
+        if (id) deps.setSelected(applySelectionClick(deps.getSelectedIds(), id, { additive: true }))
       }
       marqueeState = null
       deps.renderCurrent()

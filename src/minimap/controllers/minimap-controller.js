@@ -44,6 +44,8 @@ export function createMinimapController(deps) {
   })
 
   let canvasEl = null
+  let activeWindowPointerId = null
+  let windowPointerListenersAttached = false
 
   // 永久取代 Vue 本地"先 cancelPointerInteractions 再转发"的相机包装函数（切片 1/2 的
   // 临时跨切片依赖到这里收尾）。函数体只在被调用时才访问 drag/core，声明顺序不受限。
@@ -202,7 +204,39 @@ export function createMinimapController(deps) {
     ['contextmenu', () => contextMenu.suppressContextMenu],
   ]
 
+  function eventTargetsCanvas(event) {
+    if (!canvasEl) return false
+    if (event.target === canvasEl) return true
+    return typeof event.composedPath === 'function' && event.composedPath().includes(canvasEl)
+  }
+
+  function attachWindowPointerListeners(pointerId) {
+    if (typeof window === 'undefined' || windowPointerListenersAttached) {
+      activeWindowPointerId = pointerId
+      return
+    }
+    activeWindowPointerId = pointerId
+    window.addEventListener('pointermove', handleWindowPointerMove)
+    window.addEventListener('pointerup', handleWindowPointerUp)
+    window.addEventListener('pointercancel', handleWindowPointerCancel)
+    windowPointerListenersAttached = true
+  }
+
+  function detachWindowPointerListeners() {
+    activeWindowPointerId = null
+    if (typeof window === 'undefined' || !windowPointerListenersAttached) return
+    window.removeEventListener('pointermove', handleWindowPointerMove)
+    window.removeEventListener('pointerup', handleWindowPointerUp)
+    window.removeEventListener('pointercancel', handleWindowPointerCancel)
+    windowPointerListenersAttached = false
+  }
+
+  function shouldHandleWindowPointerEvent(event) {
+    return activeWindowPointerId != null && event.pointerId === activeWindowPointerId && !eventTargetsCanvas(event)
+  }
+
   function handlePointerDown(event) {
+    if (event.button === 0 || event.button === 2) attachWindowPointerListeners(event.pointerId)
     drag.onPointerDown(event)
     contextMenu.handlePointerDown(event)
   }
@@ -216,19 +250,38 @@ export function createMinimapController(deps) {
     drag.onPointerUp(event)
     if (event.button === 2 && drag.consumeMarqueeGesture()) {
       contextMenu.cancelPending()
+      detachWindowPointerListeners()
       return
     }
     contextMenu.handlePointerUp(event)
+    detachWindowPointerListeners()
   }
 
   function handlePointerCancel(event) {
     contextMenu.cancelPending()
     drag.onPointerCancel(event)
+    detachWindowPointerListeners()
   }
 
   function handleLostPointerCapture(event) {
     contextMenu.cancelPending()
     drag.onLostPointerCapture(event)
+    detachWindowPointerListeners()
+  }
+
+  function handleWindowPointerMove(event) {
+    if (!shouldHandleWindowPointerEvent(event)) return
+    handlePointerMove(event)
+  }
+
+  function handleWindowPointerUp(event) {
+    if (!shouldHandleWindowPointerEvent(event)) return
+    handlePointerUp(event)
+  }
+
+  function handleWindowPointerCancel(event) {
+    if (!shouldHandleWindowPointerEvent(event)) return
+    handlePointerCancel(event)
   }
 
   function mount(canvas, container) {
@@ -246,6 +299,7 @@ export function createMinimapController(deps) {
   }
 
   function destroy() {
+    detachWindowPointerListeners()
     if (canvasEl) {
       for (const { eventName, handler, options } of listeners) {
         canvasEl.removeEventListener(eventName, handler, options)

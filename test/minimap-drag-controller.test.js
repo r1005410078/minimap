@@ -272,6 +272,64 @@ test('Ctrl/Cmd-drag on blank canvas marquee-selects the nodes inside the rect on
   assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
 })
 
+test('Ctrl/Cmd-drag from empty group body space marquee-selects visible group children', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  const start = { x: 536, y: 252 } // gap between cluster-1 and cluster-2 inside heap-1::g0
+  const end = { x: 670, y: 325 } // covers cluster-2 and cluster-6
+
+  drag.onPointerDown(downEvent(start, { metaKey: true }))
+  drag.onPointerMove(moveEvent(end, { metaKey: true }))
+  drag.onPointerUp(moveEvent(end, { metaKey: true }))
+
+  assert.deepEqual(deps.getSelectedIds().sort(), ['cluster-2', 'cluster-6'])
+})
+
+test('Ctrl/Cmd-drag from a node starts marquee selection instead of moving that node', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  const start = { x: 460, y: 20 } // feeder-1
+  const end = { x: 540, y: 170 } // covers feeder-1/2/3
+
+  drag.onPointerDown(downEvent(start, { metaKey: true }))
+  drag.onPointerMove(moveEvent(end, { metaKey: true }))
+  drag.onPointerUp(moveEvent(end, { metaKey: true }))
+
+  assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(calls.change.length, 0)
+})
+
+test('Ctrl/Cmd fast drag still marquee-selects when pointerup is the first distant event', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  const start = { x: 380, y: -10 }
+  const end = { x: 540, y: 170 }
+
+  drag.onPointerDown(downEvent(start, { metaKey: true }))
+  drag.onPointerUp(moveEvent(end, { metaKey: true }))
+
+  assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+})
+
+test('Ctrl/Cmd-click on a node still toggles selection without starting marquee', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  deps.setSelected(['feeder-2'])
+
+  drag.onPointerDown(downEvent({ x: 460, y: 20 }, { metaKey: true }))
+  drag.onPointerUp(downEvent({ x: 460, y: 20 }, { metaKey: true }))
+
+  assert.deepEqual(deps.getSelectedIds(), ['feeder-2', 'feeder-1'])
+})
+
 test('right-drag on blank canvas marquee-selects the nodes inside the rect on release', () => {
   const graph = createDemoGraph()
   const layout = demoLayout()
@@ -283,6 +341,37 @@ test('right-drag on blank canvas marquee-selects the nodes inside the rect on re
   drag.onPointerDown(downEvent(start, { button: 2 }))
   drag.onPointerMove(moveEvent(end))
   drag.onPointerUp(moveEvent(end))
+
+  assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(drag.consumeMarqueeGesture(), true)
+})
+
+test('right-drag from a node starts marquee selection and suppresses the context menu gesture', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  const start = { x: 460, y: 20 }
+  const end = { x: 540, y: 170 }
+
+  drag.onPointerDown(downEvent(start, { button: 2 }))
+  drag.onPointerMove(moveEvent(end))
+  drag.onPointerUp(moveEvent(end, { button: 2 }))
+
+  assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
+  assert.equal(drag.consumeMarqueeGesture(), true)
+})
+
+test('right fast drag still marquee-selects when pointerup is the first distant event', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps } = createDeps(graph, layout)
+  const drag = createDragController(deps)
+  const start = { x: 380, y: -10 }
+  const end = { x: 540, y: 170 }
+
+  drag.onPointerDown(downEvent(start, { button: 2 }))
+  drag.onPointerUp(moveEvent(end, { button: 2 }))
 
   assert.deepEqual(deps.getSelectedIds().sort(), ['feeder-1', 'feeder-2', 'feeder-3'])
   assert.equal(drag.consumeMarqueeGesture(), true)
