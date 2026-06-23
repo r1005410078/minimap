@@ -67,6 +67,28 @@ function scaledFont(font, scale) {
   })
 }
 
+export function truncateTextToWidth(ctx, text, maxWidth, ellipsis = '...') {
+  const source = String(text ?? '')
+  if (!source) return { text: '', truncated: false }
+  if (!(maxWidth > 0)) return { text: '', truncated: source.length > 0 }
+  if (typeof ctx.measureText !== 'function') return { text: source, truncated: false }
+  if (ctx.measureText(source).width <= maxWidth) return { text: source, truncated: false }
+
+  const ellipsisWidth = ctx.measureText(ellipsis).width
+  if (ellipsisWidth >= maxWidth) return { text: ellipsis, truncated: true }
+
+  let low = 0
+  let high = source.length
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    const candidate = `${source.slice(0, mid)}${ellipsis}`
+    if (ctx.measureText(candidate).width <= maxWidth) low = mid
+    else high = mid - 1
+  }
+
+  return { text: `${source.slice(0, low)}${ellipsis}`, truncated: true }
+}
+
 // childId -> 它所属的分组（一个父节点下的每个分组各自的 children 互不重叠）。
 function groupByChildId(layout) {
   return new Map(layout.groups.flatMap((group) => group.children.map((id) => [id, group])))
@@ -413,7 +435,14 @@ function drawNode(ctx, node, rect, state, theme, scale = 1, quality = {}) {
       ctx.fillStyle = previousFillStyle
     }
     const labelX = rect.x + (icon ? 30 : 10) * scale
-    ctx.fillText(node.label ?? node.id, labelX, textY)
+    const label = String(node.label ?? node.id)
+    const labelRightPadding = 10 * scale
+    const maxLabelWidth = Math.max(0, rect.x + rect.width - labelX - labelRightPadding)
+    const display = quality.truncateText === false
+      ? { text: label, truncated: false }
+      : truncateTextToWidth(ctx, label, maxLabelWidth)
+    if (display.truncated) quality.truncatedNodeLabels?.set(node.id, label)
+    ctx.fillText(display.text, labelX, textY)
     ctx.restore()
   })
 }
@@ -490,7 +519,7 @@ function drawSelectionRect(ctx, rect, theme) {
 // 裁剪到分组框 body 范围内，对当前可见的每个子节点调用 nodeRenderer ?? drawNode——
 // 跟顶层节点完全同一套绘制路径，所以自定义节点视觉在分组框内外保持一致。
 function qualityFor(id, searchMatchId, quality) {
-  return id === searchMatchId ? { ...quality, showText: true } : quality
+  return id === searchMatchId ? { ...quality, showText: true, truncateText: false } : quality
 }
 
 function drawGroupChildren(ctx, graph, group, rect, viewport, theme, renderers, selectedIds, highlightedIds, dimmedIds, dragContext, quality = {}, searchMatchId = null) {
@@ -560,6 +589,7 @@ export function renderScene(ctx, scene) {
   const highlightedEdgeIds = state.highlightedEdgeIds
   const dimmedEdgeIds = state.dimmedEdgeIds
   const searchMatchId = state.searchMatchId ?? null
+  const truncatedNodeLabels = new Map()
   const edges = resolveEdges(graph, layout)
   const resolvedDirection = layoutDirection || direction || inferDirectionFromLayout(graph, layout, edges)
   const mainAxis = edgeMainAxis(resolvedDirection)
@@ -626,7 +656,7 @@ export function renderScene(ctx, scene) {
         highlightedIds,
         dimmedIds,
         dragContext,
-        effectiveQuality,
+        { ...effectiveQuality, truncatedNodeLabels },
         searchMatchId,
       )
     }
@@ -639,7 +669,17 @@ export function renderScene(ctx, scene) {
     const node = graph.nodes.get(item.id)
     const itemState = makeState(item.id, selectedIds, highlightedIds, dimmedIds)
     if (renderers.node) renderers.node(ctx, { node, rect: screen, state: itemState, theme, viewport })
-    else drawNode(ctx, node, screen, itemState, theme, viewport.scale, qualityFor(item.id, searchMatchId, effectiveQuality))
+    else {
+      drawNode(
+        ctx,
+        node,
+        screen,
+        itemState,
+        theme,
+        viewport.scale,
+        qualityFor(item.id, searchMatchId, { ...effectiveQuality, truncatedNodeLabels }),
+      )
+    }
     drawn++
   }
 
@@ -662,5 +702,6 @@ export function renderScene(ctx, scene) {
     culled,
     nodeCount: graph.nodes.size,
     durationMs: now() - t0,
+    truncatedNodeLabels,
   }
 }

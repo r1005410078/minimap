@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createDemoGraph, createStressGraph } from '../src/minimap/graph/graph.js'
 import { computeLayout, GROUP, visibleGroupChildren } from '../src/minimap/graph/layout.js'
 import { orthogonalPath } from '../src/minimap/render/orthogonal.js'
-import { worldRectToScreen, collectVisible, resolveEdges, renderScene } from '../src/minimap/render/renderer.js'
+import { worldRectToScreen, collectVisible, resolveEdges, renderScene, truncateTextToWidth } from '../src/minimap/render/renderer.js'
 import { defaultTheme } from '../src/minimap/render/theme.js'
 import { createMockCtx } from './helpers/mock-ctx.js'
 
@@ -219,6 +219,28 @@ test('default renderer draws node.icon before the node label', () => {
   const label = ctx.methodsOf('fillText').find((call) => call.args[0] === 'Energy Root')
   assert.deepEqual(icon.args.slice(1), [rootRect.x + 10, rootRect.y + rootRect.height / 2])
   assert.deepEqual(label.args.slice(1), [rootRect.x + 30, rootRect.y + rootRect.height / 2])
+})
+
+test('truncateTextToWidth adds ellipsis when the label exceeds max width', () => {
+  const ctx = createMockCtx()
+  const result = truncateTextToWidth(ctx, 'Very Long Energy Storage Node Label', 70)
+
+  assert.equal(result.truncated, true)
+  assert.equal(result.text.endsWith('...'), true)
+  assert.notEqual(result.text, 'Very Long Energy Storage Node Label')
+})
+
+test('renderScene records truncated node labels for hover tooltip use', () => {
+  const ctx = createMockCtx()
+  const graph = createDemoGraph()
+  graph.nodes.get('grid-tie').label = 'Grid Tie Node With A Very Long Display Name'
+  const scene = demoScene({ graph, width: 800, height: 600 })
+
+  const result = renderScene(ctx, scene)
+  const labelCall = ctx.methodsOf('fillText').find((call) => String(call.args[0]).endsWith('...'))
+
+  assert.ok(labelCall)
+  assert.equal(result.truncatedNodeLabels.get('grid-tie'), 'Grid Tie Node With A Very Long Display Name')
 })
 
 test('compact quality skips default node text drawing', () => {

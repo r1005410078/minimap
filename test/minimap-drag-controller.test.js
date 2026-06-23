@@ -44,6 +44,7 @@ function createDeps(graph, layout, overrides = {}) {
     getGraph: () => graph,
     getLayoutDirection: () => 'horizontal',
     getOptions: () => ({}),
+    getReadonly: () => false,
     getGroupStatesProp: () => null,
     getBeforeNodeDrop: () => null,
     getBeforeGroupReorder: () => null,
@@ -202,6 +203,22 @@ test('readonly blocks a cross-parent move and leaves the graph untouched, but st
   assert.deepEqual(graph.nodes.get('grid-tie').children, ['feeder-1', 'feeder-2', 'feeder-3'])
   assert.equal(calls.emitNodeMove.length, 0)
   assert.equal(calls.renderCurrent, 2) // one from the move, one from the blocked drop re-render
+})
+
+test('readonly does not start a node drag interaction in the first place', () => {
+  const graph = createDemoGraph()
+  const layout = demoLayout()
+  const { deps, calls } = createDeps(graph, layout, { getReadonly: () => true })
+  const drag = createDragController(deps)
+  const from = { x: 460, y: 20 }
+  const to = { x: 60, y: 351 }
+
+  drag.onPointerDown(downEvent(from))
+  drag.onPointerMove(moveEvent(to))
+
+  assert.equal(drag.getInteractionRenderState().dragging, false)
+  assert.deepEqual(deps.getSelectedIds(), ['feeder-1'])
+  assert.equal(calls.renderCurrent, 0)
 })
 
 test('dragging a node onto its own descendant does not move it', () => {

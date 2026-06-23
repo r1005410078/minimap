@@ -54,6 +54,11 @@ export function createMinimapController(deps) {
     core.fitToScreen()
   }
 
+  function centerGraph() {
+    drag.cancelPointerInteractions()
+    core.centerGraph()
+  }
+
   function centerOnNode(id) {
     drag.cancelPointerInteractions()
     core.centerOnNode(id)
@@ -145,6 +150,7 @@ export function createMinimapController(deps) {
     getGraph: deps.getGraph,
     getLayoutDirection: deps.getLayoutDirection,
     getOptions: deps.getOptions,
+    getReadonly: deps.getReadonly,
     getGroupStatesProp: deps.getGroupStatesProp,
     getBeforeNodeDrop: deps.getBeforeNodeDrop,
     getBeforeGroupReorder: deps.getBeforeGroupReorder,
@@ -156,6 +162,8 @@ export function createMinimapController(deps) {
     getCssSize: core.getCssSize,
     screenPointFromClient: core.screenPointFromClient,
     pointFromClient: core.pointFromClient,
+    getTruncatedNodeLabel: core.getTruncatedNodeLabel,
+    onHoverTooltipChange: deps.onHoverTooltipChange,
     renderCurrent: core.renderCurrent,
     scheduleRender: core.scheduleRender,
     flushScheduledRender: core.flushScheduledRender,
@@ -328,6 +336,7 @@ export function createMinimapController(deps) {
     zoomAt: core.zoomAt,
     panBy: core.panBy,
     fitToScreen,
+    centerGraph,
     centerOnNode,
     centerOnSelection,
     zoomTo,

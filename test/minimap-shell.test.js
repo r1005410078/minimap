@@ -6,7 +6,7 @@ import { createDemoGraph } from '../src/minimap/graph/graph.js'
 import { clearClipboard } from '../src/minimap/edit/clipboard.js'
 import { computeLayout, keepAnchorStable, childRectInGroup } from '../src/minimap/graph/layout.js'
 import { easeOutCubic } from '../src/minimap/graph/layout-transition.js'
-import { resolveEdges } from '../src/minimap/render/renderer.js'
+import { resolveEdges, worldRectToScreen } from '../src/minimap/render/renderer.js'
 import { defaultTheme } from '../src/minimap/render/theme.js'
 
 installDomEnv()
@@ -106,6 +106,30 @@ test('preview mode still honors enableSearch false while keeping zoom and hiding
   wrapper.destroy()
 })
 
+test('preview mode blocks graph editing while preserving browse chrome', () => {
+  const graph = createDemoGraph()
+  const wrapper = mountMinimap({
+    propsData: {
+      graph,
+      options: { previewMode: true },
+    },
+  })
+  const beforeSize = graph.nodes.size
+
+  wrapper.vm.select(['grid-tie'])
+  assert.equal(wrapper.vm.deleteSelection().reason, 'readonly')
+
+  dispatchDrop(wrapper, { id: 'preview-drop', label: 'Preview Drop' }, { x: 0, y: 0 })
+
+  assert.equal(graph.nodes.size, beforeSize)
+  assert.equal(wrapper.emitted('delete'), undefined)
+  assert.equal(wrapper.emitted('node-drop'), undefined)
+  assert.equal(wrapper.find('.minimap-zoom-pod').exists(), true)
+  assert.equal(wrapper.find('.minimap-search').exists(), true)
+
+  wrapper.destroy()
+})
+
 test('active canvas border is opt-in and disabled by default', () => {
   const defaultWrapper = mountMinimap( { propsData: { graph: createDemoGraph() } })
   assert.equal(defaultWrapper.find('canvas').classes().includes('is-active-border-enabled'), false)
@@ -116,6 +140,25 @@ test('active canvas border is opt-in and disabled by default', () => {
   })
   assert.equal(enabledWrapper.find('canvas').classes().includes('is-active-border-enabled'), true)
   enabledWrapper.destroy()
+})
+
+test('hovering a truncated node label shows the full text in a hover tooltip', async () => {
+  const graph = createDemoGraph()
+  graph.nodes.get('grid-tie').label = 'Grid Tie Node With A Very Long Display Name'
+  const wrapper = mountMinimap({ propsData: { graph } })
+  const rect = worldRectToScreen(
+    wrapper.vm.controller.getLayout().nodes.get('grid-tie'),
+    wrapper.vm.controller.getViewport(),
+  )
+
+  dispatchPointer(wrapper, 'pointermove', centerOf(rect))
+  await wrapper.vm.$nextTick()
+  assert.equal(wrapper.find('.minimap-hover-tooltip').text(), 'Grid Tie Node With A Very Long Display Name')
+
+  dispatchPointer(wrapper, 'pointermove', { x: 4, y: 4 })
+  await wrapper.vm.$nextTick()
+  assert.equal(wrapper.find('.minimap-hover-tooltip').exists(), false)
+  wrapper.destroy()
 })
 
 function dispatchDrop(wrapper, payload, point) {

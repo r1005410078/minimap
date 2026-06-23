@@ -4,7 +4,7 @@
 
 `Minimap` is currently optimized for the full editing workspace: resource tree on the left, search, zoom/history controls, performance HUD, and overview panel. Some hosts need an embedded preview view that keeps navigation and search but removes management-heavy chrome.
 
-This design adds a compact preview mode to `Minimap.vue` without changing graph rendering, layout, selection, search, or controller behavior.
+This design adds a compact preview mode to `Minimap.vue` without changing graph rendering, layout, selection, or search behavior. Preview mode also disables graph editing so the canvas behaves like a navigable read-only view.
 
 ## Goals
 
@@ -17,7 +17,6 @@ This design adds a compact preview mode to `Minimap.vue` without changing graph 
 
 ## Non-Goals
 
-- Do not make preview mode imply `readonly`.
 - Do not change pointer panning, wheel zoom, search navigation, or canvas rendering.
 - Do not add a new layout algorithm or preview-specific renderer.
 - Do not remove existing granular options such as `enableSearch`, `enableOverview`, or `showPerformance`.
@@ -32,11 +31,7 @@ options: {
 }
 ```
 
-When `previewMode` is `true`, `Minimap` uses a compact embedded presentation. Editing permission remains controlled by the existing `readonly` prop. Callers that need a non-editable preview should pass both:
-
-```js
-<Minimap :options="{ previewMode: true }" :readonly="true" />
-```
+When `previewMode` is `true`, `Minimap` uses a compact embedded presentation and treats the canvas as read-only.
 
 ## Preview Mode Behavior
 
@@ -46,6 +41,14 @@ Preview mode keeps:
 - pointer panning and wheel zoom
 - search, as long as `options.enableSearch !== false`
 - the lower-left zoom controls: zoom out, scale label/reset, zoom in
+- view/navigation context menu actions
+
+Preview mode disables:
+
+- resource drops into the canvas
+- node move / reorder interactions
+- delete, paste, import, and other graph-mutating edit actions
+- any edit path that is already blocked by `readonly`
 
 Preview mode hides:
 
@@ -85,7 +88,13 @@ previewMode: false
 - bottom controls wrapper: keep visible because it contains zoom.
 - history pod: render only when not preview mode.
 
-No controller API changes are needed.
+`effectiveReadonly` should become:
+
+```js
+this.internalReadonly || this.effectiveOptions.previewMode === true
+```
+
+No controller API changes are needed because the existing edit and drag controllers already respect `getReadonly()`.
 
 ## Context Menu
 
@@ -146,4 +155,4 @@ npm run build
 
 ## Compatibility
 
-Existing callers are unaffected because `previewMode` defaults to `false`. Existing options continue to work. Preview mode is additive and can be combined with `readonly` for a true read-only preview.
+Existing callers are unaffected because `previewMode` defaults to `false`. Existing options continue to work. The main behavior change is that preview mode now implies read-only editing rules instead of requiring callers to combine it with `readonly`.

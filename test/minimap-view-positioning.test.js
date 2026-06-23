@@ -159,6 +159,20 @@ test('centerOnSelection with an empty selection is a no-op', () => {
   wrapper.destroy()
 })
 
+test('centerGraph centers the full layout bounds without changing the current scale', () => {
+  const graph = createDemoGraph()
+  const wrapper = mountMinimap({ propsData: { graph } })
+  wrapper.vm.setViewport({ x: 50, y: 20, scale: 2.5 })
+
+  wrapper.vm.centerGraph()
+  settle()
+
+  const expected = centerViewportOnBounds(referenceLayout().bounds, 800, 600, 2.5, null)
+  assert.deepEqual(wrapper.vm.getViewport(), expected)
+  assert.equal(wrapper.vm.getViewport().scale, 2.5)
+  wrapper.destroy()
+})
+
 test('zoomTo without a center keeps the current screen center fixed', () => {
   const graph = createDemoGraph()
   const wrapper = mountMinimap({ propsData: { graph } })

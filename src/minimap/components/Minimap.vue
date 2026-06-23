@@ -182,6 +182,16 @@
           </button>
         </div>
       </div>
+      <div
+        v-if="hoverTooltipState"
+        class="minimap-hover-tooltip"
+        :style="{
+          left: `${hoverTooltipStyle.x}px`,
+          top: `${hoverTooltipStyle.y}px`,
+        }"
+      >
+        {{ hoverTooltipState.label }}
+      </div>
     </div>
   </div>
 </template>
@@ -529,6 +539,8 @@ export default {
       resourceTreeCollapsed: false,
       /** @type {Graph} 由简单 `data` prop 转换出的内部 graph。 */
       internalGraph: treeDataToGraph(this.data),
+      /** @type {{ nodeId: string, label: string, x: number, y: number }|null} 当前 hover 的截断节点提示。 */
+      hoverTooltipState: null,
     }
   },
 
@@ -556,7 +568,7 @@ export default {
     },
     /** @returns {boolean} 合并 prop 与内部 toggled 后的有效只读标志。 */
     effectiveReadonly() {
-      return this.internalReadonly
+      return this.internalReadonly || this.effectiveOptions.previewMode === true
     },
 
     /**
@@ -588,6 +600,14 @@ export default {
           ...(baseTheme.grid || {}),
           visible: this.effectiveOptions.showGrid !== false,
         },
+      }
+    },
+
+    hoverTooltipStyle() {
+      if (!this.hoverTooltipState) return { x: 0, y: 0 }
+      return {
+        x: Math.max(12, this.hoverTooltipState.x + 12),
+        y: Math.max(12, this.hoverTooltipState.y - 30),
       }
     },
   },
@@ -774,6 +794,11 @@ export default {
       return this.controller.fitToScreen()
     },
 
+    /** @returns {void} 将整张图居中到当前视口中心，但保持当前缩放倍率不变。 */
+    centerGraph() {
+      return this.controller.centerGraph()
+    },
+
     /**
      * @param {string} id 目标节点 id。
      * @returns {void} 将视口平移/缩放使该节点居中。
@@ -941,6 +966,7 @@ export default {
         getContextMenuItemsProp: () => this.contextMenuItems,
         getMenuEl: () => this.$refs.contextMenuRef,
         onMenuStateChange: (state) => { this.contextMenuState = state },
+        onHoverTooltipChange: (state) => { this.hoverTooltipState = state },
         emitViewportChange: (next) => {
           this.$emit('viewport-change', next)
           this.syncViewportChrome()
@@ -1278,5 +1304,21 @@ export default {
   height: 1px;
   margin: 5px 4px;
   background: #2a3038;
+}
+.minimap-hover-tooltip {
+  position: absolute;
+  z-index: 9;
+  max-width: min(320px, calc(100% - 24px));
+  padding: 6px 8px;
+  color: #d8dee8;
+  background: rgba(18, 22, 28, 0.98);
+  border: 1px solid #303741;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  font: 12px/1.35 system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 </style>

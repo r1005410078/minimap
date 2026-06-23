@@ -44,6 +44,7 @@ export function createDragController(deps) {
   let panState = null
   let marqueeState = null
   let hoveredScrollbarGroupId = null
+  let hoveredTooltipNodeId = null
 
   const now = () => (globalThis.performance ?? Date).now()
 
@@ -184,6 +185,38 @@ export function createDragController(deps) {
       point.y >= group.y + GROUP.header &&
       point.y <= group.y + group.height
     )
+  }
+
+  function clearHoverTooltip() {
+    if (hoveredTooltipNodeId == null) return
+    hoveredTooltipNodeId = null
+    deps.onHoverTooltipChange?.(null)
+  }
+
+  function updateHoverTooltip(point, screenPoint) {
+    const layout = deps.getLayout()
+    if (!layout) {
+      clearHoverTooltip()
+      return
+    }
+    const hit = hitTest(layout, point)
+    const nodeId = hit?.type === 'node' ? hit.id : hit?.type === 'group' && hit.zone === 'item' ? hit.childId : null
+    if (!nodeId) {
+      clearHoverTooltip()
+      return
+    }
+    const label = deps.getTruncatedNodeLabel?.(nodeId)
+    if (!label) {
+      clearHoverTooltip()
+      return
+    }
+    hoveredTooltipNodeId = nodeId
+    deps.onHoverTooltipChange?.({
+      nodeId,
+      label,
+      x: screenPoint.x,
+      y: screenPoint.y,
+    })
   }
 
   function updateDragTarget(worldPoint) {
@@ -395,6 +428,7 @@ export function createDragController(deps) {
     cancelScrollbarDrag()
     cancelPan()
     cancelMarquee()
+    clearHoverTooltip()
     if (hadMarquee) deps.renderCurrent()
   }
 
@@ -445,6 +479,7 @@ export function createDragController(deps) {
 
   function handlePointerDown(event) {
     deps.closeContextMenu()
+    clearHoverTooltip()
     const layout = deps.getLayout()
     if (!layout) return
     const isPrimary = event.button === 0
@@ -486,6 +521,10 @@ export function createDragController(deps) {
         return
       }
       const nodeId = hit.type === 'group' ? hit.childId : hit.id
+      if (deps.getReadonly()) {
+        deps.setSelected(applySelectionClick(deps.getSelectedIds(), nodeId, { additive: isAdditiveSelection(event) }))
+        return
+      }
       const node = deps.getGraph().nodes.get(nodeId)
       if (!node) return
       deps.getCanvasEl()?.setPointerCapture?.(event.pointerId)
@@ -576,10 +615,14 @@ export function createDragController(deps) {
     }
 
     if (!dragState) {
-      const scrollbarHit = hitScrollbarThumb(deps.getLayout(), deps.pointFromClient(event.clientX, event.clientY))
+      const screenPoint = deps.screenPointFromClient(event.clientX, event.clientY)
+      const point = deps.pointFromClient(event.clientX, event.clientY)
+      const scrollbarHit = hitScrollbarThumb(deps.getLayout(), point)
       updateScrollbarHover(scrollbarHit?.group.id ?? null)
+      updateHoverTooltip(point, screenPoint)
       return
     }
+    clearHoverTooltip()
     const screenPoint = deps.screenPointFromClient(event.clientX, event.clientY)
     const worldPoint = deps.pointFromClient(event.clientX, event.clientY)
     dragState.lastScreenPoint = screenPoint
@@ -617,6 +660,7 @@ export function createDragController(deps) {
         if (id) deps.setSelected(applySelectionClick(deps.getSelectedIds(), id, { additive: true }))
       }
       marqueeState = null
+      clearHoverTooltip()
       deps.renderCurrent()
       return
     }
@@ -624,6 +668,7 @@ export function createDragController(deps) {
     if (panState) {
       deps.flushScheduledRender()
       panState = null
+      clearHoverTooltip()
       deps.renderCurrent()
       return
     }
@@ -633,6 +678,7 @@ export function createDragController(deps) {
       const group = deps.getLayout().groups.find((g) => g.id === scrollbarDragState.groupId)
       if (group) deps.scrollGroup(group, group.scrollTop)
       scrollbarDragState = null
+      clearHoverTooltip()
       return
     }
 
@@ -746,6 +792,7 @@ export function createDragController(deps) {
     }
 
     dragState = null
+    clearHoverTooltip()
   }
 
   function handleWheel(event) {
@@ -807,6 +854,10 @@ export function createDragController(deps) {
   }
 
   function handleDragOver(event) {
+    if (deps.getReadonly()) {
+      clearResourceDragPreview()
+      return
+    }
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
     updateResourceDragPreview(deps.pointFromClient(event.clientX, event.clientY))
@@ -842,6 +893,7 @@ export function createDragController(deps) {
   function handleDrop(event) {
     event.preventDefault()
     clearResourceDragPreview()
+    if (deps.getReadonly()) return
     deps.settleAnimation()
     if (!deps.getLayout()) return
     const raw = event.dataTransfer.getData('application/json')
@@ -901,7 +953,10 @@ export function createDragController(deps) {
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
-    onPointerLeave: clearScrollbarHover,
+    onPointerLeave: () => {
+      clearScrollbarHover()
+      clearHoverTooltip()
+    },
     onPointerCancel: cancelPointerInteractions,
     onWheel: handleWheel,
     onDragOver: handleDragOver,

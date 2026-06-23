@@ -37,6 +37,7 @@ export function createCoreController(deps) {
   let activeTransition = null
   let lastRenderedLayout = null
   let lastRenderedViewport = { ...DEFAULT_VIEWPORT }
+  let lastTruncatedNodeLabels = new Map()
   let activeViewportTween = null
   let viewportTweenFrameId = null
 
@@ -251,7 +252,7 @@ export function createCoreController(deps) {
             : null,
         }
       : null
-    const stats = renderScene(ctx, {
+    const result = renderScene(ctx, {
       layout: currentLayout,
       graph: deps.getGraph(),
       layoutDirection: deps.getLayoutDirection(),
@@ -277,7 +278,14 @@ export function createCoreController(deps) {
       }),
       renderers: deps.getRenderers(),
     })
-    deps.onRenderStats(stats)
+    lastTruncatedNodeLabels = result.truncatedNodeLabels ?? new Map()
+    deps.onRenderStats({
+      total: result.total,
+      drawn: result.drawn,
+      culled: result.culled,
+      nodeCount: deps.getGraph().nodes.size,
+      durationMs: result.durationMs,
+    })
     deps.onOverviewRender({
       layout: currentLayout,
       viewport: renderViewport,
@@ -336,6 +344,10 @@ export function createCoreController(deps) {
 
   function getCssSize() {
     return { width: cssWidth, height: cssHeight }
+  }
+
+  function getTruncatedNodeLabel(id) {
+    return lastTruncatedNodeLabels.get(id) ?? null
   }
 
   function screenPointFromClient(clientX, clientY) {
@@ -403,6 +415,11 @@ export function createCoreController(deps) {
     runViewportTween(fitViewportToBounds(layout.bounds, cssWidth, cssHeight, currentOptions()))
   }
 
+  function centerGraph() {
+    if (!layout) return
+    runViewportTween(centerViewportOnBounds(layout.bounds, cssWidth, cssHeight, getViewport().scale, currentOptions()))
+  }
+
   function centerOnNode(id) {
     const target = resolveCenterTarget(id)
     if (!target) return
@@ -447,6 +464,7 @@ export function createCoreController(deps) {
     mount,
     destroy,
     getCssSize,
+    getTruncatedNodeLabel,
     screenPointFromClient,
     pointFromClient,
     getLayout,
@@ -464,6 +482,7 @@ export function createCoreController(deps) {
     flushScheduledRender,
     cancelScheduledRender,
     fitToScreen,
+    centerGraph,
     centerOnNode,
     centerOnSelection,
     zoomTo,

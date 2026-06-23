@@ -39,10 +39,12 @@ Spec: [docs/superpowers/specs/2026-06-22-group-expanded-max-height-design.md](..
 ## Task 1: layout.js 展开态封顶 + 选项透传
 
 **Files:**
+
 - Modify: `src/minimap/graph/layout.js`
 - Test: `test/minimap-layout.test.js`
 
 **Interfaces:**
+
 - Produces: `computeLayout(graph, { ..., groupExpandedMaxHeight })` 新增可选项 `groupExpandedMaxHeight?: number`（默认 `560`，非有限正数回退默认）。`layout.groups[i]` 仍是 `{ id, parentId, children, columns, rows, width, height, contentHeight, overflowY, expanded, scrollTop, x, y }`；展开态 `height = max(GROUP_MIN_HEIGHT, min(contentHeight, max(maxH, groupExpandedMaxHeight)))`。
 - Consumes: 现有 `graphWithChildren(childSpecs)`、`leaves(prefix, count)` 测试 helper（已在 `test/minimap-layout.test.js` 顶部定义）。一个父节点 `p` 下挂 N 个叶子时生成分组 id `p::g0`。
 
@@ -54,94 +56,98 @@ Spec: [docs/superpowers/specs/2026-06-22-group-expanded-max-height-design.md](..
 // 1200x760 视口下，p::g0 为 4 列；48 个叶子 -> 12 行，
 // contentHeight = GROUP.header(28) + 2*padding(24) + 12*itemH(40) + 11*itemGap(10) = 642；
 // 折叠态上限 maxH = 760*0.42 = 319.2；默认展开封顶 560。
-test('caps an expanded group box at the default max height and enables scrolling', () => {
-  const graph = graphWithChildren(leaves('c', 48))
+test("caps an expanded group box at the default max height and enables scrolling", () => {
+  const graph = graphWithChildren(leaves("c", 48));
   const layout = computeLayout(graph, {
-    direction: 'horizontal',
+    direction: "horizontal",
     viewportWidth: 1200,
     viewportHeight: 760,
-    groupStates: new Map([['p::g0', { expanded: true }]]),
-  })
-  const group = layout.groups.find((g) => g.id === 'p::g0')
-  assert.equal(group.expanded, true)
-  assert.equal(group.contentHeight, 642)
-  assert.equal(group.height, 560)
-  assert.equal(group.overflowY, true)
-})
+    groupStates: new Map([["p::g0", { expanded: true }]]),
+  });
+  const group = layout.groups.find((g) => g.id === "p::g0");
+  assert.equal(group.expanded, true);
+  assert.equal(group.contentHeight, 642);
+  assert.equal(group.height, 560);
+  assert.equal(group.overflowY, true);
+});
 
-test('an expanded group shorter than the max keeps its content height and does not scroll', () => {
+test("an expanded group shorter than the max keeps its content height and does not scroll", () => {
   // 8 个叶子 -> 2 行，contentHeight = 28+24+2*40+1*10 = 142 < 319.2 < 560
-  const graph = graphWithChildren(leaves('c', 8))
+  const graph = graphWithChildren(leaves("c", 8));
   const layout = computeLayout(graph, {
-    direction: 'horizontal',
+    direction: "horizontal",
     viewportWidth: 1200,
     viewportHeight: 760,
-    groupStates: new Map([['p::g0', { expanded: true }]]),
-  })
-  const group = layout.groups.find((g) => g.id === 'p::g0')
-  assert.equal(group.contentHeight, 142)
-  assert.equal(group.height, 142)
-  assert.equal(group.overflowY, false)
-})
+    groupStates: new Map([["p::g0", { expanded: true }]]),
+  });
+  const group = layout.groups.find((g) => g.id === "p::g0");
+  assert.equal(group.contentHeight, 142);
+  assert.equal(group.height, 142);
+  assert.equal(group.overflowY, false);
+});
 
-test('a custom groupExpandedMaxHeight overrides the default cap', () => {
-  const graph = graphWithChildren(leaves('c', 48))
+test("a custom groupExpandedMaxHeight overrides the default cap", () => {
+  const graph = graphWithChildren(leaves("c", 48));
   const layout = computeLayout(graph, {
-    direction: 'horizontal',
+    direction: "horizontal",
     viewportWidth: 1200,
     viewportHeight: 760,
     groupExpandedMaxHeight: 400, // > maxH(319.2) 且 < contentHeight(642) -> 封顶取 400
-    groupStates: new Map([['p::g0', { expanded: true }]]),
-  })
-  const group = layout.groups.find((g) => g.id === 'p::g0')
-  assert.equal(group.height, 400)
-  assert.equal(group.overflowY, true)
-})
+    groupStates: new Map([["p::g0", { expanded: true }]]),
+  });
+  const group = layout.groups.find((g) => g.id === "p::g0");
+  assert.equal(group.height, 400);
+  assert.equal(group.overflowY, true);
+});
 
-test('an invalid groupExpandedMaxHeight falls back to the default', () => {
-  const graph = graphWithChildren(leaves('c', 48))
-  for (const bad of [0, -50, NaN, 'tall', null]) {
+test("an invalid groupExpandedMaxHeight falls back to the default", () => {
+  const graph = graphWithChildren(leaves("c", 48));
+  for (const bad of [0, -50, NaN, "tall", null]) {
     const layout = computeLayout(graph, {
-      direction: 'horizontal',
+      direction: "horizontal",
       viewportWidth: 1200,
       viewportHeight: 760,
       groupExpandedMaxHeight: bad,
-      groupStates: new Map([['p::g0', { expanded: true }]]),
-    })
-    const group = layout.groups.find((g) => g.id === 'p::g0')
-    assert.equal(group.height, 560)
+      groupStates: new Map([["p::g0", { expanded: true }]]),
+    });
+    const group = layout.groups.find((g) => g.id === "p::g0");
+    assert.equal(group.height, 560);
   }
-})
+});
 
-test('on a tall viewport the expanded cap never drops below the collapsed height', () => {
+test("on a tall viewport the expanded cap never drops below the collapsed height", () => {
   // viewportHeight 1400 -> maxH = 588 > 默认 560；expandedMax = max(588,560) = 588
-  const graph = graphWithChildren(leaves('c', 48))
-  const base = { direction: 'horizontal', viewportWidth: 1200, viewportHeight: 1400 }
+  const graph = graphWithChildren(leaves("c", 48));
+  const base = {
+    direction: "horizontal",
+    viewportWidth: 1200,
+    viewportHeight: 1400,
+  };
   const collapsed = computeLayout(graph, {
     ...base,
-    groupStates: new Map([['p::g0', { expanded: false }]]),
-  }).groups.find((g) => g.id === 'p::g0')
+    groupStates: new Map([["p::g0", { expanded: false }]]),
+  }).groups.find((g) => g.id === "p::g0");
   const expanded = computeLayout(graph, {
     ...base,
-    groupStates: new Map([['p::g0', { expanded: true }]]),
-  }).groups.find((g) => g.id === 'p::g0')
-  assert.ok(expanded.height >= collapsed.height)
-  assert.equal(expanded.height, 588)
-  assert.equal(collapsed.height, 588)
-})
+    groupStates: new Map([["p::g0", { expanded: true }]]),
+  }).groups.find((g) => g.id === "p::g0");
+  assert.ok(expanded.height >= collapsed.height);
+  assert.equal(expanded.height, 588);
+  assert.equal(collapsed.height, 588);
+});
 
-test('clamps scrollTop within the capped expanded group', () => {
-  const graph = graphWithChildren(leaves('c', 48))
+test("clamps scrollTop within the capped expanded group", () => {
+  const graph = graphWithChildren(leaves("c", 48));
   const layout = computeLayout(graph, {
-    direction: 'horizontal',
+    direction: "horizontal",
     viewportWidth: 1200,
     viewportHeight: 760,
-    groupStates: new Map([['p::g0', { expanded: true, scrollTop: 10000 }]]),
-  })
-  const group = layout.groups.find((g) => g.id === 'p::g0')
-  assert.equal(group.height, 560)
-  assert.equal(group.scrollTop, group.contentHeight - group.height) // 642 - 560 = 82
-})
+    groupStates: new Map([["p::g0", { expanded: true, scrollTop: 10000 }]]),
+  });
+  const group = layout.groups.find((g) => g.id === "p::g0");
+  assert.equal(group.height, 560);
+  assert.equal(group.scrollTop, group.contentHeight - group.height); // 642 - 560 = 82
+});
 ```
 
 - [ ] **Step 2: 运行验证失败**
@@ -157,10 +163,12 @@ Expected: 新增的 `caps an expanded group...`、`custom groupExpandedMaxHeight
 在 `src/minimap/graph/layout.js`，紧接 `GROUP_MAX_H_RATIO` 那几个常量后新增：
 
 ```js
-const GROUP_EXPANDED_MAX_HEIGHT = 560
+const GROUP_EXPANDED_MAX_HEIGHT = 560;
 
 function normalizeExpandedMaxHeight(value) {
-  return Number.isFinite(value) && value > 0 ? value : GROUP_EXPANDED_MAX_HEIGHT
+  return Number.isFinite(value) && value > 0
+    ? value
+    : GROUP_EXPANDED_MAX_HEIGHT;
 }
 ```
 
@@ -214,6 +222,7 @@ git commit -m "feat: cap expanded group box height with a configurable default m
 ## Task 2: 选项透传到控制器 + 文档
 
 **Files:**
+
 - Modify: `src/minimap/controllers/core-controller.js`
 - Test: `test/minimap-core-controller.test.js`
 - Modify: `src/minimap/components/Minimap.vue`
@@ -221,6 +230,7 @@ git commit -m "feat: cap expanded group box height with a configurable default m
 - Modify: `ROADMAP.md`
 
 **Interfaces:**
+
 - Consumes: Task 1 的 `computeLayout(graph, { ..., groupExpandedMaxHeight })`；`currentOptions()`（= `deps.getOptions() ?? {}`）。
 - Produces: 组件 `options.groupExpandedMaxHeight` 经 `core-controller` 透传进 `computeLayout`，对外可用。
 
@@ -229,18 +239,23 @@ git commit -m "feat: cap expanded group box height with a configurable default m
 在 `test/minimap-core-controller.test.js` 末尾追加（`createDeps`/`mountController` 已存在；测试视口 800x600，`heap-1::g0` 为 2 列、24 子节点 -> 12 行、contentHeight 642）：
 
 ```js
-test('groupExpandedMaxHeight option flows through the controller into the layout', () => {
+test("groupExpandedMaxHeight option flows through the controller into the layout", () => {
   const deps = createDeps({
-    getOptions: () => ({ disableInitialCenter: true, groupExpandedMaxHeight: 400 }),
-    getGroupStatesProp: () => new Map([['heap-1::g0', { expanded: true }]]),
-  })
-  const { controller } = mountController(deps)
-  const group = controller.getLayout().groups.find((g) => g.id === 'heap-1::g0')
-  assert.equal(group.expanded, true)
-  assert.equal(group.height, 400) // 选项未透传时会是默认 560
-  assert.equal(group.overflowY, true)
-  controller.destroy()
-})
+    getOptions: () => ({
+      disableInitialCenter: true,
+      groupExpandedMaxHeight: 400,
+    }),
+    getGroupStatesProp: () => new Map([["heap-1::g0", { expanded: true }]]),
+  });
+  const { controller } = mountController(deps);
+  const group = controller
+    .getLayout()
+    .groups.find((g) => g.id === "heap-1::g0");
+  assert.equal(group.expanded, true);
+  assert.equal(group.height, 400); // 选项未透传时会是默认 560
+  assert.equal(group.overflowY, true);
+  controller.destroy();
+});
 ```
 
 - [ ] **Step 2: 运行验证失败**

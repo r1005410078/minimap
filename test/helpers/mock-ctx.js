@@ -44,6 +44,7 @@ export function createMockCtx() {
       calls.push({ method, args })
     }
   }
+  ctx.measureText = (text) => ({ width: String(text ?? '').length * 7 })
   for (const prop of TRACKED_PROPERTIES) {
     let value
     Object.defineProperty(ctx, prop, {

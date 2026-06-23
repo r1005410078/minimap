@@ -23,3 +23,17 @@ test('App mounts the demo graph and resource tree without throwing', () => {
   assert.equal(wrapper.find('[data-resource-id="site"]').classes().includes('is-disabled'), true)
   wrapper.destroy()
 })
+
+test('App center button calls centerGraph on the minimap ref', async () => {
+  const wrapper = mount(App)
+  const minimap = wrapper.findComponent(Minimap)
+  let calls = 0
+  minimap.vm.centerGraph = () => {
+    calls += 1
+  }
+
+  await wrapper.find('[data-testid="center-graph"]').trigger('click')
+
+  assert.equal(calls, 1)
+  wrapper.destroy()
+})
